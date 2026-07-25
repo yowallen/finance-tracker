@@ -1,0 +1,1018 @@
+.boot {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.25rem 1.25rem 3rem;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+
+.topbar-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.brand {
+  font-family: var(--display);
+  font-size: 1.65rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--accent);
+  margin: 0;
+}
+
+.topbar-email {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.month-summary {
+  background: var(--surface);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.35rem 1.5rem;
+  box-shadow: var(--shadow);
+}
+
+.month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1.15rem;
+}
+
+.month-nav h2 {
+  font-size: 1.45rem;
+  text-align: center;
+}
+
+.icon-btn {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-solid);
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--ink-soft);
+}
+
+.icon-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.stat {
+  background: var(--surface-solid);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.stat-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat.income .stat-value {
+  color: var(--income);
+}
+
+.stat.expense .stat-value {
+  color: var(--expense);
+}
+
+.stat.bill .stat-value {
+  color: var(--bill);
+}
+
+.stat.net.positive .stat-value {
+  color: var(--income);
+}
+
+.stat.net.negative .stat-value {
+  color: var(--danger);
+}
+
+.stat-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* Month-by-month balance outlook */
+.balance-outlook {
+  background: var(--surface);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.35rem 1.35rem;
+  box-shadow: var(--shadow);
+}
+
+.outlook-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0;
+}
+
+.outlook-header:has(+ .outlook-track) {
+  margin-bottom: 0.9rem;
+}
+
+.outlook-toggle {
+  flex-shrink: 0;
+}
+
+.outlook-header h2 {
+  font-size: 1.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.outlook-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.outlook-track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(168px, 1fr);
+  gap: 0.7rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+  scroll-snap-type: x proximity;
+}
+
+.outlook-card {
+  scroll-snap-align: start;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-solid);
+  padding: 0.85rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  text-align: left;
+  min-height: 100%;
+  border-top: 3px solid var(--line);
+}
+
+.outlook-card.positive {
+  border-top-color: var(--income);
+}
+
+.outlook-card.negative {
+  border-top-color: var(--danger);
+}
+
+.outlook-card.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.outlook-card:hover {
+  border-color: var(--accent);
+}
+
+.outlook-month {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.outlook-net {
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.outlook-card.positive .outlook-net {
+  color: var(--income);
+}
+
+.outlook-card.negative .outlook-net {
+  color: var(--danger);
+}
+
+.outlook-meta {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+
+.outlook-meta.soft {
+  color: var(--muted);
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.tx-form-section,
+.tx-list-section {
+  background: var(--surface);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.35rem 1.4rem;
+  box-shadow: var(--shadow);
+  min-width: 0;
+  overflow: visible;
+}
+
+.tx-form-section h2,
+.tx-list-section h2 {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.tx-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+.type-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+  padding: 0.3rem;
+  background: var(--paper-2);
+  border-radius: 12px;
+}
+
+.type-tab {
+  border: none;
+  background: transparent;
+  border-radius: 9px;
+  padding: 0.55rem 0.4rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.type-tab.active.bill {
+  background: var(--surface-solid);
+  color: var(--bill);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.type-tab.active.expense {
+  background: var(--surface-solid);
+  color: var(--expense);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.type-tab.active.income {
+  background: var(--surface-solid);
+  color: var(--income);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  min-width: 0;
+}
+
+.optional-hint {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+input,
+select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.7rem 0.8rem;
+  background: var(--surface-solid);
+  font-weight: 400;
+  color: var(--ink);
+}
+
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236b7a72' d='M1.4 0.6L6 5.2 10.6.6 12 2 6 8 0 2z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.85rem center;
+  background-size: 0.75rem;
+  padding-right: 2.25rem;
+}
+
+input:focus,
+select:focus {
+  outline: 2px solid var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+/* Narrow add-transaction column: stack fields so the category select never overlaps. */
+.tx-form .form-row {
+  grid-template-columns: 1fr;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 0.25rem;
+}
+
+.btn-primary {
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  border-radius: 10px;
+  padding: 0.7rem 1.15rem;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btn-primary:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  border: 1px solid var(--line);
+  background: var(--surface-solid);
+  color: var(--ink-soft);
+  font-weight: 600;
+  border-radius: 10px;
+  padding: 0.65rem 1rem;
+}
+
+.btn-ghost:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.link-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+}
+
+.link-btn.danger {
+  color: var(--danger);
+}
+
+.form-error,
+.banner-error {
+  margin: 0;
+  padding: 0.65rem 0.8rem;
+  border-radius: 10px;
+  background: rgba(180, 35, 24, 0.08);
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
+.muted,
+.empty-state {
+  color: var(--muted);
+  margin: 0;
+}
+
+.tx-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.tx-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-solid);
+  border-left: 4px solid var(--line);
+}
+
+.tx-item.bill {
+  border-left-color: var(--bill);
+}
+
+.tx-item.expense {
+  border-left-color: var(--expense);
+}
+
+.tx-item.income {
+  border-left-color: var(--income);
+}
+
+.tx-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.tx-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tx-type-badge {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: var(--paper-2);
+}
+
+.tx-type-badge.bill {
+  color: var(--bill);
+  background: rgba(29, 78, 216, 0.1);
+}
+
+.tx-type-badge.expense {
+  color: var(--expense);
+  background: rgba(180, 83, 9, 0.12);
+}
+
+.tx-type-badge.income {
+  color: var(--income);
+  background: rgba(31, 107, 79, 0.12);
+}
+
+.tx-category {
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.tx-desc {
+  margin: 0;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.tx-when {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.tx-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.tx-amount {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.05rem;
+}
+
+.tx-amount.income {
+  color: var(--income);
+}
+
+.tx-amount.expense,
+.tx-amount.bill {
+  color: var(--ink);
+}
+
+.tx-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+/* Bill reminders */
+.bill-reminders {
+  background: var(--surface);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.35rem 1.4rem;
+  box-shadow: var(--shadow);
+}
+
+.reminders-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.reminders-header h2 {
+  font-size: 1.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.reminders-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.reminder-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-bottom: 1.15rem;
+  padding: 1rem;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.reminder-form h3 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.05rem;
+}
+
+.reminder-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.reminder-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-solid);
+  border-left: 4px solid var(--line);
+}
+
+.reminder-item.status-overdue {
+  border-left-color: var(--danger);
+  background: rgba(180, 35, 24, 0.04);
+}
+
+.reminder-item.status-due-soon {
+  border-left-color: var(--expense);
+  background: rgba(180, 83, 9, 0.06);
+}
+
+.reminder-item.status-upcoming {
+  border-left-color: var(--bill);
+}
+
+.reminder-item.status-paid {
+  border-left-color: var(--income);
+  opacity: 0.85;
+}
+
+.reminder-item.status-unpaid {
+  border-left-color: var(--muted);
+}
+
+.reminder-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.reminder-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.reminder-status {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: var(--paper-2);
+}
+
+.reminder-status.status-overdue {
+  color: var(--danger);
+  background: rgba(180, 35, 24, 0.1);
+}
+
+.reminder-status.status-due-soon {
+  color: var(--expense);
+  background: rgba(180, 83, 9, 0.12);
+}
+
+.reminder-status.status-upcoming {
+  color: var(--bill);
+  background: rgba(29, 78, 216, 0.1);
+}
+
+.reminder-status.status-paid {
+  color: var(--income);
+  background: rgba(31, 107, 79, 0.12);
+}
+
+.reminder-status.status-unpaid {
+  color: var(--muted);
+}
+
+.reminder-due {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.duration-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.schedule-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+}
+
+.reminder-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+/* Calendar */
+.finance-calendar {
+  background: var(--surface);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.35rem 1.4rem;
+  box-shadow: var(--shadow);
+}
+
+.calendar-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.calendar-header .month-nav {
+  margin-bottom: 0;
+  flex: 1;
+  max-width: 360px;
+}
+
+.calendar-header h2 {
+  font-size: 1.25rem;
+}
+
+.calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  margin-right: 0.35rem;
+  vertical-align: middle;
+}
+
+.legend-dot.bill {
+  background: var(--bill);
+}
+
+.legend-dot.income {
+  background: var(--income);
+}
+
+.legend-dot.expense {
+  background: var(--expense);
+}
+
+.calendar-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(240px, 0.9fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.calendar-weekday {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding: 0.35rem 0;
+}
+
+.calendar-cell {
+  min-height: 4.25rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-solid);
+  padding: 0.4rem 0.35rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  text-align: left;
+  color: var(--ink);
+}
+
+.calendar-cell.empty {
+  border-color: transparent;
+  background: transparent;
+  min-height: 4.25rem;
+  pointer-events: none;
+}
+
+.calendar-cell:hover:not(.empty) {
+  border-color: var(--accent);
+}
+
+.calendar-cell.today {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+.calendar-cell.selected {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.calendar-cell.has-overdue {
+  border-color: rgba(180, 35, 24, 0.45);
+}
+
+.calendar-day-num {
+  font-weight: 700;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: auto;
+}
+
+.calendar-dots .legend-dot {
+  margin-right: 0;
+}
+
+.calendar-detail {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-solid);
+  padding: 1rem;
+  min-height: 12rem;
+}
+
+.calendar-detail h3 {
+  margin: 0 0 0.85rem;
+  font-family: var(--display);
+  font-size: 1.05rem;
+}
+
+.calendar-detail-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.calendar-detail-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  border-left: 4px solid var(--line);
+}
+
+.calendar-detail-item.bill {
+  border-left-color: var(--bill);
+}
+
+.calendar-detail-item.income {
+  border-left-color: var(--income);
+}
+
+.calendar-detail-item.expense {
+  border-left-color: var(--expense);
+}
+
+.calendar-detail-item > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+/* Auth */
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+
+.auth-panel {
+  width: min(100%, 420px);
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) + 4px);
+  padding: 2rem 1.75rem 1.75rem;
+  box-shadow: var(--shadow);
+}
+
+.auth-panel .brand {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.auth-panel h1 {
+  font-size: 1.55rem;
+  margin-bottom: 0.4rem;
+}
+
+.auth-sub {
+  margin: 0 0 1.4rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.auth-form .btn-primary {
+  width: 100%;
+  margin-top: 0.35rem;
+}
+
+.auth-switch {
+  margin: 1.15rem 0 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+@media (max-width: 860px) {
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspace,
+  .calendar-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .app {
+    padding: 1rem 0.85rem 2.5rem;
+  }
+
+  .summary-grid,
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-cell {
+    min-height: 3.4rem;
+    padding: 0.3rem 0.2rem;
+  }
+
+  .calendar-day-num {
+    font-size: 0.8rem;
+  }
+
+  .tx-item {
+    flex-direction: column;
+  }
+
+  .reminder-item,
+  .calendar-detail-item {
+    flex-direction: column;
+  }
+
+  .tx-side,
+  .reminder-side {
+    align-items: flex-start;
+    flex-direction: row;
+    justify-content: space-between;
+    width: 100%;
+  }
+}

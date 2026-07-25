@@ -1,0 +1,12 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Open access while auth is disabled (personal use only).
+    match /transactions/{transactionId} {
+      allow read, write: if true;
+    }
+    match /recurringBills/{billId} {
+      allow read, write: if true;
+    }
+  }
+}

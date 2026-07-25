@@ -1,0 +1,79 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Outfit:wght@400;500;600;700&display=swap');
+
+:root {
+  --ink: #1a2420;
+  --ink-soft: #4a5a52;
+  --muted: #6b7a72;
+  --paper: #f3f6f2;
+  --paper-2: #e8eee8;
+  --surface: rgba(255, 255, 255, 0.78);
+  --surface-solid: #ffffff;
+  --line: #cfd9d2;
+  --accent: #1f6b4f;
+  --accent-hover: #175640;
+  --accent-soft: rgba(31, 107, 79, 0.12);
+  --income: #1f6b4f;
+  --expense: #b45309;
+  --bill: #1d4ed8;
+  --danger: #b42318;
+  --shadow: 0 18px 40px rgba(26, 36, 32, 0.08);
+  --radius: 16px;
+  --sans: 'Outfit', system-ui, sans-serif;
+  --display: 'Fraunces', Georgia, serif;
+
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--paper);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background:
+    radial-gradient(ellipse 80% 50% at 10% -10%, rgba(31, 107, 79, 0.14), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(29, 78, 216, 0.08), transparent 50%),
+    linear-gradient(180deg, #eef3ee 0%, var(--paper) 40%, #e6ebe6 100%);
+  background-attachment: fixed;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+h1,
+h2 {
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin: 0;
+}
+
+#root {
+  width: 100%;
+}
