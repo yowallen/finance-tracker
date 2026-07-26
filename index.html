@@ -4,9 +4,25 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/finance-tracker/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>Ledger — Finance Tracker</title>
-    <script type="module" crossorigin src="/finance-tracker/assets/index-5ZCoonzK.js"></script>
-    <link rel="stylesheet" crossorigin href="/finance-tracker/assets/index-1zUzgVWz.css">
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('ledger.theme')
+          var theme =
+            stored === 'light' || stored === 'dark'
+              ? stored
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light'
+          document.documentElement.setAttribute('data-theme', theme)
+          document.documentElement.style.colorScheme = theme
+        } catch (e) {}
+      })()
+    </script>
+    <script type="module" crossorigin src="/finance-tracker/assets/index-lFipgPnZ.js"></script>
+    <link rel="stylesheet" crossorigin href="/finance-tracker/assets/index-B0sxWiT1.css">
   </head>
   <body>
     <div id="root"></div>
