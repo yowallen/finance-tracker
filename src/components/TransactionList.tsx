@@ -1,5 +1,6 @@
 import type { Transaction } from '../types/transaction'
 import { formatDate, formatMoney } from '../lib/format'
+import { LoadingState } from './LoadingState'
 
 interface TransactionListProps {
   transactions: Transaction[]
@@ -14,20 +15,13 @@ export function TransactionList({
   onEdit,
   onDelete,
 }: TransactionListProps) {
-  if (loading) {
-    return (
-      <section className="tx-list-section">
-        <h2>Transactions</h2>
-        <p className="muted">Loading…</p>
-      </section>
-    )
-  }
-
   return (
     <section className="tx-list-section" aria-labelledby="list-heading">
       <h2 id="list-heading">Transactions</h2>
 
-      {transactions.length === 0 ? (
+      {loading ? (
+        <LoadingState variant="section" label="Loading transactions…" />
+      ) : transactions.length === 0 ? (
         <p className="empty-state">
           No transactions this month yet. Add a bill, expense, or income above.
         </p>

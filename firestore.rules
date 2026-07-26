@@ -1,12 +1,44 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Open access while auth is disabled (personal use only).
-    match /transactions/{transactionId} {
-      allow read, write: if true;
+    function isSignedIn() {
+      return request.auth != null;
     }
+
+    function isOwner() {
+      return isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    function isCreatingOwn() {
+      return isSignedIn() && request.resource.data.userId == request.auth.uid;
+    }
+
+    // One-time claim: move pre-auth `personal` docs onto the signed-in uid.
+    function isClaimingLegacy() {
+      return isSignedIn()
+        && resource.data.userId == 'personal'
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['userId']);
+    }
+
+    // Temporary read of legacy docs so the owner can claim them after enabling auth.
+    function canRead() {
+      return isSignedIn()
+        && (resource.data.userId == request.auth.uid || resource.data.userId == 'personal');
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if canRead();
+      allow create: if isCreatingOwn();
+      allow update: if isOwner() || isClaimingLegacy();
+      allow delete: if isOwner();
+    }
+
     match /recurringBills/{billId} {
-      allow read, write: if true;
+      allow read: if canRead();
+      allow create: if isCreatingOwn();
+      allow update: if isOwner() || isClaimingLegacy();
+      allow delete: if isOwner();
     }
   }
 }

@@ -11,6 +11,7 @@ import type {
   RecurringBill,
   RecurringBillInput,
 } from '../types/recurringBill'
+import { LoadingState } from './LoadingState'
 
 interface BillRemindersProps {
   year: number
@@ -344,7 +345,7 @@ export function BillReminders({
       )}
 
       {loading ? (
-        <p className="muted">Loading reminders…</p>
+        <LoadingState variant="section" label="Loading reminders…" />
       ) : reminders.length === 0 ? (
         <p className="empty-state">
           No bills due in {monthLabel(year, month)}. Add a reminder with a start month and

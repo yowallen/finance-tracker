@@ -1,13 +1,20 @@
 import { useState, type FormEvent } from 'react'
+import { ThemeToggle } from './ThemeToggle'
+import type { ThemeMode } from '../lib/theme'
 
 interface AuthFormProps {
   onSignIn: (email: string, password: string) => Promise<void>
-  onSignUp: (email: string, password: string) => Promise<void>
   error: string | null
+  theme: ThemeMode
+  onToggleTheme: () => void
 }
 
-export function AuthForm({ onSignIn, onSignUp, error }: AuthFormProps) {
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
+export function AuthForm({
+  onSignIn,
+  error,
+  theme,
+  onToggleTheme,
+}: AuthFormProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
@@ -18,17 +25,9 @@ export function AuthForm({ onSignIn, onSignUp, error }: AuthFormProps) {
     setLocalError(null)
     setBusy(true)
     try {
-      if (mode === 'signin') {
-        await onSignIn(email.trim(), password)
-      } else {
-        await onSignUp(email.trim(), password)
-      }
+      await onSignIn(email.trim(), password)
     } catch {
-      setLocalError(
-        mode === 'signin'
-          ? 'Could not sign in. Check your email and password.'
-          : 'Could not create account. Try a different email or a longer password.',
-      )
+      setLocalError('Could not sign in. Check your email and password.')
     } finally {
       setBusy(false)
     }
@@ -36,11 +35,14 @@ export function AuthForm({ onSignIn, onSignUp, error }: AuthFormProps) {
 
   return (
     <div className="auth-shell">
+      <div className="auth-theme">
+        <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+      </div>
       <div className="auth-panel">
         <p className="brand">Ledger</p>
-        <h1>{mode === 'signin' ? 'Welcome back' : 'Create your account'}</h1>
+        <h1>Welcome back</h1>
         <p className="auth-sub">
-          Track bills, expenses, and income — with a date on every entry.
+          Private personal finance tracker — sign in to continue.
         </p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
@@ -59,12 +61,12 @@ export function AuthForm({ onSignIn, onSignUp, error }: AuthFormProps) {
             Password
             <input
               type="password"
-              autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+              autoComplete="current-password"
               required
               minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 6 characters"
+              placeholder="Your password"
             />
           </label>
 
@@ -75,27 +77,9 @@ export function AuthForm({ onSignIn, onSignUp, error }: AuthFormProps) {
           )}
 
           <button type="submit" className="btn-primary" disabled={busy}>
-            {busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Sign up'}
+            {busy ? 'Please wait…' : 'Sign in'}
           </button>
         </form>
-
-        <p className="auth-switch">
-          {mode === 'signin' ? (
-            <>
-              New here?{' '}
-              <button type="button" className="link-btn" onClick={() => setMode('signup')}>
-                Create an account
-              </button>
-            </>
-          ) : (
-            <>
-              Already have an account?{' '}
-              <button type="button" className="link-btn" onClick={() => setMode('signin')}>
-                Sign in
-              </button>
-            </>
-          )}
-        </p>
       </div>
     </div>
   )

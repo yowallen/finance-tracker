@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react'
-// Auth temporarily disabled for personal use — re-enable when needed:
-// import { AuthForm } from './components/AuthForm'
-// import { useAuth } from './hooks/useAuth'
+import { AuthForm } from './components/AuthForm'
 import { BillReminders } from './components/BillReminders'
 import { FinanceCalendar } from './components/FinanceCalendar'
+import { LoadingState } from './components/LoadingState'
 import { MonthSummary } from './components/MonthSummary'
 import { ThemeToggle } from './components/ThemeToggle'
 import { TransactionForm } from './components/TransactionForm'
 import { TransactionList } from './components/TransactionList'
+import { useAuth } from './hooks/useAuth'
 import { useRecurringBills } from './hooks/useRecurringBills'
 import { useTheme } from './hooks/useTheme'
 import { useTransactions } from './hooks/useTransactions'
@@ -16,16 +16,16 @@ import type { BillReminder } from './types/recurringBill'
 import type { Transaction, TransactionInput } from './types/transaction'
 import './App.css'
 
-/** Fixed owner id while auth is off. Swap back to `user.uid` when re-enabling login. */
-const LOCAL_USER_ID = 'personal'
-
 function App() {
-  // const { user, loading: authLoading, error: authError, signIn, signUp, logOut } = useAuth()
+  const { user, loading: authLoading, error: authError, signIn, logOut } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth())
   const [editing, setEditing] = useState<Transaction | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const userId = user?.uid
 
   const {
     transactions,
@@ -36,7 +36,7 @@ function App() {
     add,
     update,
     remove,
-  } = useTransactions(LOCAL_USER_ID, year, month)
+  } = useTransactions(userId, year, month)
 
   const {
     bills,
@@ -46,7 +46,9 @@ function App() {
     add: addBill,
     update: updateBill,
     remove: removeBill,
-  } = useRecurringBills(LOCAL_USER_ID, year, month, transactions)
+  } = useRecurringBills(userId, year, month, transactions)
+
+  const dataLoading = txLoading || billLoading
 
   const monthBalance = useMemo(
     () => computeRunningBalanceForMonth(bills, allTransactions, year, month),
@@ -70,18 +72,28 @@ function App() {
   }
 
   async function handleSubmit(input: TransactionInput) {
-    if (editing) {
-      await update(editing.id, input)
-      setEditing(null)
-    } else {
-      await add(input)
+    setSaving(true)
+    try {
+      if (editing) {
+        await update(editing.id, input)
+        setEditing(null)
+      } else {
+        await add(input)
+      }
+    } finally {
+      setSaving(false)
     }
   }
 
   async function handleDelete(id: string) {
     if (!window.confirm('Delete this transaction?')) return
     if (editing?.id === id) setEditing(null)
-    await remove(id)
+    setSaving(true)
+    try {
+      await remove(id)
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleMarkPaid(reminder: BillReminder) {
@@ -90,101 +102,135 @@ function App() {
     const day = isCurrentMonth ? now.getDate() : reminder.dueDate.getDate()
     const occurred = new Date(year, month, day, 12, 0, 0, 0)
 
-    await add({
-      type: 'bill',
-      amount: reminder.bill.amount,
-      category: reminder.bill.category,
-      description: reminder.bill.name,
-      occurredAt: occurred.toISOString(),
-      recurringBillId: reminder.bill.id,
-    })
+    setSaving(true)
+    try {
+      await add({
+        type: 'bill',
+        amount: reminder.bill.amount,
+        category: reminder.bill.category,
+        description: reminder.bill.name,
+        occurredAt: occurred.toISOString(),
+        recurringBillId: reminder.bill.id,
+      })
+    } finally {
+      setSaving(false)
+    }
   }
 
-  // if (authLoading) {
-  //   return (
-  //     <div className="boot">
-  //       <p>Loading Ledger…</p>
-  //     </div>
-  //   )
-  // }
+  if (authLoading) {
+    return (
+      <div className="boot">
+        <LoadingState variant="page" label="Signing you in…" />
+      </div>
+    )
+  }
 
-  // if (!user) {
-  //   return <AuthForm onSignIn={signIn} onSignUp={signUp} error={authError} />
-  // }
+  if (!user) {
+    return (
+      <AuthForm
+        onSignIn={signIn}
+        error={authError}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
+    )
+  }
 
   return (
     <div className="app">
       <header className="topbar">
         <div className="topbar-brand">
           <span className="brand">Ledger</span>
-          <span className="topbar-email">Personal</span>
+          <span className="topbar-email">{user.email ?? 'Signed in'}</span>
         </div>
         <div className="topbar-actions">
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
-          {/* <button type="button" className="btn-ghost" onClick={() => void logOut()}>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => {
+              setEditing(null)
+              void logOut()
+            }}
+          >
             Sign out
-          </button> */}
+          </button>
         </div>
       </header>
 
-      <main className="main">
-        <MonthSummary
-          year={year}
-          month={month}
-          summary={summary}
-          unpaidScheduledBills={monthBalance.unpaidScheduledBills}
-          unpaidCount={monthBalance.unpaidCount}
-          monthNet={monthBalance.monthNet}
-          runningBalance={monthBalance.runningBalance}
-          outlookRows={outlookRows}
-          onPrev={() => shiftMonth(-1)}
-          onNext={() => shiftMonth(1)}
-          onSelectMonth={selectMonth}
-        />
-
-        {txError && (
-          <p className="banner-error" role="alert">
-            {txError}
-          </p>
-        )}
-
-        <FinanceCalendar
-          year={year}
-          month={month}
-          reminders={reminders}
-          bills={bills}
-          allTransactions={allTransactions}
-          transactions={transactions}
-          onPrev={() => shiftMonth(-1)}
-          onNext={() => shiftMonth(1)}
-        />
-
-        <BillReminders
-          year={year}
-          month={month}
-          reminders={reminders}
-          loading={billLoading}
-          error={billError}
-          onAdd={addBill}
-          onUpdate={updateBill}
-          onDelete={removeBill}
-          onMarkPaid={handleMarkPaid}
-        />
-
-        <div className="workspace">
-          <TransactionForm
-            key={editing?.id ?? 'new'}
-            editing={editing}
-            onSubmit={handleSubmit}
-            onCancelEdit={() => setEditing(null)}
-          />
-          <TransactionList
-            transactions={transactions}
-            loading={txLoading}
-            onEdit={setEditing}
-            onDelete={handleDelete}
-          />
+      {saving && (
+        <div className="save-progress" role="status" aria-live="polite">
+          <span className="save-progress-bar" />
+          <span className="visually-hidden">Saving changes…</span>
         </div>
+      )}
+
+      <main className="main" aria-busy={dataLoading || saving}>
+        {dataLoading ? (
+          <section className="month-summary">
+            <LoadingState variant="page" label="Loading your ledger…" />
+          </section>
+        ) : (
+          <>
+            <MonthSummary
+              year={year}
+              month={month}
+              summary={summary}
+              unpaidScheduledBills={monthBalance.unpaidScheduledBills}
+              unpaidCount={monthBalance.unpaidCount}
+              monthNet={monthBalance.monthNet}
+              runningBalance={monthBalance.runningBalance}
+              outlookRows={outlookRows}
+              onPrev={() => shiftMonth(-1)}
+              onNext={() => shiftMonth(1)}
+              onSelectMonth={selectMonth}
+            />
+
+            {txError && (
+              <p className="banner-error" role="alert">
+                {txError}
+              </p>
+            )}
+
+            <FinanceCalendar
+              year={year}
+              month={month}
+              reminders={reminders}
+              bills={bills}
+              allTransactions={allTransactions}
+              transactions={transactions}
+              onPrev={() => shiftMonth(-1)}
+              onNext={() => shiftMonth(1)}
+            />
+
+            <BillReminders
+              year={year}
+              month={month}
+              reminders={reminders}
+              loading={billLoading}
+              error={billError}
+              onAdd={addBill}
+              onUpdate={updateBill}
+              onDelete={removeBill}
+              onMarkPaid={handleMarkPaid}
+            />
+
+            <div className="workspace">
+              <TransactionForm
+                key={editing?.id ?? 'new'}
+                editing={editing}
+                onSubmit={handleSubmit}
+                onCancelEdit={() => setEditing(null)}
+              />
+              <TransactionList
+                transactions={transactions}
+                loading={txLoading}
+                onEdit={setEditing}
+                onDelete={handleDelete}
+              />
+            </div>
+          </>
+        )}
       </main>
     </div>
   )
