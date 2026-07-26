@@ -22,6 +22,11 @@ export function useAuth() {
   })
 
   useEffect(() => {
+    if (!auth) {
+      setState({ user: null, loading: false, error: null })
+      return undefined
+    }
+
     const unsubscribe = onAuthStateChanged(
       auth,
       (user) => {
@@ -36,6 +41,12 @@ export function useAuth() {
 
   async function signUp(email: string, password: string): Promise<void> {
     setState((prev) => ({ ...prev, error: null }))
+    if (!auth) {
+      const message = 'Authentication is unavailable because Firebase is not configured.'
+      setState((prev) => ({ ...prev, error: message }))
+      throw new Error(message)
+    }
+
     try {
       await createUserWithEmailAndPassword(auth, email, password)
     } catch (err) {
@@ -47,6 +58,12 @@ export function useAuth() {
 
   async function signIn(email: string, password: string): Promise<void> {
     setState((prev) => ({ ...prev, error: null }))
+    if (!auth) {
+      const message = 'Authentication is unavailable because Firebase is not configured.'
+      setState((prev) => ({ ...prev, error: message }))
+      throw new Error(message)
+    }
+
     try {
       await signInWithEmailAndPassword(auth, email, password)
     } catch (err) {
@@ -57,6 +74,10 @@ export function useAuth() {
   }
 
   async function logOut(): Promise<void> {
+    if (!auth) {
+      return
+    }
+
     await signOut(auth)
   }
 

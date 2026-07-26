@@ -16,42 +16,98 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 1.75rem;
+  margin-bottom: 1.5rem;
+  padding: 0.85rem 1rem;
+  background: var(--md-sys-color-surface-container-low);
+  border-radius: var(--radius);
+  box-shadow: var(--elevation-1);
 }
 
 .topbar-brand {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.1rem;
 }
 
 .brand {
   font-family: var(--display);
-  font-size: 1.65rem;
+  font-size: 1.5rem;
   font-weight: 700;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
   color: var(--accent);
   margin: 0;
 }
 
 .topbar-email {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 500;
   color: var(--muted);
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: none;
+  border-radius: 999px;
+  padding: 0.5rem 0.9rem 0.5rem 0.65rem;
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.theme-toggle:hover {
+  box-shadow: var(--elevation-1);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.theme-toggle-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+}
+
+.theme-toggle-label {
+  line-height: 1;
 }
 
 .main {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.25rem;
 }
 
-.month-summary {
+.md-card {
   background: var(--surface);
-  backdrop-filter: blur(10px);
-  border: 1px solid var(--line);
+  border: none;
   border-radius: var(--radius);
-  padding: 1.25rem 1.35rem 1.5rem;
-  box-shadow: var(--shadow);
+  padding: 1.25rem 1.35rem 1.4rem;
+  box-shadow: var(--elevation-1);
+}
+
+.month-summary,
+.tx-form-section,
+.tx-list-section,
+.bill-reminders,
+.finance-calendar,
+.auth-panel {
+  background: var(--surface);
+  border: none;
+  border-radius: var(--radius);
+  padding: 1.25rem 1.35rem 1.4rem;
+  box-shadow: var(--elevation-1);
 }
 
 .month-nav {
@@ -63,24 +119,30 @@
 }
 
 .month-nav h2 {
-  font-size: 1.45rem;
+  font-size: 1.4rem;
   text-align: center;
 }
 
 .icon-btn {
-  width: 2.4rem;
-  height: 2.4rem;
+  width: 2.5rem;
+  height: 2.5rem;
   border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface-solid);
+  border: none;
+  background: var(--md-sys-color-surface-container-high);
   font-size: 1.4rem;
   line-height: 1;
   color: var(--ink-soft);
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .icon-btn:hover {
-  border-color: var(--accent);
+  background: var(--accent-soft);
   color: var(--accent);
+}
+
+.icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .summary-grid {
@@ -90,21 +152,21 @@
 }
 
 .stat {
-  background: var(--surface-solid);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 0.9rem 1rem;
+  background: var(--md-sys-color-surface-container-low);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0.95rem 1rem;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 }
 
 .stat-label {
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .stat-value {
@@ -138,41 +200,41 @@
   color: var(--muted);
 }
 
-/* Month-by-month balance outlook */
-.balance-outlook {
-  background: var(--surface);
-  backdrop-filter: blur(10px);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 1.25rem 1.35rem 1.35rem;
-  box-shadow: var(--shadow);
-}
-
-.outlook-header {
+.summary-outlook {
+  margin-top: 1rem;
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0;
+  gap: 0.75rem;
 }
 
-.outlook-header:has(+ .outlook-track) {
-  margin-bottom: 0.9rem;
+.text-btn {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0.35rem 0;
+  margin: 0;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  letter-spacing: 0.01em;
 }
 
-.outlook-toggle {
-  flex-shrink: 0;
+.text-btn:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
 }
 
-.outlook-header h2 {
-  font-size: 1.25rem;
-  margin-bottom: 0.25rem;
+.balance-outlook {
+  width: 100%;
 }
 
 .outlook-sub {
-  margin: 0;
+  margin: 0 0 0.65rem;
   color: var(--muted);
-  font-size: 0.92rem;
+  font-size: 0.88rem;
 }
 
 .outlook-track {
@@ -187,10 +249,10 @@
 
 .outlook-card {
   scroll-snap-align: start;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface-solid);
-  padding: 0.85rem 0.9rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--md-sys-color-surface-container-low);
+  padding: 0.9rem 0.95rem;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -198,6 +260,7 @@
   text-align: left;
   min-height: 100%;
   border-top: 3px solid var(--line);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .outlook-card.positive {
@@ -209,18 +272,26 @@
 }
 
 .outlook-card.selected {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  box-shadow: var(--elevation-1);
 }
 
 .outlook-card:hover {
-  border-color: var(--accent);
+  box-shadow: var(--elevation-1);
 }
 
 .outlook-month {
   font-size: 0.82rem;
   font-weight: 600;
   color: var(--muted);
+}
+
+.outlook-card.selected .outlook-month,
+.outlook-card.selected .outlook-meta,
+.outlook-card.selected .outlook-meta.soft {
+  color: inherit;
+  opacity: 0.85;
 }
 
 .outlook-net {
@@ -235,6 +306,11 @@
 
 .outlook-card.negative .outlook-net {
   color: var(--danger);
+}
+
+.outlook-card.selected.positive .outlook-net,
+.outlook-card.selected.negative .outlook-net {
+  color: inherit;
 }
 
 .outlook-meta {
@@ -254,18 +330,6 @@
   align-items: start;
 }
 
-.tx-form-section,
-.tx-list-section {
-  background: var(--surface);
-  backdrop-filter: blur(10px);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 1.25rem 1.35rem 1.4rem;
-  box-shadow: var(--shadow);
-  min-width: 0;
-  overflow: visible;
-}
-
 .tx-form-section h2,
 .tx-list-section h2 {
   font-size: 1.25rem;
@@ -282,46 +346,44 @@
 .type-tabs {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 0.4rem;
+  gap: 0.35rem;
   padding: 0.3rem;
-  background: var(--paper-2);
-  border-radius: 12px;
+  background: var(--md-sys-color-surface-container);
+  border-radius: 999px;
 }
 
 .type-tab {
   border: none;
   background: transparent;
-  border-radius: 9px;
+  border-radius: 999px;
   padding: 0.55rem 0.4rem;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   color: var(--muted);
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .type-tab.active.bill {
-  background: var(--surface-solid);
+  background: var(--bill-container);
   color: var(--bill);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .type-tab.active.expense {
-  background: var(--surface-solid);
+  background: var(--expense-container);
   color: var(--expense);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .type-tab.active.income {
-  background: var(--surface-solid);
+  background: var(--income-container);
   color: var(--income);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 label {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  font-size: 0.88rem;
-  font-weight: 600;
+  font-size: 0.8rem;
+  font-weight: 500;
   color: var(--ink-soft);
   min-width: 0;
 }
@@ -338,26 +400,32 @@ select {
   min-width: 0;
   box-sizing: border-box;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 0.7rem 0.8rem;
-  background: var(--surface-solid);
+  border-radius: var(--radius-xs);
+  padding: 0.75rem 0.85rem;
+  background: var(--md-sys-color-surface-container-highest);
   font-weight: 400;
   color: var(--ink);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 select {
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236b7a72' d='M1.4 0.6L6 5.2 10.6.6 12 2 6 8 0 2z'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236f7974' d='M1.4 0.6L6 5.2 10.6.6 12 2 6 8 0 2z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.85rem center;
   background-size: 0.75rem;
   padding-right: 2.25rem;
 }
 
+html[data-theme='dark'] select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2389938d' d='M1.4 0.6L6 5.2 10.6.6 12 2 6 8 0 2z'/%3E%3C/svg%3E");
+}
+
 input:focus,
 select:focus {
-  outline: 2px solid var(--accent-soft);
+  outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .form-row {
@@ -367,7 +435,6 @@ select:focus {
   min-width: 0;
 }
 
-/* Narrow add-transaction column: stack fields so the category select never overlaps. */
 .tx-form .form-row {
   grid-template-columns: 1fr;
 }
@@ -382,31 +449,44 @@ select:focus {
 .btn-primary {
   border: none;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 600;
-  border-radius: 10px;
-  padding: 0.7rem 1.15rem;
+  border-radius: 999px;
+  padding: 0.7rem 1.35rem;
+  letter-spacing: 0.02em;
+  box-shadow: var(--elevation-1);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .btn-primary:hover:not(:disabled) {
   background: var(--accent-hover);
+  box-shadow: var(--elevation-2);
+}
+
+html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  background: var(--accent);
 }
 
 .btn-primary:disabled {
-  opacity: 0.65;
+  opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .btn-ghost {
   border: 1px solid var(--line);
-  background: var(--surface-solid);
-  color: var(--ink-soft);
+  background: transparent;
+  color: var(--accent);
   font-weight: 600;
-  border-radius: 10px;
-  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  padding: 0.65rem 1.15rem;
+  letter-spacing: 0.02em;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .btn-ghost:hover {
+  background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -417,11 +497,12 @@ select:focus {
   padding: 0;
   color: var(--accent);
   font-weight: 600;
-  font-size: 0.88rem;
+  font-size: 0.875rem;
 }
 
 .link-btn:hover {
   text-decoration: underline;
+  text-underline-offset: 0.15em;
 }
 
 .link-btn.danger {
@@ -431,10 +512,10 @@ select:focus {
 .form-error,
 .banner-error {
   margin: 0;
-  padding: 0.65rem 0.8rem;
-  border-radius: 10px;
-  background: rgba(180, 35, 24, 0.08);
-  color: var(--danger);
+  padding: 0.7rem 0.9rem;
+  border-radius: var(--radius-xs);
+  background: var(--danger-container);
+  color: var(--md-sys-color-on-error-container);
   font-size: 0.9rem;
 }
 
@@ -458,9 +539,9 @@ select:focus {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.9rem 1rem;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface-solid);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--md-sys-color-surface-container-low);
   border-left: 4px solid var(--line);
 }
 
@@ -491,28 +572,28 @@ select:focus {
 }
 
 .tx-type-badge {
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: 700;
-  padding: 0.15rem 0.45rem;
+  padding: 0.2rem 0.5rem;
   border-radius: 999px;
-  background: var(--paper-2);
+  background: var(--md-sys-color-surface-container-high);
 }
 
 .tx-type-badge.bill {
   color: var(--bill);
-  background: rgba(29, 78, 216, 0.1);
+  background: var(--bill-container);
 }
 
 .tx-type-badge.expense {
   color: var(--expense);
-  background: rgba(180, 83, 9, 0.12);
+  background: var(--expense-container);
 }
 
 .tx-type-badge.income {
   color: var(--income);
-  background: rgba(31, 107, 79, 0.12);
+  background: var(--income-container);
 }
 
 .tx-category {
@@ -559,16 +640,6 @@ select:focus {
   gap: 0.75rem;
 }
 
-/* Bill reminders */
-.bill-reminders {
-  background: var(--surface);
-  backdrop-filter: blur(10px);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 1.25rem 1.35rem 1.4rem;
-  box-shadow: var(--shadow);
-}
-
 .reminders-header {
   display: flex;
   align-items: flex-start;
@@ -595,8 +666,8 @@ select:focus {
   margin-bottom: 1.15rem;
   padding: 1rem;
   border: 1px dashed var(--line);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.55);
+  border-radius: var(--radius-sm);
+  background: var(--md-sys-color-surface-container-low);
 }
 
 .reminder-form h3 {
@@ -619,20 +690,20 @@ select:focus {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.9rem 1rem;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface-solid);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--md-sys-color-surface-container-low);
   border-left: 4px solid var(--line);
 }
 
 .reminder-item.status-overdue {
   border-left-color: var(--danger);
-  background: rgba(180, 35, 24, 0.04);
+  background: var(--danger-container);
 }
 
 .reminder-item.status-due-soon {
   border-left-color: var(--expense);
-  background: rgba(180, 83, 9, 0.06);
+  background: var(--expense-container);
 }
 
 .reminder-item.status-upcoming {
@@ -641,7 +712,7 @@ select:focus {
 
 .reminder-item.status-paid {
   border-left-color: var(--income);
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 .reminder-item.status-unpaid {
@@ -663,33 +734,33 @@ select:focus {
 }
 
 .reminder-status {
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: 700;
-  padding: 0.15rem 0.45rem;
+  padding: 0.2rem 0.5rem;
   border-radius: 999px;
-  background: var(--paper-2);
+  background: var(--md-sys-color-surface-container-high);
 }
 
 .reminder-status.status-overdue {
   color: var(--danger);
-  background: rgba(180, 35, 24, 0.1);
+  background: var(--danger-container);
 }
 
 .reminder-status.status-due-soon {
   color: var(--expense);
-  background: rgba(180, 83, 9, 0.12);
+  background: var(--expense-container);
 }
 
 .reminder-status.status-upcoming {
   color: var(--bill);
-  background: rgba(29, 78, 216, 0.1);
+  background: var(--bill-container);
 }
 
 .reminder-status.status-paid {
   color: var(--income);
-  background: rgba(31, 107, 79, 0.12);
+  background: var(--income-container);
 }
 
 .reminder-status.status-unpaid {
@@ -712,9 +783,9 @@ select:focus {
   margin: 0;
   font-size: 0.85rem;
   font-weight: 500;
-  color: var(--accent);
-  background: var(--accent-soft);
-  border-radius: 10px;
+  color: var(--md-sys-color-on-primary-container);
+  background: var(--md-sys-color-primary-container);
+  border-radius: var(--radius-xs);
   padding: 0.55rem 0.75rem;
 }
 
@@ -724,16 +795,6 @@ select:focus {
   align-items: flex-end;
   gap: 0.45rem;
   flex-shrink: 0;
-}
-
-/* Calendar */
-.finance-calendar {
-  background: var(--surface);
-  backdrop-filter: blur(10px);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 1.25rem 1.35rem 1.4rem;
-  box-shadow: var(--shadow);
 }
 
 .calendar-header {
@@ -753,6 +814,50 @@ select:focus {
 
 .calendar-header h2 {
   font-size: 1.25rem;
+}
+
+.calendar-adb {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-bottom: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+
+.calendar-adb-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 1rem;
+}
+
+.calendar-adb .stat-label {
+  color: inherit;
+  opacity: 0.8;
+}
+
+.calendar-adb .stat-value {
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+}
+
+.calendar-adb.positive .stat-value,
+.calendar-adb.negative .stat-value {
+  color: inherit;
+}
+
+.calendar-adb .stat-meta {
+  margin: 0;
+  font-size: 0.78rem;
+  color: inherit;
+  opacity: 0.8;
+  line-height: 1.35;
 }
 
 .calendar-legend {
@@ -802,7 +907,7 @@ select:focus {
 
 .calendar-weekday {
   text-align: center;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -812,9 +917,9 @@ select:focus {
 
 .calendar-cell {
   min-height: 4.25rem;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface-solid);
+  border: none;
+  border-radius: var(--radius-xs);
+  background: var(--md-sys-color-surface-container-low);
   padding: 0.4rem 0.35rem;
   display: flex;
   flex-direction: column;
@@ -822,6 +927,7 @@ select:focus {
   gap: 0.35rem;
   text-align: left;
   color: var(--ink);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .calendar-cell.empty {
@@ -832,20 +938,20 @@ select:focus {
 }
 
 .calendar-cell:hover:not(.empty) {
-  border-color: var(--accent);
+  background: var(--md-sys-color-surface-container-high);
 }
 
 .calendar-cell.today {
-  box-shadow: inset 0 0 0 1.5px var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 
 .calendar-cell.selected {
-  background: var(--accent-soft);
-  border-color: var(--accent);
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
 }
 
-.calendar-cell.has-overdue {
-  border-color: rgba(180, 35, 24, 0.45);
+.calendar-cell.has-overdue:not(.selected) {
+  box-shadow: inset 0 0 0 2px var(--danger);
 }
 
 .calendar-day-num {
@@ -866,9 +972,9 @@ select:focus {
 }
 
 .calendar-detail {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface-solid);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--md-sys-color-surface-container-low);
   padding: 1rem;
   min-height: 12rem;
 }
@@ -877,6 +983,29 @@ select:focus {
   margin: 0 0 0.85rem;
   font-family: var(--display);
   font-size: 1.05rem;
+}
+
+.calendar-day-balance {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.9rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--radius-xs);
+  border: none;
+  background: var(--md-sys-color-surface-container-high);
+}
+
+.calendar-day-balance.positive .stat-value {
+  color: var(--income);
+}
+
+.calendar-day-balance.negative .stat-value {
+  color: var(--danger);
+}
+
+.calendar-day-balance .stat-value {
+  font-size: 1.2rem;
 }
 
 .calendar-detail-list {
@@ -893,8 +1022,9 @@ select:focus {
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.7rem 0.75rem;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: var(--surface);
   border-left: 4px solid var(--line);
 }
 
@@ -917,7 +1047,6 @@ select:focus {
   gap: 0.2rem;
 }
 
-/* Auth */
 .auth-shell {
   min-height: 100vh;
   display: grid;
@@ -927,12 +1056,8 @@ select:focus {
 
 .auth-panel {
   width: min(100%, 420px);
-  background: var(--surface);
-  backdrop-filter: blur(12px);
-  border: 1px solid var(--line);
-  border-radius: calc(var(--radius) + 4px);
   padding: 2rem 1.75rem 1.75rem;
-  box-shadow: var(--shadow);
+  box-shadow: var(--elevation-2);
 }
 
 .auth-panel .brand {
@@ -983,6 +1108,14 @@ select:focus {
 @media (max-width: 520px) {
   .app {
     padding: 1rem 0.85rem 2.5rem;
+  }
+
+  .theme-toggle-label {
+    display: none;
+  }
+
+  .theme-toggle {
+    padding: 0.55rem;
   }
 
   .summary-grid,

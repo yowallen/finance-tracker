@@ -1,4 +1,5 @@
 import {
+  dueDateForMonth,
   isBillDueInMonth,
 } from './recurringBills'
 import { computeMonthlySummary, filterByMonth } from './transactions'
@@ -154,4 +155,135 @@ export function computeRunningBalanceForMonth(
 ): MonthBalanceOutlook {
   const rows = buildBalanceOutlook(bills, transactions, year, month, 0)
   return rows[0] ?? computeMonthBalance(bills, transactions, year, month, 0)
+}
+
+/** Net change within a month using only activity on or before `day`. */
+function monthNetThroughDay(
+  bills: RecurringBill[],
+  transactions: Transaction[],
+  year: number,
+  month: number,
+  day: number,
+): number {
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const clampedDay = Math.min(Math.max(day, 1), daysInMonth)
+
+  const monthly = filterByMonth(transactions, year, month).filter((tx) => {
+    const d = new Date(tx.occurredAt)
+    return d.getDate() <= clampedDay
+  })
+
+  let income = 0
+  let expenses = 0
+  let recordedBills = 0
+  const paidRecurringIds = new Set<string>()
+
+  for (const tx of monthly) {
+    if (tx.type === 'income') income += tx.amount
+    else if (tx.type === 'expense') expenses += tx.amount
+    else {
+      recordedBills += tx.amount
+      if (tx.recurringBillId) paidRecurringIds.add(tx.recurringBillId)
+    }
+  }
+
+  let unpaidScheduledBills = 0
+  for (const bill of bills) {
+    if (!bill.active || !isBillDueInMonth(bill, year, month)) continue
+    const dueDay = dueDateForMonth(year, month, bill.dueDay).getDate()
+    if (dueDay <= clampedDay && !paidRecurringIds.has(bill.id)) {
+      unpaidScheduledBills += bill.amount
+    }
+  }
+
+  return income - expenses - recordedBills - unpaidScheduledBills
+}
+
+/**
+ * Running balance as of a specific calendar day (inclusive).
+ * Includes prior months in full, then this month's activity through that day.
+ */
+export function computeRunningBalanceForDay(
+  bills: RecurringBill[],
+  transactions: Transaction[],
+  year: number,
+  month: number,
+  day: number,
+): number {
+  const targetIndex = monthKey(year, month)
+  const epoch = earliestMonthIndex(bills, transactions, year, month)
+
+  let running = 0
+  for (let index = epoch; index < targetIndex; index += 1) {
+    const { year: y, month: m } = fromMonthKey(index)
+    running = computeMonthBalance(bills, transactions, y, m, running).runningBalance
+  }
+
+  return running + monthNetThroughDay(bills, transactions, year, month, day)
+}
+
+export interface AverageDailyBalanceResult {
+  /** Mean of end-of-day running balances across the averaged days. */
+  averageDailyBalance: number
+  /** Days included in the average (full month, or month-to-date). */
+  daysAveraged: number
+  /** Days in the calendar month. */
+  daysInMonth: number
+  /** End-of-day balance on the last day included in the average. */
+  lastDayBalance: number
+}
+
+function priorMonthRunningBalance(
+  bills: RecurringBill[],
+  transactions: Transaction[],
+  year: number,
+  month: number,
+): number {
+  const targetIndex = monthKey(year, month)
+  const epoch = earliestMonthIndex(bills, transactions, year, month)
+
+  let running = 0
+  for (let index = epoch; index < targetIndex; index += 1) {
+    const { year: y, month: m } = fromMonthKey(index)
+    running = computeMonthBalance(bills, transactions, y, m, running).runningBalance
+  }
+  return running
+}
+
+/**
+ * Average Daily Balance for a month: mean of end-of-day running balances.
+ * Banks typically use this over the statement month vs a required minimum.
+ *
+ * When `throughDay` is set (e.g. today in the current month), only days 1..throughDay
+ * are averaged — matching month-to-date ADB. Omit it for the full calendar month
+ * (includes scheduled unpaid bills on future due dates).
+ */
+export function computeAverageDailyBalance(
+  bills: RecurringBill[],
+  transactions: Transaction[],
+  year: number,
+  month: number,
+  throughDay?: number,
+): AverageDailyBalanceResult {
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const lastDay =
+    throughDay == null
+      ? daysInMonth
+      : Math.min(Math.max(throughDay, 1), daysInMonth)
+
+  const prior = priorMonthRunningBalance(bills, transactions, year, month)
+
+  let sum = 0
+  let lastDayBalance = prior
+  for (let day = 1; day <= lastDay; day += 1) {
+    lastDayBalance = prior + monthNetThroughDay(bills, transactions, year, month, day)
+    sum += lastDayBalance
+  }
+
+  return {
+    averageDailyBalance: sum / lastDay,
+    daysAveraged: lastDay,
+    daysInMonth,
+    lastDayBalance,
+  }
 }

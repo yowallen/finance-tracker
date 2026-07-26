@@ -1,13 +1,21 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { formatMoney, formatDate, monthLabel } from '../lib/format'
-import type { BillReminder } from '../types/recurringBill'
+import {
+  computeAverageDailyBalance,
+  computeRunningBalanceForDay,
+} from '../services/balanceOutlook'
+import type { BillReminder, RecurringBill } from '../types/recurringBill'
 import type { Transaction } from '../types/transaction'
 
 interface FinanceCalendarProps {
   year: number
   month: number
   reminders: BillReminder[]
+  /** All transactions (not just the viewed month) for running balance. */
+  allTransactions: Transaction[]
+  /** Month-scoped transactions for day markers. */
   transactions: Transaction[]
+  bills: RecurringBill[]
   onPrev: () => void
   onNext: () => void
 }
@@ -37,11 +45,43 @@ function buildMonthCells(year: number, month: number): Array<number | null> {
   return cells
 }
 
+function buildEventsByDay(
+  reminders: BillReminder[],
+  transactions: Transaction[],
+  year: number,
+  month: number,
+): Map<number, DayEvents> {
+  const map = new Map<number, DayEvents>()
+
+  function ensure(day: number): DayEvents {
+    let entry = map.get(day)
+    if (!entry) {
+      entry = { day, bills: [], transactions: [] }
+      map.set(day, entry)
+    }
+    return entry
+  }
+
+  for (const reminder of reminders) {
+    ensure(reminder.dueDate.getDate()).bills.push(reminder)
+  }
+  for (const tx of transactions) {
+    const d = new Date(tx.occurredAt)
+    if (d.getFullYear() === year && d.getMonth() === month) {
+      ensure(d.getDate()).transactions.push(tx)
+    }
+  }
+
+  return map
+}
+
 export function FinanceCalendar({
   year,
   month,
   reminders,
+  allTransactions,
   transactions,
+  bills,
   onPrev,
   onNext,
 }: FinanceCalendarProps) {
@@ -52,32 +92,8 @@ export function FinanceCalendar({
     isCurrentMonth ? today.getDate() : 1,
   )
 
-  const cells = useMemo(() => buildMonthCells(year, month), [year, month])
-
-  const eventsByDay = useMemo(() => {
-    const map = new Map<number, DayEvents>()
-
-    function ensure(day: number): DayEvents {
-      let entry = map.get(day)
-      if (!entry) {
-        entry = { day, bills: [], transactions: [] }
-        map.set(day, entry)
-      }
-      return entry
-    }
-
-    for (const reminder of reminders) {
-      ensure(reminder.dueDate.getDate()).bills.push(reminder)
-    }
-    for (const tx of transactions) {
-      const d = new Date(tx.occurredAt)
-      if (d.getFullYear() === year && d.getMonth() === month) {
-        ensure(d.getDate()).transactions.push(tx)
-      }
-    }
-
-    return map
-  }, [reminders, transactions, year, month])
+  const cells = buildMonthCells(year, month)
+  const eventsByDay = buildEventsByDay(reminders, transactions, year, month)
 
   // Clamp selection when the month has fewer days (no effect needed).
   const daysInView = new Date(year, month + 1, 0).getDate()
@@ -96,6 +112,24 @@ export function FinanceCalendar({
     year: 'numeric',
   }).format(new Date(year, month, activeDay))
 
+  const dayRunningBalance = computeRunningBalanceForDay(
+    bills,
+    allTransactions,
+    year,
+    month,
+    activeDay,
+  )
+  const balancePositive = dayRunningBalance >= 0
+
+  const averageDaily = computeAverageDailyBalance(
+    bills,
+    allTransactions,
+    year,
+    month,
+    isCurrentMonth ? today.getDate() : undefined,
+  )
+  const adbPositive = averageDaily.averageDailyBalance >= 0
+
   return (
     <section className="finance-calendar" aria-labelledby="calendar-heading">
       <div className="calendar-header">
@@ -109,9 +143,26 @@ export function FinanceCalendar({
           </button>
         </div>
         <p className="calendar-legend">
-          <span className="legend-dot bill" /> Bill due
-          <span className="legend-dot income" /> Income
-          <span className="legend-dot expense" /> Expense / paid
+          <span className="legend-dot bill" />Bill due
+          <span className="legend-dot income" />Income
+          <span className="legend-dot expense" />Expense / paid
+        </p>
+      </div>
+
+      <div
+        className={`calendar-adb ${adbPositive ? 'positive' : 'negative'}`}
+        aria-label="Average daily balance for this month"
+      >
+        <div className="calendar-adb-main">
+          <span className="stat-label">Average Daily Balance</span>
+          <strong className="stat-value">{formatMoney(averageDaily.averageDailyBalance)}</strong>
+        </div>
+        <p className="stat-meta">
+          {isCurrentMonth
+            ? `Month-to-date · average of end-of-day balances for days 1–${averageDaily.daysAveraged}`
+            : `Full month · average of end-of-day balances across ${averageDaily.daysAveraged} days`}
+          {' · '}
+          includes unpaid bills due in the averaged period
         </p>
       </div>
 
@@ -169,6 +220,11 @@ export function FinanceCalendar({
 
         <aside className="calendar-detail">
           <h3>{selectedDateLabel}</h3>
+          <div className={`calendar-day-balance ${balancePositive ? 'positive' : 'negative'}`}>
+            <span className="stat-label">Running balance</span>
+            <strong className="stat-value">{formatMoney(dayRunningBalance)}</strong>
+            <span className="stat-meta">As of this day · includes unpaid bills due by now</span>
+          </div>
           {!selected || (selected.bills.length === 0 && selected.transactions.length === 0) ? (
             <p className="muted">No bills or transactions on this day.</p>
           ) : (

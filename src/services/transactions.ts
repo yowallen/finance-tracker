@@ -72,6 +72,11 @@ export function subscribeTransactions(
   onData: (transactions: Transaction[]) => void,
   onError: (error: Error) => void,
 ): Unsubscribe {
+  if (!db) {
+    onError(new Error('Firebase is not configured. Data sync is unavailable.'))
+    return () => {}
+  }
+
   // Filter by userId only; sort client-side so no composite index is required.
   const q = query(collection(db, COLLECTION), where('userId', '==', userId))
 
@@ -109,6 +114,10 @@ export async function createTransaction(
   userId: string,
   input: TransactionInput,
 ): Promise<string> {
+  if (!db) {
+    throw new Error('Firebase is not configured. Data sync is unavailable.')
+  }
+
   if (!Number.isFinite(input.amount) || input.amount <= 0) {
     throw new Error('Amount must be a positive number.')
   }
@@ -142,6 +151,10 @@ export async function updateTransaction(
   id: string,
   input: TransactionInput,
 ): Promise<void> {
+  if (!db) {
+    throw new Error('Firebase is not configured. Data sync is unavailable.')
+  }
+
   if (!Number.isFinite(input.amount) || input.amount <= 0) {
     throw new Error('Amount must be a positive number.')
   }
@@ -160,6 +173,10 @@ export async function updateTransaction(
 }
 
 export async function deleteTransaction(id: string): Promise<void> {
+  if (!db) {
+    throw new Error('Firebase is not configured. Data sync is unavailable.')
+  }
+
   await deleteDoc(doc(db, COLLECTION, id))
 }
 

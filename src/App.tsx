@@ -2,13 +2,14 @@ import { useMemo, useState } from 'react'
 // Auth temporarily disabled for personal use — re-enable when needed:
 // import { AuthForm } from './components/AuthForm'
 // import { useAuth } from './hooks/useAuth'
-import { BalanceOutlook } from './components/BalanceOutlook'
 import { BillReminders } from './components/BillReminders'
 import { FinanceCalendar } from './components/FinanceCalendar'
 import { MonthSummary } from './components/MonthSummary'
+import { ThemeToggle } from './components/ThemeToggle'
 import { TransactionForm } from './components/TransactionForm'
 import { TransactionList } from './components/TransactionList'
 import { useRecurringBills } from './hooks/useRecurringBills'
+import { useTheme } from './hooks/useTheme'
 import { useTransactions } from './hooks/useTransactions'
 import { buildBalanceOutlook, computeRunningBalanceForMonth } from './services/balanceOutlook'
 import type { BillReminder } from './types/recurringBill'
@@ -20,6 +21,7 @@ const LOCAL_USER_ID = 'personal'
 
 function App() {
   // const { user, loading: authLoading, error: authError, signIn, signUp, logOut } = useAuth()
+  const { theme, toggleTheme } = useTheme()
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth())
@@ -117,9 +119,12 @@ function App() {
           <span className="brand">Ledger</span>
           <span className="topbar-email">Personal</span>
         </div>
-        {/* <button type="button" className="btn-ghost" onClick={() => void logOut()}>
-          Sign out
-        </button> */}
+        <div className="topbar-actions">
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
+          {/* <button type="button" className="btn-ghost" onClick={() => void logOut()}>
+            Sign out
+          </button> */}
+        </div>
       </header>
 
       <main className="main">
@@ -131,14 +136,9 @@ function App() {
           unpaidCount={monthBalance.unpaidCount}
           monthNet={monthBalance.monthNet}
           runningBalance={monthBalance.runningBalance}
+          outlookRows={outlookRows}
           onPrev={() => shiftMonth(-1)}
           onNext={() => shiftMonth(1)}
-        />
-
-        <BalanceOutlook
-          rows={outlookRows}
-          selectedYear={year}
-          selectedMonth={month}
           onSelectMonth={selectMonth}
         />
 
@@ -152,6 +152,8 @@ function App() {
           year={year}
           month={month}
           reminders={reminders}
+          bills={bills}
+          allTransactions={allTransactions}
           transactions={transactions}
           onPrev={() => shiftMonth(-1)}
           onNext={() => shiftMonth(1)}

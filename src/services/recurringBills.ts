@@ -173,6 +173,10 @@ function mapDoc(
 }
 
 async function migrateScheduleFields(bill: RecurringBill): Promise<void> {
+  if (!db) {
+    return
+  }
+
   await updateDoc(doc(db, COLLECTION, bill.id), {
     startsOn: bill.startsOn,
     durationValue: bill.durationValue,
@@ -185,6 +189,11 @@ export function subscribeRecurringBills(
   onData: (bills: RecurringBill[]) => void,
   onError: (error: Error) => void,
 ): Unsubscribe {
+  if (!db) {
+    onError(new Error('Firebase is not configured. Data sync is unavailable.'))
+    return () => {}
+  }
+
   const q = query(collection(db, COLLECTION), where('userId', '==', userId))
   const migrating = new Set<string>()
 
@@ -238,6 +247,10 @@ export async function createRecurringBill(
   userId: string,
   input: RecurringBillInput,
 ): Promise<string> {
+  if (!db) {
+    throw new Error('Firebase is not configured. Data sync is unavailable.')
+  }
+
   validateInput(input)
   const ref = await addDoc(collection(db, COLLECTION), {
     userId,
@@ -259,6 +272,10 @@ export async function updateRecurringBill(
   id: string,
   input: RecurringBillInput,
 ): Promise<void> {
+  if (!db) {
+    throw new Error('Firebase is not configured. Data sync is unavailable.')
+  }
+
   validateInput(input)
   await updateDoc(doc(db, COLLECTION, id), {
     name: input.name.trim(),
@@ -274,6 +291,10 @@ export async function updateRecurringBill(
 }
 
 export async function deleteRecurringBill(id: string): Promise<void> {
+  if (!db) {
+    throw new Error('Firebase is not configured. Data sync is unavailable.')
+  }
+
   await deleteDoc(doc(db, COLLECTION, id))
 }
 

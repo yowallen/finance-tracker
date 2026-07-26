@@ -1,5 +1,10 @@
+import { useState } from 'react'
+import { BalanceOutlook } from './BalanceOutlook'
+import type { MonthBalanceOutlook } from '../services/balanceOutlook'
 import type { MonthlySummary } from '../types/transaction'
 import { formatMoney, monthLabel } from '../lib/format'
+
+const OUTLOOK_STORAGE_KEY = 'ledger.showBalanceOutlook'
 
 interface MonthSummaryProps {
   year: number
@@ -10,8 +15,18 @@ interface MonthSummaryProps {
   unpaidCount: number
   monthNet: number
   runningBalance: number
+  outlookRows: MonthBalanceOutlook[]
   onPrev: () => void
   onNext: () => void
+  onSelectMonth: (year: number, month: number) => void
+}
+
+function readStoredOutlookVisibility(): boolean {
+  try {
+    return localStorage.getItem(OUTLOOK_STORAGE_KEY) === '1'
+  } catch {
+    return false
+  }
 }
 
 export function MonthSummary({
@@ -22,11 +37,26 @@ export function MonthSummary({
   unpaidCount,
   monthNet,
   runningBalance,
+  outlookRows,
   onPrev,
   onNext,
+  onSelectMonth,
 }: MonthSummaryProps) {
   const netPositive = runningBalance >= 0
   const billsTotal = summary.bills + unpaidScheduledBills
+  const [outlookVisible, setOutlookVisible] = useState(readStoredOutlookVisibility)
+
+  function toggleOutlook() {
+    setOutlookVisible((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem(OUTLOOK_STORAGE_KEY, next ? '1' : '0')
+      } catch {
+        // Ignore storage failures (private mode, etc.)
+      }
+      return next
+    })
+  }
 
   return (
     <section className="month-summary" aria-labelledby="month-heading">
@@ -66,6 +96,27 @@ export function MonthSummary({
           </span>
         </article>
       </div>
+
+      {outlookRows.length > 0 && (
+        <div className="summary-outlook">
+          <button
+            type="button"
+            className="text-btn"
+            onClick={toggleOutlook}
+            aria-expanded={outlookVisible}
+          >
+            {outlookVisible ? 'Hide month-by-month balance' : 'Show month-by-month balance'}
+          </button>
+          {outlookVisible && (
+            <BalanceOutlook
+              rows={outlookRows}
+              selectedYear={year}
+              selectedMonth={month}
+              onSelectMonth={onSelectMonth}
+            />
+          )}
+        </div>
+      )}
     </section>
   )
 }
