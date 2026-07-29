@@ -1,4 +1,5 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
+import { Check, MapPinned, PiggyBank, Plus } from 'lucide-react'
 import { formatMoney } from '../lib/format'
 import { fileToFirestoreImageDataUrl } from '../lib/imageData'
 import type {
@@ -178,7 +179,10 @@ export function SavingsGoals({
     <section className="savings-goals" aria-labelledby="savings-heading">
       <div className="reminders-header">
         <div>
-          <h2 id="savings-heading">Savings track</h2>
+          <h2 id="savings-heading" className="section-title">
+            <MapPinned className="section-icon" aria-hidden="true" />
+            Savings track
+          </h2>
           <p className="reminders-sub">
             {journey.stops.length === 0
               ? 'Add wish-list stops — the priciest item sets the end of the bar'
@@ -187,12 +191,14 @@ export function SavingsGoals({
         </div>
         <div className="savings-header-actions">
           {!showContribute && (
-            <button type="button" className="btn-ghost" onClick={openContribute}>
+            <button type="button" className="btn-ghost btn-with-icon" onClick={openContribute}>
+              <PiggyBank aria-hidden="true" />
               Add to pot
             </button>
           )}
           {!showForm && (
-            <button type="button" className="btn-primary" onClick={openCreate}>
+            <button type="button" className="btn-primary btn-with-icon" onClick={openCreate}>
+              <Plus aria-hidden="true" />
               Add stop
             </button>
           )}
@@ -394,7 +400,7 @@ export function SavingsGoals({
                       </span>
                       {stop.reached && (
                         <span className="savings-stop-check" aria-hidden="true">
-                          ✓
+                          <Check size={12} strokeWidth={3} />
                         </span>
                       )}
                     </div>
@@ -431,7 +437,9 @@ export function SavingsGoals({
                   )}
                   <div>
                     <p className="tx-desc">
-                      {stop.reached ? '✓ ' : ''}
+                      {stop.reached ? (
+                        <Check className="inline-check" aria-hidden="true" />
+                      ) : null}
                       {stop.goal.name}
                     </p>
                     <p className="reminder-due">

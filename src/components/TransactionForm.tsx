@@ -1,5 +1,15 @@
 import { useState, type FormEvent } from 'react'
 import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Pencil,
+  PlusCircle,
+  Receipt,
+  ShoppingBag,
+  TrendingUp,
+  Wallet,
+} from 'lucide-react'
+import {
   CATEGORIES,
   type SavingsDirection,
   type Transaction,
@@ -14,6 +24,9 @@ interface TransactionFormProps {
   onCancelEdit: () => void
 }
 
+/** Types offered when creating a new transaction (bills/savings come from elsewhere). */
+const CREATE_TYPES: TransactionType[] = ['expense', 'income']
+
 function createInitialState(editing: Transaction | null) {
   if (editing) {
     return {
@@ -27,9 +40,9 @@ function createInitialState(editing: Transaction | null) {
   }
 
   return {
-    type: 'bill' as TransactionType,
+    type: 'expense' as TransactionType,
     amount: '',
-    category: CATEGORIES.bill[0],
+    category: CATEGORIES.expense[0],
     description: '',
     occurredAt: toDateInputValue(new Date()),
     savingsDirection: 'deposit' as SavingsDirection,
@@ -41,6 +54,19 @@ function descriptionPlaceholder(type: TransactionType): string {
   if (type === 'income') return 'e.g. Mid-month salary'
   if (type === 'savings') return 'e.g. Moved to savings pot'
   return 'e.g. Groceries at SM'
+}
+
+function availableTypes(editing: Transaction | null): TransactionType[] {
+  if (!editing) return CREATE_TYPES
+  if (editing.type === 'bill' || editing.type === 'savings') return [editing.type]
+  return CREATE_TYPES
+}
+
+const TYPE_ICONS: Record<TransactionType, typeof ShoppingBag> = {
+  expense: ShoppingBag,
+  income: TrendingUp,
+  bill: Receipt,
+  savings: Wallet,
 }
 
 export function TransactionForm({
@@ -59,6 +85,8 @@ export function TransactionForm({
   )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const types = availableTypes(editing)
 
   function selectType(next: TransactionType) {
     setType(next)
@@ -120,23 +148,36 @@ export function TransactionForm({
 
   return (
     <section className="tx-form-section" aria-labelledby="form-heading">
-      <h2 id="form-heading">{editing ? 'Edit transaction' : 'Add transaction'}</h2>
+      <h2 id="form-heading" className="section-title">
+        {editing ? (
+          <Pencil className="section-icon" aria-hidden="true" />
+        ) : (
+          <PlusCircle className="section-icon" aria-hidden="true" />
+        )}
+        {editing ? 'Edit transaction' : 'Add transaction'}
+      </h2>
 
       <form className="tx-form" onSubmit={handleSubmit}>
-        <div className="type-tabs type-tabs-4" role="tablist" aria-label="Transaction type">
-          {(['bill', 'expense', 'income', 'savings'] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              role="tab"
-              aria-selected={type === t}
-              className={`type-tab ${type === t ? 'active' : ''} ${t}`}
-              onClick={() => selectType(t)}
-            >
-              {t.charAt(0).toUpperCase() + t.slice(1)}
-            </button>
-          ))}
-        </div>
+        {types.length > 1 && (
+          <div className="type-tabs" role="tablist" aria-label="Transaction type">
+            {types.map((t) => {
+              const Icon = TYPE_ICONS[t]
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  role="tab"
+                  aria-selected={type === t}
+                  className={`type-tab ${type === t ? 'active' : ''} ${t}`}
+                  onClick={() => selectType(t)}
+                >
+                  <Icon aria-hidden="true" />
+                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {type === 'savings' && (
           <div className="type-tabs" role="tablist" aria-label="Savings direction">
@@ -147,6 +188,7 @@ export function TransactionForm({
               className={`type-tab ${savingsDirection === 'deposit' ? 'active savings' : ''}`}
               onClick={() => selectSavingsDirection('deposit')}
             >
+              <ArrowDownToLine aria-hidden="true" />
               Deposit (to pot)
             </button>
             <button
@@ -156,6 +198,7 @@ export function TransactionForm({
               className={`type-tab ${savingsDirection === 'withdraw' ? 'active income' : ''}`}
               onClick={() => selectSavingsDirection('withdraw')}
             >
+              <ArrowUpFromLine aria-hidden="true" />
               Withdraw (from pot)
             </button>
           </div>

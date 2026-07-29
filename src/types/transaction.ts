@@ -39,6 +39,31 @@ export interface MonthlySummary {
   count: number
 }
 
+/** One category row in a monthly spending breakdown. */
+export interface SpendingCategoryStat {
+  category: string
+  amount: number
+  percent: number
+  count: number
+}
+
+export interface MonthlySpendingStats {
+  total: number
+  categories: SpendingCategoryStat[]
+}
+
+/** Deposits / withdrawals for one month's savings activity. */
+export interface MonthlySavingsStats {
+  deposits: number
+  withdrawals: number
+  /** deposits − withdrawals for the month */
+  net: number
+  depositCount: number
+  withdrawCount: number
+  /** Pot balance after all savings txs through the end of this month */
+  potBalance: number
+}
+
 export const CATEGORIES: Record<TransactionType, string[]> = {
   income: ['Salary', 'Freelance', 'Investment', 'Gift', 'Other'],
   expense: ['Food', 'Transport', 'Shopping', 'Entertainment', 'Health', 'Other'],

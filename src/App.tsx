@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react'
+import { BookMarked, LogOut } from 'lucide-react'
 import { AuthForm } from './components/AuthForm'
 import { BillReminders } from './components/BillReminders'
 import { FinanceCalendar } from './components/FinanceCalendar'
 import { LoadingState } from './components/LoadingState'
 import { MonthSummary } from './components/MonthSummary'
 import { SavingsGoals } from './components/SavingsGoals'
+import { SavingsStats } from './components/SavingsStats'
+import { SpendingStats } from './components/SpendingStats'
 import { ThemeToggle } from './components/ThemeToggle'
 import { TransactionForm } from './components/TransactionForm'
 import { TransactionList } from './components/TransactionList'
@@ -14,6 +17,12 @@ import { useSavingsGoals } from './hooks/useSavingsGoals'
 import { useTheme } from './hooks/useTheme'
 import { useTransactions } from './hooks/useTransactions'
 import { buildBalanceOutlook, computeRunningBalanceForMonth } from './services/balanceOutlook'
+import {
+  buildMonthlySavingsHistory,
+  buildMonthlySpendingHistory,
+  computeMonthlySavingsStats,
+  computeMonthlySpendingStats,
+} from './services/transactions'
 import type { BillReminder } from './types/recurringBill'
 import type { Transaction, TransactionInput } from './types/transaction'
 import './App.css'
@@ -70,6 +79,27 @@ function App() {
   const outlookRows = useMemo(
     () => buildBalanceOutlook(bills, allTransactions, year, month, 11),
     [bills, allTransactions, year, month],
+  )
+
+  const spendingStats = useMemo(
+    () => computeMonthlySpendingStats(transactions),
+    [transactions],
+  )
+
+  const spendingHistory = useMemo(
+    () => buildMonthlySpendingHistory(allTransactions, year, month, 5),
+    [allTransactions, year, month],
+  )
+
+  const savingsStats = useMemo(
+    () =>
+      computeMonthlySavingsStats(transactions, allTransactions, year, month),
+    [transactions, allTransactions, year, month],
+  )
+
+  const savingsHistory = useMemo(
+    () => buildMonthlySavingsHistory(allTransactions, year, month, 5),
+    [allTransactions, year, month],
   )
 
   function shiftMonth(delta: number) {
@@ -152,20 +182,23 @@ function App() {
     <div className="app">
       <header className="topbar">
         <div className="topbar-brand">
-          <span className="brand">Ledger</span>
+          <span className="brand">
+            <BookMarked className="brand-icon" aria-hidden="true" />
+            Ledger
+          </span>
           <span className="topbar-email">{user.email ?? 'Signed in'}</span>
         </div>
         <div className="topbar-actions">
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
           <button
             type="button"
-            className="btn-ghost"
+            className="btn-ghost btn-with-icon"
             onClick={() => {
               setEditing(null)
               void logOut()
             }}
           >
-            Sign out
+            <LogOut aria-hidden="true" />
           </button>
         </div>
       </header>
@@ -215,6 +248,24 @@ function App() {
               onPrev={() => shiftMonth(-1)}
               onNext={() => shiftMonth(1)}
             />
+
+            <div className="stats-row">
+              <SpendingStats
+                year={year}
+                month={month}
+                stats={spendingStats}
+                history={spendingHistory}
+                onSelectMonth={selectMonth}
+              />
+
+              <SavingsStats
+                year={year}
+                month={month}
+                stats={savingsStats}
+                history={savingsHistory}
+                onSelectMonth={selectMonth}
+              />
+            </div>
 
             <BillReminders
               year={year}

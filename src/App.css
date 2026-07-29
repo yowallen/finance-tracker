@@ -141,6 +141,55 @@
   letter-spacing: 0;
   color: var(--accent);
   margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.brand-icon {
+  width: 1.2em;
+  height: 1.2em;
+  flex-shrink: 0;
+}
+
+.section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.section-icon {
+  width: 1.1em;
+  height: 1.1em;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.btn-with-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.btn-with-icon svg {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+.link-btn.btn-with-icon svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.inline-check {
+  width: 0.95rem;
+  height: 0.95rem;
+  display: inline-block;
+  vertical-align: -0.15em;
+  margin-right: 0.2rem;
+  color: var(--accent);
 }
 
 .topbar-email {
@@ -207,6 +256,7 @@
 .tx-list-section,
 .bill-reminders,
 .savings-goals,
+.spending-stats,
 .finance-calendar,
 .auth-panel {
   background: var(--surface);
@@ -238,7 +288,14 @@
   font-size: 1.4rem;
   line-height: 1;
   color: var(--ink-soft);
+  display: inline-grid;
+  place-items: center;
   transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.icon-btn svg {
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 .icon-btn:hover {
@@ -273,6 +330,15 @@
   letter-spacing: 0.06em;
   color: var(--muted);
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.stat-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex-shrink: 0;
 }
 
 .stat-value {
@@ -436,6 +502,18 @@
   align-items: start;
 }
 
+.stats-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  align-items: stretch;
+}
+
+.stats-row > .spending-stats {
+  min-width: 0;
+  height: 100%;
+}
+
 .tx-form-section h2,
 .tx-list-section h2 {
   font-size: 1.25rem;
@@ -451,16 +529,11 @@
 
 .type-tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
   gap: 0.35rem;
   padding: 0.3rem;
   background: var(--md-sys-color-surface-container);
   border-radius: 999px;
-}
-
-.type-tabs-4 {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  border-radius: 14px;
 }
 
 .type-tab {
@@ -471,7 +544,17 @@
   font-weight: 600;
   font-size: 0.875rem;
   color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
   transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.type-tab svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  flex-shrink: 0;
 }
 
 .type-tab.active.bill {
@@ -572,6 +655,7 @@ select:focus {
   letter-spacing: 0.02em;
   box-shadow: var(--elevation-1);
   transition: background-color 0.15s ease, box-shadow 0.15s ease;
+  white-space: nowrap;
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -599,6 +683,7 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
   padding: 0.65rem 1.15rem;
   letter-spacing: 0.02em;
   transition: background-color 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
 }
 
 .btn-ghost:hover {
@@ -774,6 +859,10 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
   margin-bottom: 1rem;
 }
 
+.reminders-header > :last-child:not(:first-child) {
+  flex-shrink: 0;
+}
+
 .reminders-header h2 {
   font-size: 1.25rem;
   margin-bottom: 0.25rem;
@@ -783,6 +872,177 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
   margin: 0;
   color: var(--muted);
   font-size: 0.92rem;
+}
+
+.spending-stats-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.spending-stats-header h2 {
+  font-size: 1.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.spending-total {
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--expense);
+  white-space: nowrap;
+}
+
+.savings-stats .spending-total.savings-net.positive {
+  color: var(--accent);
+}
+
+.savings-stats .spending-total.savings-net.negative {
+  color: var(--expense);
+}
+
+.savings-stats .spending-history-col:hover .spending-history-bar,
+.savings-stats .spending-history-col.selected .spending-history-bar {
+  background: var(--accent);
+}
+
+.spending-category-fill.savings-fill {
+  background: linear-gradient(
+    90deg,
+    var(--accent),
+    color-mix(in srgb, var(--accent) 65%, var(--income))
+  );
+}
+
+.spending-category-fill.savings-withdraw-fill {
+  background: linear-gradient(
+    90deg,
+    var(--muted),
+    color-mix(in srgb, var(--muted) 50%, var(--expense))
+  );
+}
+
+.savings-pot-balance {
+  margin: 1rem 0 0;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.spending-history {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.4rem;
+  align-items: end;
+  margin-bottom: 1.15rem;
+  padding: 0.75rem 0.5rem 0.35rem;
+  background: var(--md-sys-color-surface-container-low);
+  border-radius: var(--radius-sm);
+}
+
+.spending-history-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--muted);
+  cursor: pointer;
+  min-width: 0;
+}
+
+.spending-history-bar-wrap {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+  height: 4.25rem;
+}
+
+.spending-history-bar {
+  width: 55%;
+  max-width: 1.75rem;
+  min-height: 0.35rem;
+  border-radius: 6px 6px 3px 3px;
+  background: var(--md-sys-color-surface-container-high);
+  transition: height 0.25s ease, background-color 0.15s ease;
+}
+
+.spending-history-col:hover .spending-history-bar,
+.spending-history-col.selected .spending-history-bar {
+  background: var(--expense);
+}
+
+.spending-history-col.selected {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.spending-history-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.spending-category-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.spending-category-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.3rem;
+}
+
+.spending-category-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.spending-category-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.spending-category-track {
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--md-sys-color-surface-container-high);
+  overflow: hidden;
+}
+
+.spending-category-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--expense), color-mix(in srgb, var(--expense) 65%, var(--accent)));
+  transition: width 0.35s ease;
+}
+
+.spending-category-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 500;
 }
 
 .reminder-form {
@@ -929,6 +1189,7 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
+  justify-content: flex-end;
 }
 
 .savings-track-summary {
@@ -1148,6 +1409,9 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
   padding: 0.2rem 0.55rem;
   width: fit-content;
   margin-top: 0.2rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 .savings-image-field {
@@ -1546,7 +1810,8 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
   }
 
   .workspace,
-  .calendar-layout {
+  .calendar-layout,
+  .stats-row {
     grid-template-columns: 1fr;
   }
 }
@@ -1567,6 +1832,49 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
   .summary-grid,
   .form-row {
     grid-template-columns: 1fr;
+  }
+
+  .reminders-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.7rem;
+  }
+
+  .reminders-header > :last-child:not(:first-child),
+  .savings-header-actions {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: stretch;
+    gap: 0.4rem;
+    width: 100%;
+  }
+
+  .reminders-header .btn-primary,
+  .reminders-header .btn-ghost,
+  .savings-header-actions .btn-primary,
+  .savings-header-actions .btn-ghost {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 2.15rem;
+    padding: 0.4rem 0.55rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border-radius: 10px;
+    box-shadow: none;
+    letter-spacing: 0;
+  }
+
+  .reminders-header .btn-with-icon,
+  .savings-header-actions .btn-with-icon {
+    gap: 0.3rem;
+  }
+
+  .reminders-header .btn-with-icon svg,
+  .savings-header-actions .btn-with-icon svg {
+    width: 0.8rem;
+    height: 0.8rem;
   }
 
   .calendar-cell {

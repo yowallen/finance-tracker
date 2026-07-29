@@ -1,4 +1,13 @@
 import { useState } from 'react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  PiggyBank,
+  Receipt,
+  ShoppingBag,
+  TrendingUp,
+  Wallet,
+} from 'lucide-react'
 import { BalanceOutlook } from './BalanceOutlook'
 import type { MonthBalanceOutlook } from '../services/balanceOutlook'
 import type { MonthlySummary } from '../types/transaction'
@@ -65,25 +74,34 @@ export function MonthSummary({
     <section className="month-summary" aria-labelledby="month-heading">
       <div className="month-nav">
         <button type="button" className="icon-btn" onClick={onPrev} aria-label="Previous month">
-          ‹
+          <ChevronLeft aria-hidden="true" />
         </button>
         <h2 id="month-heading">{monthLabel(year, month)}</h2>
         <button type="button" className="icon-btn" onClick={onNext} aria-label="Next month">
-          ›
+          <ChevronRight aria-hidden="true" />
         </button>
       </div>
 
       <div className="summary-grid">
         <article className="stat income">
-          <span className="stat-label">Income</span>
+          <span className="stat-label">
+            <TrendingUp className="stat-icon" aria-hidden="true" />
+            Income
+          </span>
           <strong className="stat-value">{formatMoney(summary.income)}</strong>
         </article>
         <article className="stat expense">
-          <span className="stat-label">Expenses</span>
+          <span className="stat-label">
+            <ShoppingBag className="stat-icon" aria-hidden="true" />
+            Expenses
+          </span>
           <strong className="stat-value">{formatMoney(summary.expenses)}</strong>
         </article>
         <article className="stat bill">
-          <span className="stat-label">Bills</span>
+          <span className="stat-label">
+            <Receipt className="stat-icon" aria-hidden="true" />
+            Bills
+          </span>
           <strong className="stat-value">{formatMoney(billsTotal)}</strong>
           {unpaidCount > 0 && (
             <span className="stat-meta">
@@ -92,13 +110,17 @@ export function MonthSummary({
           )}
         </article>
         <article className={`stat net ${netPositive ? 'positive' : 'negative'}`}>
-          <span className="stat-label">Running balance</span>
+          <span className="stat-label">
+            <Wallet className="stat-icon" aria-hidden="true" />
+            Running balance
+          </span>
           <strong className="stat-value">{formatMoney(runningBalance)}</strong>
           <span className="stat-meta">
             This month {formatMoney(monthNet)} · carries over from prior months
           </span>
           {savingsPot > 0 && (
             <span className="stat-meta savings-earmark">
+              <PiggyBank className="stat-icon" aria-hidden="true" />
               In savings {formatMoney(savingsPot)}
             </span>
           )}

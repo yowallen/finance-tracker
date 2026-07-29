@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
 import { formatMoney, formatDate, monthLabel } from '../lib/format'
 import {
   computeAverageDailyBalance,
@@ -136,11 +137,14 @@ export function FinanceCalendar({
       <div className="calendar-header">
         <div className="month-nav">
           <button type="button" className="icon-btn" onClick={onPrev} aria-label="Previous month">
-            ‹
+            <ChevronLeft aria-hidden="true" />
           </button>
-          <h2 id="calendar-heading">{monthLabel(year, month)}</h2>
+          <h2 id="calendar-heading" className="section-title">
+            <CalendarDays className="section-icon" aria-hidden="true" />
+            {monthLabel(year, month)}
+          </h2>
           <button type="button" className="icon-btn" onClick={onNext} aria-label="Next month">
-            ›
+            <ChevronRight aria-hidden="true" />
           </button>
         </div>
         <p className="calendar-legend">

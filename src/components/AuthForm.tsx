@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { BookMarked } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
 import type { ThemeMode } from '../lib/theme'
 
@@ -39,7 +40,10 @@ export function AuthForm({
         <ThemeToggle theme={theme} onToggle={onToggleTheme} />
       </div>
       <div className="auth-panel">
-        <p className="brand">Ledger</p>
+        <p className="brand">
+          <BookMarked className="brand-icon" aria-hidden="true" />
+          Ledger
+        </p>
         <h1>Welcome back</h1>
         <p className="auth-sub">
           Private personal finance tracker — sign in to continue.

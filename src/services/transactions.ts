@@ -13,11 +13,14 @@ import {
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import type {
+  MonthlySavingsStats,
+  MonthlySpendingStats,
   MonthlySummary,
   SavingsDirection,
   Transaction,
   TransactionInput,
 } from '../types/transaction'
+import { isSavingsDeposit, isSavingsWithdraw } from '../types/transaction'
 
 const COLLECTION = 'transactions'
 
@@ -248,4 +251,145 @@ export function computeMonthlySummary(
     net: income + savingsWithdrawals - expenses - bills - savingsDeposits,
     count: transactions.length,
   }
+}
+
+/**
+ * Category breakdown of money spent (expenses + bills) for the given month's txs.
+ * Savings transfers are excluded — they are not discretionary spend.
+ */
+export function computeMonthlySpendingStats(
+  transactions: Transaction[],
+): MonthlySpendingStats {
+  const byCategory = new Map<string, { amount: number; count: number }>()
+
+  for (const tx of transactions) {
+    if (tx.type !== 'expense' && tx.type !== 'bill') continue
+    const prev = byCategory.get(tx.category) ?? { amount: 0, count: 0 }
+    byCategory.set(tx.category, {
+      amount: prev.amount + tx.amount,
+      count: prev.count + 1,
+    })
+  }
+
+  let total = 0
+  for (const row of byCategory.values()) total += row.amount
+
+  const categories = [...byCategory.entries()]
+    .map(([category, row]) => ({
+      category,
+      amount: row.amount,
+      count: row.count,
+      percent: total > 0 ? (row.amount / total) * 100 : 0,
+    }))
+    .sort((a, b) => b.amount - a.amount)
+
+  return { total, categories }
+}
+
+export interface MonthSpendingRow {
+  year: number
+  month: number
+  stats: MonthlySpendingStats
+}
+
+/** Spending totals for a window of months ending at the selected month (inclusive). */
+export function buildMonthlySpendingHistory(
+  transactions: Transaction[],
+  endYear: number,
+  endMonth: number,
+  monthsBack = 5,
+): MonthSpendingRow[] {
+  const rows: MonthSpendingRow[] = []
+  for (let i = monthsBack; i >= 0; i -= 1) {
+    const d = new Date(endYear, endMonth - i, 1)
+    const year = d.getFullYear()
+    const month = d.getMonth()
+    rows.push({
+      year,
+      month,
+      stats: computeMonthlySpendingStats(filterByMonth(transactions, year, month)),
+    })
+  }
+  return rows
+}
+
+function monthEndExclusive(year: number, month: number): Date {
+  return new Date(year, month + 1, 1)
+}
+
+/** Pot total from savings txs that occurred before `before` (exclusive). */
+function potBalanceBefore(transactions: Transaction[], before: Date): number {
+  let saved = 0
+  const cutoff = before.getTime()
+  for (const tx of transactions) {
+    if (tx.type !== 'savings') continue
+    const t = new Date(tx.occurredAt).getTime()
+    if (Number.isNaN(t) || t >= cutoff) continue
+    if (isSavingsWithdraw(tx)) saved -= tx.amount
+    else saved += tx.amount
+  }
+  return Math.max(0, saved)
+}
+
+export function computeMonthlySavingsStats(
+  monthTransactions: Transaction[],
+  allTransactions: Transaction[],
+  year: number,
+  month: number,
+): MonthlySavingsStats {
+  let deposits = 0
+  let withdrawals = 0
+  let depositCount = 0
+  let withdrawCount = 0
+
+  for (const tx of monthTransactions) {
+    if (tx.type !== 'savings') continue
+    if (isSavingsWithdraw(tx)) {
+      withdrawals += tx.amount
+      withdrawCount += 1
+    } else if (isSavingsDeposit(tx)) {
+      deposits += tx.amount
+      depositCount += 1
+    }
+  }
+
+  return {
+    deposits,
+    withdrawals,
+    net: deposits - withdrawals,
+    depositCount,
+    withdrawCount,
+    potBalance: potBalanceBefore(allTransactions, monthEndExclusive(year, month)),
+  }
+}
+
+export interface MonthSavingsRow {
+  year: number
+  month: number
+  stats: MonthlySavingsStats
+}
+
+export function buildMonthlySavingsHistory(
+  transactions: Transaction[],
+  endYear: number,
+  endMonth: number,
+  monthsBack = 5,
+): MonthSavingsRow[] {
+  const rows: MonthSavingsRow[] = []
+  for (let i = monthsBack; i >= 0; i -= 1) {
+    const d = new Date(endYear, endMonth - i, 1)
+    const year = d.getFullYear()
+    const month = d.getMonth()
+    rows.push({
+      year,
+      month,
+      stats: computeMonthlySavingsStats(
+        filterByMonth(transactions, year, month),
+        transactions,
+        year,
+        month,
+      ),
+    })
+  }
+  return rows
 }

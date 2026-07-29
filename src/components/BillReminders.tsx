@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Bell, Plus } from 'lucide-react'
 import { formatMoney, formatYearMonth, monthLabel, toMonthInputValue } from '../lib/format'
 import {
   durationInMonths,
@@ -199,7 +200,10 @@ export function BillReminders({
     <section className="bill-reminders" aria-labelledby="reminders-heading">
       <div className="reminders-header">
         <div>
-          <h2 id="reminders-heading">Monthly bill reminders</h2>
+          <h2 id="reminders-heading" className="section-title">
+            <Bell className="section-icon" aria-hidden="true" />
+            Monthly bill reminders
+          </h2>
           <p className="reminders-sub">
             {needsAttention > 0
               ? `${needsAttention} bill${needsAttention === 1 ? '' : 's'} need attention this month`
@@ -207,7 +211,8 @@ export function BillReminders({
           </p>
         </div>
         {!showForm && (
-          <button type="button" className="btn-primary" onClick={openCreate}>
+          <button type="button" className="btn-primary btn-with-icon" onClick={openCreate}>
+            <Plus aria-hidden="true" />
             Add bill
           </button>
         )}

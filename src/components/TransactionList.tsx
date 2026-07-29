@@ -1,3 +1,4 @@
+import { List, Pencil, Trash2 } from 'lucide-react'
 import type { Transaction } from '../types/transaction'
 import { isSavingsWithdraw } from '../types/transaction'
 import { formatDate, formatMoney } from '../lib/format'
@@ -18,13 +19,16 @@ export function TransactionList({
 }: TransactionListProps) {
   return (
     <section className="tx-list-section" aria-labelledby="list-heading">
-      <h2 id="list-heading">Transactions</h2>
+      <h2 id="list-heading" className="section-title">
+        <List className="section-icon" aria-hidden="true" />
+        Transactions
+      </h2>
 
       {loading ? (
         <LoadingState variant="section" label="Loading transactions…" />
       ) : transactions.length === 0 ? (
         <p className="empty-state">
-          No transactions this month yet. Add a bill, expense, income, or savings entry above.
+          No transactions this month yet. Add an expense or income above.
         </p>
       ) : (
         <ul className="tx-list">
@@ -52,16 +56,22 @@ export function TransactionList({
                     {formatMoney(tx.amount)}
                   </strong>
                   <div className="tx-actions">
-                    <button type="button" className="link-btn" onClick={() => onEdit(tx)}>
+                    <button
+                      type="button"
+                      className="link-btn btn-with-icon"
+                      onClick={() => onEdit(tx)}
+                    >
+                      <Pencil aria-hidden="true" />
                       Edit
                     </button>
                     <button
                       type="button"
-                      className="link-btn danger"
+                      className="link-btn danger btn-with-icon"
                       onClick={() => {
                         void onDelete(tx.id)
                       }}
                     >
+                      <Trash2 aria-hidden="true" />
                       Delete
                     </button>
                   </div>
