@@ -40,5 +40,26 @@ service cloud.firestore {
       allow update: if isOwner() || isClaimingLegacy();
       allow delete: if isOwner();
     }
+
+    match /savingsGoals/{goalId} {
+      allow read: if canRead();
+      allow create: if isCreatingOwn();
+      allow update: if isOwner() || isClaimingLegacy();
+      allow delete: if isOwner();
+    }
+
+    match /savingsPools/{poolId} {
+      allow read: if isSignedIn() && request.auth.uid == poolId;
+      allow create: if isSignedIn()
+        && request.auth.uid == poolId
+        && request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn()
+        && request.auth.uid == poolId
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn()
+        && request.auth.uid == poolId
+        && resource.data.userId == request.auth.uid;
+    }
   }
 }

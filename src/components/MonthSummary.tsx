@@ -15,6 +15,8 @@ interface MonthSummaryProps {
   unpaidCount: number
   monthNet: number
   runningBalance: number
+  /** Total currently in the shared savings pot. */
+  savingsPot: number
   outlookRows: MonthBalanceOutlook[]
   onPrev: () => void
   onNext: () => void
@@ -37,6 +39,7 @@ export function MonthSummary({
   unpaidCount,
   monthNet,
   runningBalance,
+  savingsPot,
   outlookRows,
   onPrev,
   onNext,
@@ -94,6 +97,11 @@ export function MonthSummary({
           <span className="stat-meta">
             This month {formatMoney(monthNet)} · carries over from prior months
           </span>
+          {savingsPot > 0 && (
+            <span className="stat-meta savings-earmark">
+              In savings {formatMoney(savingsPot)}
+            </span>
+          )}
         </article>
       </div>
 

@@ -6,6 +6,7 @@ import {
 } from '../services/balanceOutlook'
 import type { BillReminder, RecurringBill } from '../types/recurringBill'
 import type { Transaction } from '../types/transaction'
+import { isSavingsWithdraw } from '../types/transaction'
 
 interface FinanceCalendarProps {
   year: number
@@ -206,10 +207,12 @@ export function FinanceCalendar({
                 <span className="calendar-day-num">{day}</span>
                 <span className="calendar-dots" aria-hidden="true">
                   {billCount > 0 && <span className="legend-dot bill" />}
-                  {(events?.transactions.some((t) => t.type === 'income') ?? false) && (
+                  {(events?.transactions.some((t) => t.type === 'income' || isSavingsWithdraw(t)) ?? false) && (
                     <span className="legend-dot income" />
                   )}
-                  {(events?.transactions.some((t) => t.type !== 'income') ?? false) && (
+                  {(events?.transactions.some(
+                    (t) => t.type !== 'income' && !isSavingsWithdraw(t),
+                  ) ?? false) && (
                     <span className="legend-dot expense" />
                   )}
                 </span>
@@ -241,7 +244,9 @@ export function FinanceCalendar({
                   <strong className="tx-amount bill">{formatMoney(bill.bill.amount)}</strong>
                 </li>
               ))}
-              {selected.transactions.map((tx) => (
+              {selected.transactions.map((tx) => {
+                const isInflow = tx.type === 'income' || isSavingsWithdraw(tx)
+                return (
                 <li key={`tx-${tx.id}`} className={`calendar-detail-item ${tx.type}`}>
                   <div>
                     <span className={`tx-type-badge ${tx.type}`}>{tx.type}</span>
@@ -250,12 +255,13 @@ export function FinanceCalendar({
                       {formatDate(tx.occurredAt)}
                     </time>
                   </div>
-                  <strong className={`tx-amount ${tx.type}`}>
-                    {tx.type === 'income' ? '+' : '−'}
+                  <strong className={`tx-amount ${isInflow ? 'income' : tx.type}`}>
+                    {isInflow ? '+' : '−'}
                     {formatMoney(tx.amount)}
                   </strong>
                 </li>
-              ))}
+                )
+              })}
             </ul>
           )}
         </aside>

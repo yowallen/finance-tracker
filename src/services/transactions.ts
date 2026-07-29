@@ -14,6 +14,7 @@ import {
 import { db } from '../lib/firebase'
 import type {
   MonthlySummary,
+  SavingsDirection,
   Transaction,
   TransactionInput,
 } from '../types/transaction'
@@ -40,16 +41,26 @@ function mapDoc(
   const category = data.category
   const description = data.description
   const occurredAt = data.occurredAt
+  const savingsDirection = data.savingsDirection
 
   if (
     typeof userId !== 'string' ||
-    (type !== 'income' && type !== 'expense' && type !== 'bill') ||
+    (type !== 'income' &&
+      type !== 'expense' &&
+      type !== 'bill' &&
+      type !== 'savings') ||
     typeof amount !== 'number' ||
     typeof category !== 'string' ||
     typeof description !== 'string' ||
     !(occurredAt instanceof Timestamp || typeof occurredAt === 'string')
   ) {
     return null
+  }
+
+  if (type === 'savings') {
+    if (savingsDirection !== 'deposit' && savingsDirection !== 'withdraw') {
+      return null
+    }
   }
 
   return {
@@ -64,6 +75,27 @@ function mapDoc(
     ...(typeof data.recurringBillId === 'string'
       ? { recurringBillId: data.recurringBillId }
       : {}),
+    ...(type === 'savings'
+      ? { savingsDirection: savingsDirection as SavingsDirection }
+      : {}),
+  }
+}
+
+function validateInput(input: TransactionInput): void {
+  if (!Number.isFinite(input.amount) || input.amount <= 0) {
+    throw new Error('Amount must be a positive number.')
+  }
+  if (!input.category.trim()) {
+    throw new Error('Category is required.')
+  }
+  const occurred = new Date(input.occurredAt)
+  if (Number.isNaN(occurred.getTime())) {
+    throw new Error('Invalid date.')
+  }
+  if (input.type === 'savings') {
+    if (input.savingsDirection !== 'deposit' && input.savingsDirection !== 'withdraw') {
+      throw new Error('Savings transfers need a deposit or withdraw direction.')
+    }
   }
 }
 
@@ -118,16 +150,8 @@ export async function createTransaction(
     throw new Error('Firebase is not configured. Data sync is unavailable.')
   }
 
-  if (!Number.isFinite(input.amount) || input.amount <= 0) {
-    throw new Error('Amount must be a positive number.')
-  }
-  if (!input.category.trim()) {
-    throw new Error('Category is required.')
-  }
+  validateInput(input)
   const occurred = new Date(input.occurredAt)
-  if (Number.isNaN(occurred.getTime())) {
-    throw new Error('Invalid date.')
-  }
 
   const payload: Record<string, unknown> = {
     userId,
@@ -140,6 +164,9 @@ export async function createTransaction(
   }
   if (input.recurringBillId) {
     payload.recurringBillId = input.recurringBillId
+  }
+  if (input.type === 'savings' && input.savingsDirection) {
+    payload.savingsDirection = input.savingsDirection
   }
 
   const ref = await addDoc(collection(db, COLLECTION), payload)
@@ -155,21 +182,24 @@ export async function updateTransaction(
     throw new Error('Firebase is not configured. Data sync is unavailable.')
   }
 
-  if (!Number.isFinite(input.amount) || input.amount <= 0) {
-    throw new Error('Amount must be a positive number.')
-  }
+  validateInput(input)
   const occurred = new Date(input.occurredAt)
-  if (Number.isNaN(occurred.getTime())) {
-    throw new Error('Invalid date.')
-  }
 
-  await updateDoc(doc(db, COLLECTION, id), {
+  const payload: Record<string, unknown> = {
     type: input.type,
     amount: input.amount,
     category: input.category.trim(),
     description: input.description.trim(),
     occurredAt: Timestamp.fromDate(occurred),
-  })
+  }
+
+  if (input.type === 'savings' && input.savingsDirection) {
+    payload.savingsDirection = input.savingsDirection
+  } else {
+    payload.savingsDirection = null
+  }
+
+  await updateDoc(doc(db, COLLECTION, id), payload)
 }
 
 export async function deleteTransaction(id: string): Promise<void> {
@@ -197,18 +227,25 @@ export function computeMonthlySummary(
   let income = 0
   let expenses = 0
   let bills = 0
+  let savingsDeposits = 0
+  let savingsWithdrawals = 0
 
   for (const tx of transactions) {
     if (tx.type === 'income') income += tx.amount
     else if (tx.type === 'expense') expenses += tx.amount
-    else bills += tx.amount
+    else if (tx.type === 'bill') bills += tx.amount
+    else if (tx.savingsDirection === 'withdraw') savingsWithdrawals += tx.amount
+    else savingsDeposits += tx.amount
   }
+
+  const savings = savingsDeposits - savingsWithdrawals
 
   return {
     income,
     expenses,
     bills,
-    net: income - expenses - bills,
+    savings,
+    net: income + savingsWithdrawals - expenses - bills - savingsDeposits,
     count: transactions.length,
   }
 }

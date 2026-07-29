@@ -4,11 +4,13 @@ import { BillReminders } from './components/BillReminders'
 import { FinanceCalendar } from './components/FinanceCalendar'
 import { LoadingState } from './components/LoadingState'
 import { MonthSummary } from './components/MonthSummary'
+import { SavingsGoals } from './components/SavingsGoals'
 import { ThemeToggle } from './components/ThemeToggle'
 import { TransactionForm } from './components/TransactionForm'
 import { TransactionList } from './components/TransactionList'
 import { useAuth } from './hooks/useAuth'
 import { useRecurringBills } from './hooks/useRecurringBills'
+import { useSavingsGoals } from './hooks/useSavingsGoals'
 import { useTheme } from './hooks/useTheme'
 import { useTransactions } from './hooks/useTransactions'
 import { buildBalanceOutlook, computeRunningBalanceForMonth } from './services/balanceOutlook'
@@ -48,7 +50,17 @@ function App() {
     remove: removeBill,
   } = useRecurringBills(userId, year, month, transactions)
 
-  const dataLoading = txLoading || billLoading
+  const {
+    journey: savingsJourney,
+    loading: goalsLoading,
+    error: goalsError,
+    add: addGoal,
+    update: updateGoal,
+    contribute: contributeGoal,
+    remove: removeGoal,
+  } = useSavingsGoals(userId, allTransactions)
+
+  const dataLoading = txLoading || billLoading || goalsLoading
 
   const monthBalance = useMemo(
     () => computeRunningBalanceForMonth(bills, allTransactions, year, month),
@@ -180,6 +192,7 @@ function App() {
               unpaidCount={monthBalance.unpaidCount}
               monthNet={monthBalance.monthNet}
               runningBalance={monthBalance.runningBalance}
+              savingsPot={savingsJourney.savedAmount}
               outlookRows={outlookRows}
               onPrev={() => shiftMonth(-1)}
               onNext={() => shiftMonth(1)}
@@ -213,6 +226,16 @@ function App() {
               onUpdate={updateBill}
               onDelete={removeBill}
               onMarkPaid={handleMarkPaid}
+            />
+
+            <SavingsGoals
+              journey={savingsJourney}
+              loading={goalsLoading}
+              error={goalsError}
+              onAdd={addGoal}
+              onUpdate={updateGoal}
+              onContribute={contributeGoal}
+              onDelete={removeGoal}
             />
 
             <div className="workspace">

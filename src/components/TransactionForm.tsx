@@ -1,5 +1,11 @@
 import { useState, type FormEvent } from 'react'
-import { CATEGORIES, type Transaction, type TransactionInput, type TransactionType } from '../types/transaction'
+import {
+  CATEGORIES,
+  type SavingsDirection,
+  type Transaction,
+  type TransactionInput,
+  type TransactionType,
+} from '../types/transaction'
 import { dateInputToIso, toDateInputValue } from '../lib/format'
 
 interface TransactionFormProps {
@@ -16,6 +22,7 @@ function createInitialState(editing: Transaction | null) {
       category: editing.category,
       description: editing.description,
       occurredAt: toDateInputValue(new Date(editing.occurredAt)),
+      savingsDirection: (editing.savingsDirection ?? 'deposit') as SavingsDirection,
     }
   }
 
@@ -25,12 +32,14 @@ function createInitialState(editing: Transaction | null) {
     category: CATEGORIES.bill[0],
     description: '',
     occurredAt: toDateInputValue(new Date()),
+    savingsDirection: 'deposit' as SavingsDirection,
   }
 }
 
 function descriptionPlaceholder(type: TransactionType): string {
   if (type === 'bill') return 'e.g. Meralco July bill'
   if (type === 'income') return 'e.g. Mid-month salary'
+  if (type === 'savings') return 'e.g. Moved to savings pot'
   return 'e.g. Groceries at SM'
 }
 
@@ -45,13 +54,26 @@ export function TransactionForm({
   const [category, setCategory] = useState(initial.category)
   const [description, setDescription] = useState(initial.description)
   const [occurredAt, setOccurredAt] = useState(initial.occurredAt)
+  const [savingsDirection, setSavingsDirection] = useState<SavingsDirection>(
+    initial.savingsDirection,
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   function selectType(next: TransactionType) {
     setType(next)
     const options = CATEGORIES[next]
-    setCategory((prev) => (options.includes(prev) ? prev : options[0]))
+    if (next === 'savings') {
+      setSavingsDirection('deposit')
+      setCategory(CATEGORIES.savings[0])
+    } else {
+      setCategory((prev) => (options.includes(prev) ? prev : options[0]))
+    }
+  }
+
+  function selectSavingsDirection(next: SavingsDirection) {
+    setSavingsDirection(next)
+    setCategory(next === 'deposit' ? CATEGORIES.savings[0] : CATEGORIES.savings[1])
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -68,9 +90,15 @@ export function TransactionForm({
       await onSubmit({
         type,
         amount: parsed,
-        category,
+        category:
+          type === 'savings'
+            ? savingsDirection === 'deposit'
+              ? CATEGORIES.savings[0]
+              : CATEGORIES.savings[1]
+            : category,
         description: description.trim(),
         occurredAt: dateInputToIso(occurredAt),
+        ...(type === 'savings' ? { savingsDirection } : {}),
       })
       if (!editing) {
         setAmount('')
@@ -95,8 +123,8 @@ export function TransactionForm({
       <h2 id="form-heading">{editing ? 'Edit transaction' : 'Add transaction'}</h2>
 
       <form className="tx-form" onSubmit={handleSubmit}>
-        <div className="type-tabs" role="tablist" aria-label="Transaction type">
-          {(['bill', 'expense', 'income'] as const).map((t) => (
+        <div className="type-tabs type-tabs-4" role="tablist" aria-label="Transaction type">
+          {(['bill', 'expense', 'income', 'savings'] as const).map((t) => (
             <button
               key={t}
               type="button"
@@ -109,6 +137,29 @@ export function TransactionForm({
             </button>
           ))}
         </div>
+
+        {type === 'savings' && (
+          <div className="type-tabs" role="tablist" aria-label="Savings direction">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={savingsDirection === 'deposit'}
+              className={`type-tab ${savingsDirection === 'deposit' ? 'active savings' : ''}`}
+              onClick={() => selectSavingsDirection('deposit')}
+            >
+              Deposit (to pot)
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={savingsDirection === 'withdraw'}
+              className={`type-tab ${savingsDirection === 'withdraw' ? 'active income' : ''}`}
+              onClick={() => selectSavingsDirection('withdraw')}
+            >
+              Withdraw (from pot)
+            </button>
+          </div>
+        )}
 
         <div className="form-row">
           <label>
@@ -124,16 +175,18 @@ export function TransactionForm({
               placeholder="0.00"
             />
           </label>
-          <label>
-            Category
-            <select value={category} onChange={(e) => setCategory(e.target.value)}>
-              {CATEGORIES[type].map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </label>
+          {type !== 'savings' && (
+            <label>
+              Category
+              <select value={category} onChange={(e) => setCategory(e.target.value)}>
+                {CATEGORIES[type].map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
 
         <label>

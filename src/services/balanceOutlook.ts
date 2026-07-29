@@ -99,6 +99,7 @@ export function computeMonthBalance(
     summary.income -
     summary.expenses -
     summary.bills -
+    summary.savings -
     unpaidScheduledBills
 
   return {
@@ -176,14 +177,20 @@ function monthNetThroughDay(
   let income = 0
   let expenses = 0
   let recordedBills = 0
+  let savingsDeposits = 0
+  let savingsWithdrawals = 0
   const paidRecurringIds = new Set<string>()
 
   for (const tx of monthly) {
     if (tx.type === 'income') income += tx.amount
     else if (tx.type === 'expense') expenses += tx.amount
-    else {
+    else if (tx.type === 'bill') {
       recordedBills += tx.amount
       if (tx.recurringBillId) paidRecurringIds.add(tx.recurringBillId)
+    } else if (tx.savingsDirection === 'withdraw') {
+      savingsWithdrawals += tx.amount
+    } else if (tx.type === 'savings') {
+      savingsDeposits += tx.amount
     }
   }
 
@@ -196,7 +203,14 @@ function monthNetThroughDay(
     }
   }
 
-  return income - expenses - recordedBills - unpaidScheduledBills
+  return (
+    income +
+    savingsWithdrawals -
+    expenses -
+    recordedBills -
+    savingsDeposits -
+    unpaidScheduledBills
+  )
 }
 
 /**
