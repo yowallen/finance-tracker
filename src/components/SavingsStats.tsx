@@ -25,7 +25,7 @@ export function SavingsStats({
   history,
   onSelectMonth,
 }: SavingsStatsProps) {
-  const maxHistory = Math.max(...history.map((row) => row.stats.deposits), 1)
+  const totalHistory = history.reduce((sum, row) => sum + row.stats.deposits, 0)
   const hasActivity = stats.depositCount + stats.withdrawCount > 0
 
   return (
@@ -52,7 +52,8 @@ export function SavingsStats({
         <div className="spending-history" role="list" aria-label="Monthly savings history">
           {history.map((row) => {
             const selected = row.year === year && row.month === month
-            const height = Math.max(8, (row.stats.deposits / maxHistory) * 100)
+            const share = totalHistory > 0 ? (row.stats.deposits / totalHistory) * 100 : 0
+            const height = Math.max(8, share)
             return (
               <button
                 key={`${row.year}-${row.month}`}
@@ -61,7 +62,7 @@ export function SavingsStats({
                 className={`spending-history-col ${selected ? 'selected' : ''}`}
                 onClick={() => onSelectMonth(row.year, row.month)}
                 aria-pressed={selected}
-                title={`${monthLabel(row.year, row.month)}: deposited ${formatMoney(row.stats.deposits)}, net ${formatMoney(row.stats.net)}`}
+                title={`${monthLabel(row.year, row.month)}: deposited ${formatMoney(row.stats.deposits)}, net ${formatMoney(row.stats.net)} • ${share.toFixed(0)}% of this period`}
               >
                 <span className="spending-history-bar-wrap">
                   <span
@@ -70,7 +71,8 @@ export function SavingsStats({
                   />
                 </span>
                 <span className="spending-history-label">
-                  {shortMonthLabel(row.year, row.month)}
+                  <span>{shortMonthLabel(row.year, row.month)}</span>
+                  <span className="spending-history-percent">{share.toFixed(0)}%</span>
                 </span>
               </button>
             )

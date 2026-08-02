@@ -985,12 +985,26 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
 }
 
 .spending-history-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.12rem;
   font-size: 0.68rem;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+}
+
+.spending-history-percent {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.spending-history-col.selected .spending-history-percent {
+  color: inherit;
 }
 
 .spending-category-list {
