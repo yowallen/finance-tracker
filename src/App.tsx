@@ -16,7 +16,12 @@ import { useRecurringBills } from './hooks/useRecurringBills'
 import { useSavingsGoals } from './hooks/useSavingsGoals'
 import { useTheme } from './hooks/useTheme'
 import { useTransactions } from './hooks/useTransactions'
-import { buildBalanceOutlook, computeRunningBalanceForMonth } from './services/balanceOutlook'
+import {
+  buildBalanceOutlook,
+  computeMonthNetThroughDay,
+  computeRunningBalanceForDay,
+  computeRunningBalanceForMonth,
+} from './services/balanceOutlook'
 import {
   buildMonthlySavingsHistory,
   buildMonthlySpendingHistory,
@@ -71,10 +76,32 @@ function App() {
 
   const dataLoading = txLoading || billLoading || goalsLoading
 
-  const monthBalance = useMemo(
-    () => computeRunningBalanceForMonth(bills, allTransactions, year, month),
-    [bills, allTransactions, year, month],
-  )
+  const monthBalance = useMemo(() => {
+    const base = computeRunningBalanceForMonth(bills, allTransactions, year, month)
+    const isCurrentMonth = year === now.getFullYear() && month === now.getMonth()
+
+    if (!isCurrentMonth) {
+      return base
+    }
+
+    return {
+      ...base,
+      runningBalance: computeRunningBalanceForDay(
+        bills,
+        allTransactions,
+        year,
+        month,
+        now.getDate(),
+      ),
+      monthNet: computeMonthNetThroughDay(
+        bills,
+        allTransactions,
+        year,
+        month,
+        now.getDate(),
+      ),
+    }
+  }, [bills, allTransactions, year, month, now])
 
   const outlookRows = useMemo(
     () => buildBalanceOutlook(bills, allTransactions, year, month, 11),
@@ -225,6 +252,7 @@ function App() {
               unpaidCount={monthBalance.unpaidCount}
               monthNet={monthBalance.monthNet}
               runningBalance={monthBalance.runningBalance}
+              isCurrentMonth={year === now.getFullYear() && month === now.getMonth()}
               savingsPot={savingsJourney.savedAmount}
               outlookRows={outlookRows}
               onPrev={() => shiftMonth(-1)}

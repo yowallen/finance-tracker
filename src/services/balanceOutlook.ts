@@ -159,7 +159,7 @@ export function computeRunningBalanceForMonth(
 }
 
 /** Net change within a month using only activity on or before `day`. */
-function monthNetThroughDay(
+export function computeMonthNetThroughDay(
   bills: RecurringBill[],
   transactions: Transaction[],
   year: number,
@@ -233,7 +233,7 @@ export function computeRunningBalanceForDay(
     running = computeMonthBalance(bills, transactions, y, m, running).runningBalance
   }
 
-  return running + monthNetThroughDay(bills, transactions, year, month, day)
+  return running + computeMonthNetThroughDay(bills, transactions, year, month, day)
 }
 
 export interface AverageDailyBalanceResult {
@@ -290,7 +290,7 @@ export function computeAverageDailyBalance(
   let sum = 0
   let lastDayBalance = prior
   for (let day = 1; day <= lastDay; day += 1) {
-    lastDayBalance = prior + monthNetThroughDay(bills, transactions, year, month, day)
+    lastDayBalance = prior + computeMonthNetThroughDay(bills, transactions, year, month, day)
     sum += lastDayBalance
   }
 

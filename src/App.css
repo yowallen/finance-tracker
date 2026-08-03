@@ -1536,13 +1536,14 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
 .calendar-adb {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  margin-bottom: 1rem;
-  padding: 0.9rem 1rem;
+  gap: 0.12rem;
+  margin-top: 1rem;
+  margin-bottom: 0.25rem;
+  padding: 0.5rem 0.75rem;
   border-radius: var(--radius-sm);
   border: none;
-  background: var(--md-sys-color-primary-container);
-  color: var(--md-sys-color-on-primary-container);
+  background: transparent;
+  color: var(--muted);
 }
 
 .calendar-adb-main {
@@ -1550,16 +1551,17 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 0.35rem 1rem;
+  gap: 0.25rem 0.6rem;
 }
 
 .calendar-adb .stat-label {
   color: inherit;
-  opacity: 0.8;
+  opacity: 0.75;
+  font-size: 0.86rem;
 }
 
 .calendar-adb .stat-value {
-  font-size: 1.35rem;
+  font-size: 1.05rem;
   font-variant-numeric: tabular-nums;
   color: inherit;
 }
@@ -1571,10 +1573,10 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
 
 .calendar-adb .stat-meta {
   margin: 0;
-  font-size: 0.78rem;
-  color: inherit;
+  font-size: 0.72rem;
+  color: var(--muted);
   opacity: 0.8;
-  line-height: 1.35;
+  line-height: 1.25;
 }
 
 .calendar-legend {

@@ -74,6 +74,24 @@ function buildEventsByDay(
     }
   }
 
+  for (const entry of map.values()) {
+    const paidBillIds = new Set(
+      entry.bills
+        .filter((bill) => bill.status === 'paid')
+        .map((bill) => bill.bill.id),
+    )
+    if (paidBillIds.size > 0) {
+      entry.transactions = entry.transactions.filter(
+        (tx) =>
+          !(
+            tx.type === 'bill' &&
+            typeof tx.recurringBillId === 'string' &&
+            paidBillIds.has(tx.recurringBillId)
+          ),
+      )
+    }
+  }
+
   return map
 }
 
@@ -107,12 +125,28 @@ export function FinanceCalendar({
         : 1
 
   const selected = eventsByDay.get(activeDay)
+
   const selectedDateLabel = new Intl.DateTimeFormat('en-PH', {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
     year: 'numeric',
   }).format(new Date(year, month, activeDay))
+
+  const selectedDayEvents = eventsByDay.get(activeDay)
+  const paidReminderBillIds = new Set(
+    selectedDayEvents?.bills
+      .filter((bill) => bill.status === 'paid')
+      .map((bill) => bill.bill.id),
+  )
+  const visibleTransactions = selectedDayEvents?.transactions.filter(
+    (tx) =>
+      !(
+        tx.type === 'bill' &&
+        typeof tx.recurringBillId === 'string' &&
+        paidReminderBillIds.has(tx.recurringBillId)
+      ),
+  )
 
   const dayRunningBalance = computeRunningBalanceForDay(
     bills,
@@ -150,26 +184,11 @@ export function FinanceCalendar({
         <p className="calendar-legend">
           <span className="legend-dot bill" />Bill due
           <span className="legend-dot income" />Income
-          <span className="legend-dot expense" />Expense / paid
+          <span className="legend-dot expense" />Expense
         </p>
       </div>
 
-      <div
-        className={`calendar-adb ${adbPositive ? 'positive' : 'negative'}`}
-        aria-label="Average daily balance for this month"
-      >
-        <div className="calendar-adb-main">
-          <span className="stat-label">Average Daily Balance</span>
-          <strong className="stat-value">{formatMoney(averageDaily.averageDailyBalance)}</strong>
-        </div>
-        <p className="stat-meta">
-          {isCurrentMonth
-            ? `Month-to-date · average of end-of-day balances for days 1–${averageDaily.daysAveraged}`
-            : `Full month · average of end-of-day balances across ${averageDaily.daysAveraged} days`}
-          {' · '}
-          includes unpaid bills due in the averaged period
-        </p>
-      </div>
+      {/* Average Daily Balance moved below the calendar layout to reduce visual clutter */}
 
       <div className="calendar-layout">
         <div className="calendar-grid" role="grid" aria-label={`Calendar for ${monthLabel(year, month)}`}>
@@ -184,8 +203,21 @@ export function FinanceCalendar({
             }
 
             const events = eventsByDay.get(day)
+            const paidBillIds = new Set(
+              events?.bills
+                .filter((bill) => bill.status === 'paid')
+                .map((bill) => bill.bill.id),
+            )
+            const visibleEvents = events?.transactions.filter(
+              (tx) =>
+                !(
+                  tx.type === 'bill' &&
+                  typeof tx.recurringBillId === 'string' &&
+                  paidBillIds.has(tx.recurringBillId)
+                ),
+            )
             const billCount = events?.bills.length ?? 0
-            const txCount = events?.transactions.length ?? 0
+            const txCount = visibleEvents?.length ?? 0
             const isToday = isCurrentMonth && day === today.getDate()
             const isSelected = day === activeDay
             const hasOverdue = events?.bills.some((b) => b.status === 'overdue') ?? false
@@ -211,13 +243,16 @@ export function FinanceCalendar({
                 <span className="calendar-day-num">{day}</span>
                 <span className="calendar-dots" aria-hidden="true">
                   {billCount > 0 && <span className="legend-dot bill" />}
-                  {(events?.transactions.some((t) => t.type === 'income' || isSavingsWithdraw(t)) ?? false) && (
+                  {(visibleEvents?.some((t) => t.type === 'income' || isSavingsWithdraw(t)) ?? false) && (
                     <span className="legend-dot income" />
                   )}
-                  {(events?.transactions.some(
-                    (t) => t.type !== 'income' && !isSavingsWithdraw(t),
+                  {(visibleEvents?.some(
+                    (t) => t.type !== 'income' && t.type !== 'bill' && !isSavingsWithdraw(t),
                   ) ?? false) && (
                     <span className="legend-dot expense" />
+                  )}
+                  {(visibleEvents?.some((t) => t.type === 'bill') ?? false) && (
+                    <span className="legend-dot bill" />
                   )}
                 </span>
               </button>
@@ -228,11 +263,11 @@ export function FinanceCalendar({
         <aside className="calendar-detail">
           <h3>{selectedDateLabel}</h3>
           <div className={`calendar-day-balance ${balancePositive ? 'positive' : 'negative'}`}>
-            <span className="stat-label">Running balance</span>
+            <span className="stat-label">Daily balance</span>
             <strong className="stat-value">{formatMoney(dayRunningBalance)}</strong>
             <span className="stat-meta">As of this day · includes unpaid bills due by now</span>
           </div>
-          {!selected || (selected.bills.length === 0 && selected.transactions.length === 0) ? (
+          {!selected || (selected.bills.length === 0 && visibleTransactions?.length === 0) ? (
             <p className="muted">No bills or transactions on this day.</p>
           ) : (
             <ul className="calendar-detail-list">
@@ -242,14 +277,20 @@ export function FinanceCalendar({
                     <span className={`reminder-status status-${bill.status}`}>{statusShort(bill)}</span>
                     <p className="tx-desc">{bill.bill.name}</p>
                     <p className="reminder-due">
-                      Bill due · Payment {bill.paymentNumber}/{bill.totalPayments}
+                      {bill.status === 'paid'
+                        ? `Paid · Payment ${bill.paymentNumber}/${bill.totalPayments}`
+                        : `Bill due · Payment ${bill.paymentNumber}/${bill.totalPayments}`}
                     </p>
                   </div>
-                  <strong className="tx-amount bill">{formatMoney(bill.bill.amount)}</strong>
+                  <strong className={`tx-amount ${bill.status === 'paid' ? 'bill' : 'bill'}`}>
+                    {bill.status === 'paid' ? '−' : ''}
+                    {formatMoney(bill.bill.amount)}
+                  </strong>
                 </li>
               ))}
-              {selected.transactions.map((tx) => {
+              {visibleTransactions?.map((tx) => {
                 const isInflow = tx.type === 'income' || isSavingsWithdraw(tx)
+                const amountClass = isInflow ? 'income' : tx.type === 'bill' ? 'bill' : tx.type
                 return (
                 <li key={`tx-${tx.id}`} className={`calendar-detail-item ${tx.type}`}>
                   <div>
@@ -259,8 +300,8 @@ export function FinanceCalendar({
                       {formatDate(tx.occurredAt)}
                     </time>
                   </div>
-                  <strong className={`tx-amount ${isInflow ? 'income' : tx.type}`}>
-                    {isInflow ? '+' : '−'}
+                  <strong className={`tx-amount ${amountClass}`}>
+                    {isInflow ? '+' : tx.type === 'bill' ? '−' : '−'}
                     {formatMoney(tx.amount)}
                   </strong>
                 </li>
@@ -269,6 +310,23 @@ export function FinanceCalendar({
             </ul>
           )}
         </aside>
+      </div>
+
+      <div
+        className={`calendar-adb ${adbPositive ? 'positive' : 'negative'}`}
+        aria-label="Average daily balance for this month"
+      >
+        <div className="calendar-adb-main">
+          <span className="stat-label">Average Daily Balance</span>
+          <strong className="stat-value">{formatMoney(averageDaily.averageDailyBalance)}</strong>
+        </div>
+        <p className="stat-meta">
+          {isCurrentMonth
+            ? `Month-to-date · average of end-of-day balances for days 1–${averageDaily.daysAveraged}`
+            : `Full month · average of end-of-day balances across ${averageDaily.daysAveraged} days`}
+          {' · '}
+          includes unpaid bills due in the averaged period
+        </p>
       </div>
     </section>
   )
