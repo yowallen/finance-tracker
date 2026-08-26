@@ -49,7 +49,7 @@ export function SavingsStats({
       </div>
 
       {history.length > 1 && (
-        <div className="spending-history" role="list" aria-label="Monthly savings history">
+        <div className="spending-history" role="group" aria-label="Monthly savings history">
           {history.map((row) => {
             const selected = row.year === year && row.month === month
             const share = totalHistory > 0 ? (row.stats.deposits / totalHistory) * 100 : 0
@@ -58,10 +58,10 @@ export function SavingsStats({
               <button
                 key={`${row.year}-${row.month}`}
                 type="button"
-                role="listitem"
                 className={`spending-history-col ${selected ? 'selected' : ''}`}
                 onClick={() => onSelectMonth(row.year, row.month)}
                 aria-pressed={selected}
+                aria-label={`${monthLabel(row.year, row.month)}: deposited ${formatMoney(row.stats.deposits)}, net ${formatMoney(row.stats.net)}, ${share.toFixed(0)}% of this period${selected ? ' (selected)' : ''}`}
                 title={`${monthLabel(row.year, row.month)}: deposited ${formatMoney(row.stats.deposits)}, net ${formatMoney(row.stats.net)} • ${share.toFixed(0)}% of this period`}
               >
                 <span className="spending-history-bar-wrap">
@@ -91,7 +91,7 @@ export function SavingsStats({
                 {formatMoney(stats.deposits)}
               </span>
             </div>
-            <div className="spending-category-track" role="presentation">
+            <div className="spending-category-track">
               <span
                 className="spending-category-fill savings-fill"
                 style={{
@@ -113,7 +113,7 @@ export function SavingsStats({
                 {formatMoney(stats.withdrawals)}
               </span>
             </div>
-            <div className="spending-category-track" role="presentation">
+            <div className="spending-category-track">
               <span
                 className="spending-category-fill savings-withdraw-fill"
                 style={{

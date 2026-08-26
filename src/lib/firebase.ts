@@ -1,7 +1,6 @@
 import { initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
-import { getFirestore } from 'firebase/firestore'
-import { getStorage } from 'firebase/storage'
+import type { Firestore } from 'firebase/firestore'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -28,8 +27,38 @@ if (!hasRequiredConfig) {
   console.warn('Firebase config is incomplete. Continuing in demo mode without Firestore persistence.')
 }
 
+// Auth initializes eagerly (the sign-in screen needs it); the Firestore SDK
+// is loaded on demand so it stays out of the initial bundle.
 export const app = hasRequiredConfig ? initializeApp(firebaseConfig) : null
 export const auth = app ? getAuth(app) : null
-export const db = app ? getFirestore(app) : null
-export const storage = app ? getStorage(app) : null
 export const isFirebaseConfigured = hasRequiredConfig
+
+type FirestoreModule = typeof import('firebase/firestore')
+
+let firestoreClient: Promise<{
+  fs: FirestoreModule
+  db: Firestore
+}> | null = null
+
+/**
+ * Loads the Firestore SDK + database handle, caching the result.
+ * Rejects when Firebase isn't configured; callers surface that as an error.
+ */
+export function getFirestoreClient(): Promise<{
+  fs: FirestoreModule
+  db: Firestore
+}> {
+  if (!firestoreClient) {
+    if (!app) {
+      return Promise.reject(
+        new Error('Firebase is not configured. Data sync is unavailable.'),
+      )
+    }
+
+    firestoreClient = import('firebase/firestore').then((fs) => ({
+      fs,
+      db: fs.getFirestore(app),
+    }))
+  }
+  return firestoreClient
+}

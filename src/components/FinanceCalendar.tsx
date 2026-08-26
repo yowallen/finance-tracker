@@ -191,9 +191,12 @@ export function FinanceCalendar({
       {/* Average Daily Balance moved below the calendar layout to reduce visual clutter */}
 
       <div className="calendar-layout">
-        <div className="calendar-grid" role="grid" aria-label={`Calendar for ${monthLabel(year, month)}`}>
+        {/* Plain group + buttons: a real ARIA grid would require row
+            structure we don't have, and broken grid semantics are worse
+            than none for screen readers. */}
+        <div className="calendar-grid" role="group" aria-label={`Calendar for ${monthLabel(year, month)}`}>
           {WEEKDAYS.map((label) => (
-            <div key={label} className="calendar-weekday" role="columnheader">
+            <div key={label} className="calendar-weekday" aria-hidden="true">
               {label}
             </div>
           ))}
@@ -226,7 +229,6 @@ export function FinanceCalendar({
               <button
                 key={day}
                 type="button"
-                role="gridcell"
                 className={[
                   'calendar-cell',
                   isToday ? 'today' : '',

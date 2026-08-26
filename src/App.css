@@ -211,6 +211,7 @@
   border: none;
   border-radius: 999px;
   padding: 0.5rem 0.9rem 0.5rem 0.65rem;
+  min-height: 2.75rem;
   background: var(--md-sys-color-secondary-container);
   color: var(--md-sys-color-on-secondary-container);
   font-weight: 500;
@@ -222,9 +223,8 @@
   box-shadow: var(--elevation-1);
 }
 
-.theme-toggle:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+.theme-toggle:active {
+  transform: scale(0.96);
 }
 
 .theme-toggle-icon {
@@ -280,8 +280,8 @@
 }
 
 .icon-btn {
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 2.75rem;
+  height: 2.75rem;
   border-radius: 999px;
   border: none;
   background: var(--md-sys-color-surface-container-high);
@@ -303,9 +303,8 @@
   color: var(--accent);
 }
 
-.icon-btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+.icon-btn:active {
+  transform: scale(0.96);
 }
 
 .summary-grid {
@@ -325,7 +324,7 @@
 }
 
 .stat-label {
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted);
@@ -384,7 +383,7 @@
   appearance: none;
   border: none;
   background: none;
-  padding: 0.35rem 0;
+  padding: 0.55rem 0;
   margin: 0;
   font: inherit;
   font-size: 0.875rem;
@@ -609,7 +608,7 @@ select {
 
 select {
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236f7974' d='M1.4 0.6L6 5.2 10.6.6 12 2 6 8 0 2z'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%235c6660' d='M1.4 0.6L6 5.2 10.6.6 12 2 6 8 0 2z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.85rem center;
   background-size: 0.75rem;
@@ -668,6 +667,10 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
   background: var(--accent);
 }
 
+.btn-primary:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -695,7 +698,9 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
 .link-btn {
   border: none;
   background: none;
-  padding: 0;
+  /* Padding keeps the tap target ≥24px (WCAG 2.2) without changing the
+     text-only look; coarse pointers get a full-size target further down. */
+  padding: 0.35rem 0.25rem;
   color: var(--accent);
   font-weight: 600;
   font-size: 0.875rem;
@@ -708,6 +713,12 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
 
 .link-btn.danger {
   color: var(--danger);
+}
+
+@media (pointer: coarse) {
+  .link-btn {
+    padding: 0.7rem 0.6rem;
+  }
 }
 
 .form-error,
@@ -777,7 +788,7 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
 }
 
 .tx-type-badge {
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: 700;
@@ -989,7 +1000,7 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
   flex-direction: column;
   align-items: center;
   gap: 0.12rem;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -998,7 +1009,7 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
 }
 
 .spending-history-percent {
-  font-size: 0.62rem;
+  font-size: 0.7rem;
   font-weight: 700;
   color: var(--ink-soft);
 }
@@ -1134,7 +1145,7 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
 }
 
 .reminder-status {
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: 700;
@@ -1383,7 +1394,7 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
 }
 
 .savings-stop-price {
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 500;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -1510,7 +1521,7 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
   }
 
   .savings-stop-name {
-    font-size: 0.68rem;
+    font-size: 0.72rem;
   }
 }
 
@@ -1573,7 +1584,7 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
 
 .calendar-adb .stat-meta {
   margin: 0;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   color: var(--muted);
   opacity: 0.8;
   line-height: 1.25;
@@ -1626,7 +1637,7 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
 
 .calendar-weekday {
   text-align: center;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -1873,11 +1884,12 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
   .savings-header-actions .btn-ghost {
     flex: 1 1 0;
     min-width: 0;
-    min-height: 2.15rem;
-    padding: 0.4rem 0.55rem;
-    font-size: 0.78rem;
+    /* Keep the 44px touch target on small screens instead of shrinking it. */
+    min-height: 2.75rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
     font-weight: 600;
-    border-radius: 10px;
+    border-radius: 999px;
     box-shadow: none;
     letter-spacing: 0;
   }
@@ -1918,4 +1930,149 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
     justify-content: space-between;
     width: 100%;
   }
+}
+
+/* --- Password visibility toggle (sign-in form) --- */
+
+.password-field {
+  position: relative;
+  display: block;
+}
+
+.password-field input {
+  width: 100%;
+  padding-right: 2.9rem;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.3rem;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.4rem;
+  min-height: 2.4rem;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.password-toggle:hover {
+  color: var(--accent);
+}
+
+.password-toggle svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+@media (pointer: coarse) {
+  .password-toggle {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    right: 0.15rem;
+  }
+}
+
+/* --- Undo toast (replaces confirm() dialogs) --- */
+
+.undo-toast {
+  position: fixed;
+  left: 50%;
+  bottom: max(1.25rem, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem 0.9rem;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  max-width: min(92vw, 34rem);
+  padding: 0.7rem 0.85rem 0.7rem 1.1rem;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: var(--elevation-2);
+  animation: undo-toast-in 0.18s ease-out;
+}
+
+@keyframes undo-toast-in {
+  from {
+    opacity: 0;
+    translate: 0 0.5rem;
+  }
+
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+.undo-toast-message {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.undo-toast-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.undo-toast-undo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+  font-size: 0.875rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  padding: 0.45rem 0.55rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.undo-toast-undo svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.undo-toast-undo:hover {
+  filter: brightness(1.25);
+}
+
+.undo-toast-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.72;
+  min-width: 2.4rem;
+  min-height: 2.4rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.undo-toast-dismiss:hover {
+  opacity: 1;
+}
+
+.undo-toast-dismiss svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.undo-toast :focus-visible {
+  outline-color: currentColor;
 }

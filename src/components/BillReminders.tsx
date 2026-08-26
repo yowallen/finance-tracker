@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent, type MouseEvent } from 'react'
 import { Bell, Plus } from 'lucide-react'
 import { formatMoney, formatYearMonth, monthLabel, toMonthInputValue } from '../lib/format'
 import {
@@ -22,7 +22,7 @@ interface BillRemindersProps {
   error: string | null
   onAdd: (input: RecurringBillInput) => Promise<void>
   onUpdate: (id: string, input: RecurringBillInput) => Promise<void>
-  onDelete: (id: string) => Promise<void>
+  onDelete: (bill: RecurringBill) => Promise<void>
   onMarkPaid: (reminder: BillReminder) => Promise<void>
 }
 
@@ -112,11 +112,17 @@ export function BillReminders({
   const [formError, setFormError] = useState<string | null>(null)
   const [payingId, setPayingId] = useState<string | null>(null)
 
+  // Remember where the form was opened from so focus can return there.
+  const addTriggerRef = useRef<HTMLButtonElement>(null)
+  const returnFocusRef = useRef<HTMLElement | null>(null)
+
   const needsAttention = reminders.filter(
     (r) => r.status === 'overdue' || r.status === 'due-soon',
   ).length
 
   function openCreate() {
+    returnFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
     setEditing(null)
     setForm(emptyForm())
     setAmountText('')
@@ -125,11 +131,28 @@ export function BillReminders({
   }
 
   function openEdit(bill: RecurringBill) {
+    returnFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
     setEditing(bill)
     setForm(formFromBill(bill))
     setAmountText(String(bill.amount))
     setFormError(null)
     setShowForm(true)
+  }
+
+  /** Close the inline form and hand focus back to where it came from. */
+  function closeForm() {
+    setShowForm(false)
+    setEditing(null)
+    setForm(emptyForm())
+    setAmountText('')
+    setFormError(null)
+    requestAnimationFrame(() => {
+      const target =
+        returnFocusRef.current ?? addTriggerRef.current
+      target?.focus()
+      returnFocusRef.current = null
+    })
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -166,10 +189,7 @@ export function BillReminders({
       } else {
         await onAdd(payload)
       }
-      setEditing(null)
-      setShowForm(false)
-      setForm(emptyForm())
-      setAmountText('')
+      closeForm()
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Could not save bill.')
     } finally {
@@ -178,19 +198,43 @@ export function BillReminders({
   }
 
   function cancelForm() {
-    setShowForm(false)
-    setEditing(null)
-    setForm(emptyForm())
-    setAmountText('')
-    setFormError(null)
+    closeForm()
   }
 
-  async function handleMarkPaid(reminder: BillReminder) {
+  async function handleMarkPaid(
+    reminder: BillReminder,
+    event: MouseEvent<HTMLButtonElement>,
+  ) {
+    const row = event.currentTarget.closest<HTMLElement>('.reminder-item')
     setPayingId(reminder.bill.id)
     try {
       await onMarkPaid(reminder)
     } finally {
       setPayingId(null)
+      // Row stays mounted across the paid-state change; re-anchor focus there.
+      requestAnimationFrame(() => row?.focus())
+    }
+  }
+
+  async function handleRemove(reminder: BillReminder) {
+    const container = document.querySelector<HTMLElement>('.reminder-list')
+    const rows = container?.querySelectorAll<HTMLElement>('.reminder-item')
+    const deletedIndex = rows
+      ? Array.from(rows).findIndex((row) => row.dataset.billId === reminder.bill.id)
+      : -1
+
+    try {
+      await onDelete(reminder.bill)
+    } finally {
+      requestAnimationFrame(() => {
+        const remaining = container?.querySelectorAll<HTMLElement>('.reminder-item')
+        if (remaining && deletedIndex >= 0 && remaining.length > 0) {
+          const neighbor = remaining[Math.min(deletedIndex, remaining.length - 1)]
+          neighbor.querySelector('button')?.focus()
+        } else {
+          document.getElementById('reminders-heading')?.focus()
+        }
+      })
     }
   }
 
@@ -200,7 +244,7 @@ export function BillReminders({
     <section className="bill-reminders" aria-labelledby="reminders-heading">
       <div className="reminders-header">
         <div>
-          <h2 id="reminders-heading" className="section-title">
+          <h2 id="reminders-heading" tabIndex={-1} className="section-title">
             <Bell className="section-icon" aria-hidden="true" />
             Monthly bill reminders
           </h2>
@@ -211,7 +255,12 @@ export function BillReminders({
           </p>
         </div>
         {!showForm && (
-          <button type="button" className="btn-primary btn-with-icon" onClick={openCreate}>
+          <button
+            ref={addTriggerRef}
+            type="button"
+            className="btn-primary btn-with-icon"
+            onClick={openCreate}
+          >
             <Plus aria-hidden="true" />
             Add bill
           </button>
@@ -359,7 +408,12 @@ export function BillReminders({
       ) : (
         <ul className="reminder-list">
           {reminders.map((reminder) => (
-            <li key={reminder.bill.id} className={`reminder-item status-${reminder.status}`}>
+            <li
+              key={reminder.bill.id}
+              data-bill-id={reminder.bill.id}
+              tabIndex={-1}
+              className={`reminder-item status-${reminder.status}`}
+            >
               <div className="reminder-main">
                 <div className="reminder-top">
                   <span className={`reminder-status status-${reminder.status}`}>
@@ -382,7 +436,7 @@ export function BillReminders({
                       type="button"
                       className="link-btn"
                       disabled={payingId === reminder.bill.id}
-                      onClick={() => void handleMarkPaid(reminder)}
+                      onClick={(event) => void handleMarkPaid(reminder, event)}
                     >
                       {payingId === reminder.bill.id ? 'Saving…' : 'Mark paid'}
                     </button>
@@ -397,11 +451,7 @@ export function BillReminders({
                   <button
                     type="button"
                     className="link-btn danger"
-                    onClick={() => {
-                      if (window.confirm(`Remove reminder for “${reminder.bill.name}”?`)) {
-                        void onDelete(reminder.bill.id)
-                      }
-                    }}
+                    onClick={() => void handleRemove(reminder)}
                   >
                     Remove
                   </button>

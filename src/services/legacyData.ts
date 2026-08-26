@@ -1,11 +1,4 @@
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-  writeBatch,
-} from 'firebase/firestore'
-import { db } from '../lib/firebase'
+import { getFirestoreClient } from '../lib/firebase'
 
 /** Previous unauthenticated owner id used while auth was disabled. */
 export const LEGACY_USER_ID = 'personal'
@@ -37,17 +30,18 @@ function markClaimed(uid: string): void {
  * Safe to call repeatedly; no-ops once localStorage says this uid already claimed.
  */
 export async function claimLegacyPersonalData(uid: string): Promise<void> {
-  if (!db || !uid || alreadyClaimed(uid)) return
+  if (!uid || alreadyClaimed(uid)) return
 
+  const { fs, db } = await getFirestoreClient()
   const collections = ['transactions', 'recurringBills'] as const
 
   for (const name of collections) {
-    const snap = await getDocs(
-      query(collection(db, name), where('userId', '==', LEGACY_USER_ID)),
+    const snap = await fs.getDocs(
+      fs.query(fs.collection(db, name), fs.where('userId', '==', LEGACY_USER_ID)),
     )
 
     // Firestore batches are capped at 500 ops.
-    let batch = writeBatch(db)
+    let batch = fs.writeBatch(db)
     let ops = 0
 
     for (const docSnap of snap.docs) {
@@ -55,7 +49,7 @@ export async function claimLegacyPersonalData(uid: string): Promise<void> {
       ops += 1
       if (ops >= 450) {
         await batch.commit()
-        batch = writeBatch(db)
+        batch = fs.writeBatch(db)
         ops = 0
       }
     }

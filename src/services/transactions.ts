@@ -1,17 +1,5 @@
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  Timestamp,
-  updateDoc,
-  where,
-  type Unsubscribe,
-} from 'firebase/firestore'
-import { db } from '../lib/firebase'
+import { getFirestoreClient } from '../lib/firebase'
+import type { Timestamp, Unsubscribe } from 'firebase/firestore'
 import type {
   MonthlySavingsStats,
   MonthlySpendingStats,
@@ -24,8 +12,8 @@ import { isSavingsDeposit, isSavingsWithdraw } from '../types/transaction'
 
 const COLLECTION = 'transactions'
 
-function toIso(value: unknown): string {
-  if (value instanceof Timestamp) {
+function toIso(value: unknown, timestampCtor: typeof Timestamp): string {
+  if (value instanceof timestampCtor) {
     return value.toDate().toISOString()
   }
   if (typeof value === 'string') {
@@ -37,6 +25,7 @@ function toIso(value: unknown): string {
 function mapDoc(
   id: string,
   data: Record<string, unknown>,
+  timestampCtor: typeof Timestamp,
 ): Transaction | null {
   const userId = data.userId
   const type = data.type
@@ -55,7 +44,9 @@ function mapDoc(
     typeof amount !== 'number' ||
     typeof category !== 'string' ||
     typeof description !== 'string' ||
-    !(occurredAt instanceof Timestamp || typeof occurredAt === 'string')
+    !(
+      occurredAt instanceof timestampCtor || typeof occurredAt === 'string'
+    )
   ) {
     return null
   }
@@ -73,8 +64,8 @@ function mapDoc(
     amount,
     category,
     description,
-    occurredAt: toIso(occurredAt),
-    createdAt: toIso(data.createdAt),
+    occurredAt: toIso(occurredAt, timestampCtor),
+    createdAt: toIso(data.createdAt, timestampCtor),
     ...(typeof data.recurringBillId === 'string'
       ? { recurringBillId: data.recurringBillId }
       : {}),
@@ -107,51 +98,65 @@ export function subscribeTransactions(
   onData: (transactions: Transaction[]) => void,
   onError: (error: Error) => void,
 ): Unsubscribe {
-  if (!db) {
-    onError(new Error('Firebase is not configured. Data sync is unavailable.'))
-    return () => {}
-  }
+  let disposed = false
+  let unsubscribe: Unsubscribe = () => {}
 
-  // Filter by userId only; sort client-side so no composite index is required.
-  const q = query(collection(db, COLLECTION), where('userId', '==', userId))
+  void getFirestoreClient()
+    .then(({ fs, db }) => {
+      if (disposed) return
 
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const items: Transaction[] = []
-      let invalidId: string | null = null
-      for (const docSnap of snapshot.docs) {
-        const mapped = mapDoc(docSnap.id, docSnap.data())
-        if (mapped) {
-          items.push(mapped)
-        } else {
-          invalidId = docSnap.id
-        }
-      }
-      items.sort(
-        (a, b) =>
-          new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
+      // Filter by userId only; sort client-side so no composite index is required.
+      const q = fs.query(
+        fs.collection(db, COLLECTION),
+        fs.where('userId', '==', userId),
       )
-      onData(items)
-      if (invalidId) {
-        onError(
-          new Error(
-            `Transaction ${invalidId} has invalid or incomplete data.`,
-          ),
-        )
+
+      unsubscribe = fs.onSnapshot(
+        q,
+        (snapshot) => {
+          const items: Transaction[] = []
+          let invalidId: string | null = null
+          for (const docSnap of snapshot.docs) {
+            const mapped = mapDoc(docSnap.id, docSnap.data(), fs.Timestamp)
+            if (mapped) {
+              items.push(mapped)
+            } else {
+              invalidId = docSnap.id
+            }
+          }
+          items.sort(
+            (a, b) =>
+              new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
+          )
+          onData(items)
+          if (invalidId) {
+            onError(
+              new Error(
+                `Transaction ${invalidId} has invalid or incomplete data.`,
+              ),
+            )
+          }
+        },
+        (error) => onError(error),
+      )
+    })
+    .catch((err: unknown) => {
+      if (!disposed) {
+        onError(err instanceof Error ? err : new Error(String(err)))
       }
-    },
-    (error) => onError(error),
-  )
+    })
+
+  return () => {
+    disposed = true
+    unsubscribe()
+  }
 }
 
 export async function createTransaction(
   userId: string,
   input: TransactionInput,
 ): Promise<string> {
-  if (!db) {
-    throw new Error('Firebase is not configured. Data sync is unavailable.')
-  }
+  const { fs, db } = await getFirestoreClient()
 
   validateInput(input)
   const occurred = new Date(input.occurredAt)
@@ -162,8 +167,8 @@ export async function createTransaction(
     amount: input.amount,
     category: input.category.trim(),
     description: input.description.trim(),
-    occurredAt: Timestamp.fromDate(occurred),
-    createdAt: serverTimestamp(),
+    occurredAt: fs.Timestamp.fromDate(occurred),
+    createdAt: fs.serverTimestamp(),
   }
   if (input.recurringBillId) {
     payload.recurringBillId = input.recurringBillId
@@ -172,7 +177,7 @@ export async function createTransaction(
     payload.savingsDirection = input.savingsDirection
   }
 
-  const ref = await addDoc(collection(db, COLLECTION), payload)
+  const ref = await fs.addDoc(fs.collection(db, COLLECTION), payload)
 
   return ref.id
 }
@@ -181,9 +186,7 @@ export async function updateTransaction(
   id: string,
   input: TransactionInput,
 ): Promise<void> {
-  if (!db) {
-    throw new Error('Firebase is not configured. Data sync is unavailable.')
-  }
+  const { fs, db } = await getFirestoreClient()
 
   validateInput(input)
   const occurred = new Date(input.occurredAt)
@@ -193,7 +196,7 @@ export async function updateTransaction(
     amount: input.amount,
     category: input.category.trim(),
     description: input.description.trim(),
-    occurredAt: Timestamp.fromDate(occurred),
+    occurredAt: fs.Timestamp.fromDate(occurred),
   }
 
   if (input.type === 'savings' && input.savingsDirection) {
@@ -202,15 +205,12 @@ export async function updateTransaction(
     payload.savingsDirection = null
   }
 
-  await updateDoc(doc(db, COLLECTION, id), payload)
+  await fs.updateDoc(fs.doc(db, COLLECTION, id), payload)
 }
 
 export async function deleteTransaction(id: string): Promise<void> {
-  if (!db) {
-    throw new Error('Firebase is not configured. Data sync is unavailable.')
-  }
-
-  await deleteDoc(doc(db, COLLECTION, id))
+  const { fs, db } = await getFirestoreClient()
+  await fs.deleteDoc(fs.doc(db, COLLECTION, id))
 }
 
 export function filterByMonth(

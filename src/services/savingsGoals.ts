@@ -1,18 +1,5 @@
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  setDoc,
-  Timestamp,
-  updateDoc,
-  where,
-  type Unsubscribe,
-} from 'firebase/firestore'
-import { db } from '../lib/firebase'
+import { getFirestoreClient } from '../lib/firebase'
+import type { Timestamp, Unsubscribe } from 'firebase/firestore'
 import { createTransaction } from './transactions'
 import type {
   SavingsGoal,
@@ -25,8 +12,8 @@ import type {
 const GOALS_COLLECTION = 'savingsGoals'
 const POOLS_COLLECTION = 'savingsPools'
 
-function toIso(value: unknown): string {
-  if (value instanceof Timestamp) {
+function toIso(value: unknown, timestampCtor: typeof Timestamp): string {
+  if (value instanceof timestampCtor) {
     return value.toDate().toISOString()
   }
   if (typeof value === 'string') {
@@ -38,6 +25,7 @@ function toIso(value: unknown): string {
 function mapGoalDoc(
   id: string,
   data: Record<string, unknown>,
+  timestampCtor: typeof Timestamp,
 ): SavingsGoal | null {
   const userId = data.userId
   const name = data.name
@@ -68,7 +56,7 @@ function mapGoalDoc(
     targetAmount,
     notes,
     imageDataUrl: image,
-    createdAt: toIso(data.createdAt),
+    createdAt: toIso(data.createdAt, timestampCtor),
   }
 }
 
@@ -139,38 +127,54 @@ export function subscribeSavingsGoals(
   onData: (goals: SavingsGoal[]) => void,
   onError: (error: Error) => void,
 ): Unsubscribe {
-  if (!db) {
-    onError(new Error('Firebase is not configured. Data sync is unavailable.'))
-    return () => {}
+  let disposed = false
+  let unsubscribe: Unsubscribe = () => {}
+
+  void getFirestoreClient()
+    .then(({ fs, db }) => {
+      if (disposed) return
+
+      const q = fs.query(
+        fs.collection(db, GOALS_COLLECTION),
+        fs.where('userId', '==', userId),
+      )
+
+      unsubscribe = fs.onSnapshot(
+        q,
+        (snapshot) => {
+          const items: SavingsGoal[] = []
+          let invalidId: string | null = null
+
+          for (const docSnap of snapshot.docs) {
+            const mapped = mapGoalDoc(docSnap.id, docSnap.data(), fs.Timestamp)
+            if (mapped) {
+              items.push(mapped)
+            } else {
+              invalidId = docSnap.id
+            }
+          }
+
+          items.sort((a, b) => a.targetAmount - b.targetAmount || a.name.localeCompare(b.name))
+          onData(items)
+          if (invalidId) {
+            onError(
+              new Error(`Savings goal ${invalidId} has invalid or incomplete data.`),
+            )
+          }
+        },
+        (error) => onError(error),
+      )
+    })
+    .catch((err: unknown) => {
+      if (!disposed) {
+        onError(err instanceof Error ? err : new Error(String(err)))
+      }
+    })
+
+  return () => {
+    disposed = true
+    unsubscribe()
   }
-
-  const q = query(collection(db, GOALS_COLLECTION), where('userId', '==', userId))
-
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const items: SavingsGoal[] = []
-      let invalidId: string | null = null
-
-      for (const docSnap of snapshot.docs) {
-        const mapped = mapGoalDoc(docSnap.id, docSnap.data())
-        if (mapped) {
-          items.push(mapped)
-        } else {
-          invalidId = docSnap.id
-        }
-      }
-
-      items.sort((a, b) => a.targetAmount - b.targetAmount || a.name.localeCompare(b.name))
-      onData(items)
-      if (invalidId) {
-        onError(
-          new Error(`Savings goal ${invalidId} has invalid or incomplete data.`),
-        )
-      }
-    },
-    (error) => onError(error),
-  )
 }
 
 export function subscribeSavingsPool(
@@ -178,38 +182,49 @@ export function subscribeSavingsPool(
   onData: (pool: SavingsPool) => void,
   onError: (error: Error) => void,
 ): Unsubscribe {
-  if (!db) {
-    onError(new Error('Firebase is not configured. Data sync is unavailable.'))
-    return () => {}
+  let disposed = false
+  let unsubscribe: Unsubscribe = () => {}
+
+  void getFirestoreClient()
+    .then(({ fs, db }) => {
+      if (disposed) return
+
+      const ref = fs.doc(db, POOLS_COLLECTION, userId)
+
+      unsubscribe = fs.onSnapshot(
+        ref,
+        (snapshot) => {
+          onData(mapPoolData(userId, snapshot.data()))
+        },
+        (error) => onError(error),
+      )
+    })
+    .catch((err: unknown) => {
+      if (!disposed) {
+        onError(err instanceof Error ? err : new Error(String(err)))
+      }
+    })
+
+  return () => {
+    disposed = true
+    unsubscribe()
   }
-
-  const ref = doc(db, POOLS_COLLECTION, userId)
-
-  return onSnapshot(
-    ref,
-    (snapshot) => {
-      onData(mapPoolData(userId, snapshot.data()))
-    },
-    (error) => onError(error),
-  )
 }
 
 export async function createSavingsGoal(
   userId: string,
   input: SavingsGoalInput,
 ): Promise<string> {
-  if (!db) {
-    throw new Error('Firebase is not configured. Data sync is unavailable.')
-  }
+  const { fs, db } = await getFirestoreClient()
 
   validateInput(input)
-  const ref = await addDoc(collection(db, GOALS_COLLECTION), {
+  const ref = await fs.addDoc(fs.collection(db, GOALS_COLLECTION), {
     userId,
     name: input.name.trim(),
     targetAmount: input.targetAmount,
     notes: input.notes.trim(),
     imageDataUrl: input.imageDataUrl,
-    createdAt: serverTimestamp(),
+    createdAt: fs.serverTimestamp(),
   })
   return ref.id
 }
@@ -218,12 +233,10 @@ export async function updateSavingsGoal(
   id: string,
   input: SavingsGoalInput,
 ): Promise<void> {
-  if (!db) {
-    throw new Error('Firebase is not configured. Data sync is unavailable.')
-  }
+  const { fs, db } = await getFirestoreClient()
 
   validateInput(input)
-  await updateDoc(doc(db, GOALS_COLLECTION, id), {
+  await fs.updateDoc(fs.doc(db, GOALS_COLLECTION, id), {
     name: input.name.trim(),
     targetAmount: input.targetAmount,
     notes: input.notes.trim(),
@@ -304,28 +317,23 @@ export async function setSavingsPoolAmount(
   userId: string,
   savedAmount: number,
 ): Promise<void> {
-  if (!db) {
-    throw new Error('Firebase is not configured. Data sync is unavailable.')
-  }
+  const { fs, db } = await getFirestoreClient()
   if (!Number.isFinite(savedAmount) || savedAmount < 0) {
     throw new Error('Saved amount cannot be negative.')
   }
 
-  await setDoc(
-    doc(db, POOLS_COLLECTION, userId),
+  await fs.setDoc(
+    fs.doc(db, POOLS_COLLECTION, userId),
     {
       userId,
       savedAmount,
-      createdAt: serverTimestamp(),
+      createdAt: fs.serverTimestamp(),
     },
     { merge: true },
   )
 }
 
 export async function deleteSavingsGoal(id: string): Promise<void> {
-  if (!db) {
-    throw new Error('Firebase is not configured. Data sync is unavailable.')
-  }
-
-  await deleteDoc(doc(db, GOALS_COLLECTION, id))
+  const { fs, db } = await getFirestoreClient()
+  await fs.deleteDoc(fs.doc(db, GOALS_COLLECTION, id))
 }

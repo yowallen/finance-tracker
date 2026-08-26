@@ -1,4 +1,10 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react'
+import {
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type MouseEvent,
+} from 'react'
 import { Check, MapPinned, PiggyBank, Plus } from 'lucide-react'
 import { formatMoney } from '../lib/format'
 import { fileToFirestoreImageDataUrl } from '../lib/imageData'
@@ -16,7 +22,7 @@ interface SavingsGoalsProps {
   onAdd: (input: SavingsGoalInput) => Promise<void>
   onUpdate: (id: string, input: SavingsGoalInput) => Promise<void>
   onContribute: (amount: number) => Promise<void>
-  onDelete: (id: string) => Promise<void>
+  onDelete: (goal: SavingsGoal) => Promise<void>
 }
 
 const emptyForm = (): SavingsGoalInput => ({
@@ -57,9 +63,39 @@ export function SavingsGoals({
   const [contributeError, setContributeError] = useState<string | null>(null)
   const [contributeBusy, setContributeBusy] = useState(false)
 
+  // Remember where an inline form was opened from so focus can return there.
+  const returnFocusRef = useRef<HTMLElement | null>(null)
+
   const reachedCount = journey.stops.filter((stop) => stop.reached).length
 
+  /** Close whichever inline form is open and hand focus back to its trigger. */
+  function closeOpenForms() {
+    const target =
+      returnFocusRef.current &&
+      document.contains(returnFocusRef.current)
+        ? returnFocusRef.current
+        : document.getElementById('savings-heading')
+    setShowForm(false)
+    setEditing(null)
+    setShowContribute(false)
+    requestAnimationFrame(() => {
+      if (target instanceof HTMLElement) target.focus()
+      returnFocusRef.current = null
+    })
+    setForm(emptyForm())
+    setTargetText('')
+    setFormError(null)
+    setContributeText('')
+    setContributeError(null)
+  }
+
+  function captureFocusOrigin() {
+    returnFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
+  }
+
   function openCreate() {
+    captureFocusOrigin()
     setEditing(null)
     setForm(emptyForm())
     setTargetText('')
@@ -69,6 +105,7 @@ export function SavingsGoals({
   }
 
   function openEdit(goal: SavingsGoal) {
+    captureFocusOrigin()
     setEditing(goal)
     setForm(formFromGoal(goal))
     setTargetText(String(goal.targetAmount))
@@ -78,11 +115,7 @@ export function SavingsGoals({
   }
 
   function cancelForm() {
-    setShowForm(false)
-    setEditing(null)
-    setForm(emptyForm())
-    setTargetText('')
-    setFormError(null)
+    closeOpenForms()
   }
 
   async function handleImageChange(e: ChangeEvent<HTMLInputElement>) {
@@ -125,7 +158,7 @@ export function SavingsGoals({
       } else {
         await onAdd(payload)
       }
-      cancelForm()
+      closeOpenForms()
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Could not save goal.')
     } finally {
@@ -134,6 +167,7 @@ export function SavingsGoals({
   }
 
   function openContribute() {
+    captureFocusOrigin()
     setShowContribute(true)
     setContributeText('')
     setContributeError(null)
@@ -141,9 +175,7 @@ export function SavingsGoals({
   }
 
   function cancelContribute() {
-    setShowContribute(false)
-    setContributeText('')
-    setContributeError(null)
+    closeOpenForms()
   }
 
   async function handleContribute(e: FormEvent) {
@@ -158,7 +190,7 @@ export function SavingsGoals({
     setContributeBusy(true)
     try {
       await onContribute(amount)
-      cancelContribute()
+      closeOpenForms()
     } catch (err) {
       setContributeError(
         err instanceof Error ? err.message : 'Could not update savings.',
@@ -168,9 +200,26 @@ export function SavingsGoals({
     }
   }
 
-  async function handleDelete(goal: SavingsGoal) {
-    if (!window.confirm(`Remove “${goal.name}” from the savings track?`)) return
-    await onDelete(goal.id)
+  async function handleDelete(goal: SavingsGoal, event: MouseEvent<HTMLButtonElement>) {
+    const currentRow = event.currentTarget.closest('li')
+    const list = event.currentTarget.closest<HTMLElement>('.savings-manage-list')
+    const rows = list?.querySelectorAll<HTMLElement>(':scope > li')
+    const deletedIndex =
+      rows && currentRow ? Array.from(rows).indexOf(currentRow) : -1
+
+    try {
+      await onDelete(goal)
+    } finally {
+      requestAnimationFrame(() => {
+        const remaining = list?.querySelectorAll<HTMLElement>(':scope > li')
+        if (remaining && deletedIndex >= 0 && remaining.length > 0) {
+          const neighbor = remaining[Math.min(deletedIndex, remaining.length - 1)]
+          neighbor.querySelector('button')?.focus()
+        } else {
+          document.getElementById('savings-heading')?.focus()
+        }
+      })
+    }
   }
 
   const submitLabel = busy ? 'Saving…' : editing ? 'Save stop' : 'Add stop'
@@ -459,9 +508,7 @@ export function SavingsGoals({
                   <button
                     type="button"
                     className="link-btn danger"
-                    onClick={() => {
-                      void handleDelete(stop.goal)
-                    }}
+                    onClick={(event) => void handleDelete(stop.goal, event)}
                   >
                     Remove
                   </button>

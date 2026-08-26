@@ -1,17 +1,5 @@
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  Timestamp,
-  updateDoc,
-  where,
-  type Unsubscribe,
-} from 'firebase/firestore'
-import { db } from '../lib/firebase'
+import { getFirestoreClient } from '../lib/firebase'
+import type { Timestamp, Unsubscribe } from 'firebase/firestore'
 import type {
   BillReminder,
   BillReminderStatus,
@@ -24,8 +12,8 @@ import type { Transaction } from '../types/transaction'
 const COLLECTION = 'recurringBills'
 const STARTS_ON_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/
 
-function toIso(value: unknown): string {
-  if (value instanceof Timestamp) {
+function toIso(value: unknown, timestampCtor: typeof Timestamp): string {
+  if (value instanceof timestampCtor) {
     return value.toDate().toISOString()
   }
   if (typeof value === 'string') {
@@ -83,8 +71,8 @@ export function paymentNumberForMonth(
   return view - start + 1
 }
 
-function defaultStartsOn(createdAt: unknown): string {
-  if (createdAt instanceof Timestamp) {
+function defaultStartsOn(createdAt: unknown, timestampCtor: typeof Timestamp): string {
+  if (createdAt instanceof timestampCtor) {
     return toMonthInputValue(createdAt.toDate())
   }
   if (typeof createdAt === 'string') {
@@ -110,6 +98,7 @@ interface MappedBill {
 function mapDoc(
   id: string,
   data: Record<string, unknown>,
+  timestampCtor: typeof Timestamp,
 ): MappedBill | null {
   const userId = data.userId
   const name = data.name
@@ -149,7 +138,7 @@ function mapDoc(
 
   const startsOn = hasValidStartsOn
     ? rawStartsOn
-    : defaultStartsOn(data.createdAt)
+    : defaultStartsOn(data.createdAt, timestampCtor)
   const durationValue = hasValidDuration ? rawDurationValue : 12
   const durationUnit: DurationUnit = hasValidUnit ? rawDurationUnit : 'months'
 
@@ -166,18 +155,18 @@ function mapDoc(
       durationUnit,
       notes,
       active,
-      createdAt: toIso(data.createdAt),
+      createdAt: toIso(data.createdAt, timestampCtor),
     },
     needsScheduleMigration,
   }
 }
 
-async function migrateScheduleFields(bill: RecurringBill): Promise<void> {
-  if (!db) {
-    return
-  }
-
-  await updateDoc(doc(db, COLLECTION, bill.id), {
+async function migrateScheduleFields(
+  fs: typeof import('firebase/firestore'),
+  db: Awaited<ReturnType<typeof getFirestoreClient>>['db'],
+  bill: RecurringBill,
+): Promise<void> {
+  await fs.updateDoc(fs.doc(db, COLLECTION, bill.id), {
     startsOn: bill.startsOn,
     durationValue: bill.durationValue,
     durationUnit: bill.durationUnit,
@@ -189,70 +178,86 @@ export function subscribeRecurringBills(
   onData: (bills: RecurringBill[]) => void,
   onError: (error: Error) => void,
 ): Unsubscribe {
-  if (!db) {
-    onError(new Error('Firebase is not configured. Data sync is unavailable.'))
-    return () => {}
+  let disposed = false
+  let unsubscribe: Unsubscribe = () => {}
+
+  void getFirestoreClient()
+    .then(({ fs, db }) => {
+      if (disposed) return
+
+      const q = fs.query(
+        fs.collection(db, COLLECTION),
+        fs.where('userId', '==', userId),
+      )
+      const migrating = new Set<string>()
+
+      unsubscribe = fs.onSnapshot(
+        q,
+        (snapshot) => {
+          const items: RecurringBill[] = []
+          let invalidId: string | null = null
+
+          for (const docSnap of snapshot.docs) {
+            const mapped = mapDoc(docSnap.id, docSnap.data(), fs.Timestamp)
+            if (!mapped) {
+              invalidId = docSnap.id
+              continue
+            }
+
+            items.push(mapped.bill)
+
+            if (
+              mapped.needsScheduleMigration &&
+              !migrating.has(mapped.bill.id)
+            ) {
+              migrating.add(mapped.bill.id)
+              void migrateScheduleFields(fs, db, mapped.bill).catch(
+                (err: unknown) => {
+                  migrating.delete(mapped.bill.id)
+                  const message =
+                    err instanceof Error
+                      ? err.message
+                      : 'Failed to migrate bill schedule fields.'
+                  onError(new Error(message))
+                },
+              )
+            }
+          }
+
+          items.sort((a, b) => a.dueDay - b.dueDay || a.name.localeCompare(b.name))
+          onData(items)
+
+          if (invalidId) {
+            onError(
+              new Error(
+                `Recurring bill ${invalidId} has invalid or incomplete core data.`,
+              ),
+            )
+          }
+        },
+        (error) => onError(error),
+      )
+    })
+    .catch((err: unknown) => {
+      if (!disposed) {
+        onError(err instanceof Error ? err : new Error(String(err)))
+      }
+    })
+
+  return () => {
+    disposed = true
+    unsubscribe()
   }
-
-  const q = query(collection(db, COLLECTION), where('userId', '==', userId))
-  const migrating = new Set<string>()
-
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const items: RecurringBill[] = []
-      let invalidId: string | null = null
-
-      for (const docSnap of snapshot.docs) {
-        const mapped = mapDoc(docSnap.id, docSnap.data())
-        if (!mapped) {
-          invalidId = docSnap.id
-          continue
-        }
-
-        items.push(mapped.bill)
-
-        if (
-          mapped.needsScheduleMigration &&
-          !migrating.has(mapped.bill.id)
-        ) {
-          migrating.add(mapped.bill.id)
-          void migrateScheduleFields(mapped.bill).catch((err: unknown) => {
-            migrating.delete(mapped.bill.id)
-            const message =
-              err instanceof Error
-                ? err.message
-                : 'Failed to migrate bill schedule fields.'
-            onError(new Error(message))
-          })
-        }
-      }
-
-      items.sort((a, b) => a.dueDay - b.dueDay || a.name.localeCompare(b.name))
-      onData(items)
-
-      if (invalidId) {
-        onError(
-          new Error(
-            `Recurring bill ${invalidId} has invalid or incomplete core data.`,
-          ),
-        )
-      }
-    },
-    (error) => onError(error),
-  )
 }
 
 export async function createRecurringBill(
   userId: string,
   input: RecurringBillInput,
 ): Promise<string> {
-  if (!db) {
-    throw new Error('Firebase is not configured. Data sync is unavailable.')
-  }
+  const { fs, db } = await getFirestoreClient()
 
   validateInput(input)
-  const ref = await addDoc(collection(db, COLLECTION), {
+  const ref = await fs.addDoc(fs.collection(db, COLLECTION), {
     userId,
     name: input.name.trim(),
     amount: input.amount,
@@ -263,7 +268,7 @@ export async function createRecurringBill(
     durationUnit: input.durationUnit,
     notes: input.notes.trim(),
     active: input.active ?? true,
-    createdAt: serverTimestamp(),
+    createdAt: fs.serverTimestamp(),
   })
   return ref.id
 }
@@ -272,12 +277,10 @@ export async function updateRecurringBill(
   id: string,
   input: RecurringBillInput,
 ): Promise<void> {
-  if (!db) {
-    throw new Error('Firebase is not configured. Data sync is unavailable.')
-  }
+  const { fs, db } = await getFirestoreClient()
 
   validateInput(input)
-  await updateDoc(doc(db, COLLECTION, id), {
+  await fs.updateDoc(fs.doc(db, COLLECTION, id), {
     name: input.name.trim(),
     amount: input.amount,
     category: input.category.trim(),
@@ -291,11 +294,8 @@ export async function updateRecurringBill(
 }
 
 export async function deleteRecurringBill(id: string): Promise<void> {
-  if (!db) {
-    throw new Error('Firebase is not configured. Data sync is unavailable.')
-  }
-
-  await deleteDoc(doc(db, COLLECTION, id))
+  const { fs, db } = await getFirestoreClient()
+  await fs.deleteDoc(fs.doc(db, COLLECTION, id))
 }
 
 function validateInput(input: RecurringBillInput): void {

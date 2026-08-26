@@ -36,14 +36,14 @@ export function SpendingStats({
             Spending
           </h2>
           <p className="reminders-sub">
-            How you spent in {monthLabel(year, month)} — expenses and bills by category
+            How you spent in {monthLabel(year, month)}
           </p>
         </div>
         <strong className="spending-total">{formatMoney(stats.total)}</strong>
       </div>
 
       {history.length > 1 && (
-        <div className="spending-history" role="list" aria-label="Monthly spend history">
+        <div className="spending-history" role="group" aria-label="Monthly spend history">
           {history.map((row) => {
             const selected = row.year === year && row.month === month
             const share = totalHistory > 0 ? (row.stats.total / totalHistory) * 100 : 0
@@ -52,10 +52,10 @@ export function SpendingStats({
               <button
                 key={`${row.year}-${row.month}`}
                 type="button"
-                role="listitem"
                 className={`spending-history-col ${selected ? 'selected' : ''}`}
                 onClick={() => onSelectMonth(row.year, row.month)}
                 aria-pressed={selected}
+                aria-label={`${monthLabel(row.year, row.month)}: spent ${formatMoney(row.stats.total)}, ${share.toFixed(0)}% of this period${selected ? ' (selected)' : ''}`}
                 title={`${monthLabel(row.year, row.month)}: ${formatMoney(row.stats.total)} • ${share.toFixed(0)}% of this period`}
               >
                 <span className="spending-history-bar-wrap">
@@ -86,10 +86,7 @@ export function SpendingStats({
                   {formatMoney(row.amount)}
                 </span>
               </div>
-              <div
-                className="spending-category-track"
-                role="presentation"
-              >
+              <div className="spending-category-track">
                 <span
                   className="spending-category-fill"
                   style={{ width: `${row.percent}%` }}

@@ -148,7 +148,7 @@ export function TransactionForm({
 
   return (
     <section className="tx-form-section" aria-labelledby="form-heading">
-      <h2 id="form-heading" className="section-title">
+      <h2 id="form-heading" tabIndex={-1} className="section-title">
         {editing ? (
           <Pencil className="section-icon" aria-hidden="true" />
         ) : (
@@ -216,6 +216,8 @@ export function TransactionForm({
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? 'tx-form-error' : undefined}
             />
           </label>
           {type !== 'savings' && (
@@ -254,7 +256,7 @@ export function TransactionForm({
         </label>
 
         {error && (
-          <p className="form-error" role="alert">
+          <p id="tx-form-error" className="form-error" role="alert">
             {error}
           </p>
         )}
