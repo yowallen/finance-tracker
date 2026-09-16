@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { RotateCcw, X } from 'lucide-react'
 
-export type UndoResource = 'transaction' | 'bill' | 'goal'
+export type UndoResource = 'transaction' | 'bill' | 'goal' | 'card'
 
 export interface PendingUndo {
   /** Monotonic id so repeated actions restart the auto-dismiss window. */
@@ -21,22 +21,27 @@ interface UndoToastProps {
 const AUTO_DISMISS_MS = 6000
 
 /**
- * Non-blocking replacement for confirm() dialogs: destructive actions apply
- * immediately and this toast offers a timed Undo instead. Pauses while the
- * pointer or keyboard focus is inside and never steals focus (aria-live
- * polite), per toast-accessibility guidance.
+ * Mobile-first toast with slide-up animation, proper touch targets,
+ * safe-area awareness, and a progress indicator for auto-dismiss.
  */
 export function UndoToast({ pending, onUndo, onDismiss }: UndoToastProps) {
-  // Latest-callback ref keeps the timer effect free of handler identity churn.
+  const [isExiting, setIsExiting] = useState(false)
+  const [isVisible, setIsVisible] = useState(false)
+  const toastRef = useRef<HTMLDivElement>(null)
+  const progressRef = useRef<{ pause: () => void; resume: () => void } | null>(null)
+
+  // Animation callbacks
   const callbacksRef = useRef({ onUndo, onDismiss })
   useEffect(() => {
     callbacksRef.current = { onUndo, onDismiss }
   })
 
-  const controlsRef = useRef<{ pause: () => void; resume: () => void } | null>(
-    null,
-  )
+  // Trigger entrance animation
+  useEffect(() => {
+    requestAnimationFrame(() => setIsVisible(true))
+  }, [pending.id])
 
+  // Auto-dismiss timer with progress tracking
   useEffect(() => {
     let timer: number | null = null
 
@@ -45,59 +50,112 @@ export function UndoToast({ pending, onUndo, onDismiss }: UndoToastProps) {
         window.clearTimeout(timer)
         timer = null
       }
+      // Pause CSS animation
+      if (toastRef.current) {
+        toastRef.current.style.animationPlayState = 'paused'
+      }
     }
 
     function start() {
       stop()
       timer = window.setTimeout(() => {
         timer = null
-        callbacksRef.current.onDismiss()
+        setIsExiting(true)
+        // Allow exit animation to complete before actually dismissing
+        setTimeout(() => {
+          callbacksRef.current.onDismiss()
+        }, 200)
       }, AUTO_DISMISS_MS)
+
+      // Resume CSS animation
+      if (toastRef.current) {
+        toastRef.current.style.animationPlayState = 'running'
+      }
     }
 
-    controlsRef.current = { pause: stop, resume: start }
+    progressRef.current = { pause: stop, resume: start }
     start()
     return () => {
       stop()
-      controlsRef.current = null
+      progressRef.current = null
     }
   }, [pending.id])
 
+  // Set CSS custom property for animation duration on mount
+  useEffect(() => {
+    if (toastRef.current) {
+      toastRef.current.style.setProperty('--toast-duration', `${AUTO_DISMISS_MS}ms`)
+    }
+  }, [])
+
+  const handleUndoClick = () => {
+    progressRef.current?.pause()
+    setIsExiting(true)
+    setTimeout(() => {
+      onUndo(pending)
+    }, 150)
+  }
+
+  const handleDismissClick = () => {
+    progressRef.current?.pause()
+    setIsExiting(true)
+    setTimeout(() => {
+      callbacksRef.current.onDismiss()
+    }, 150)
+  }
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape') {
+      handleDismissClick()
+    }
+  }
+
+  if (!isVisible && isExiting) return null
+
   return (
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
+    // eslint-disable-next-line jsx-a11y/tabindex-no-positive
     <div
-      className="undo-toast"
+      ref={toastRef}
+      className={`undo-toast ${isExiting ? 'undo-toast--exiting' : ''}`}
       role="status"
       aria-live="polite"
-      onPointerEnter={() => controlsRef.current?.pause()}
-      onPointerLeave={() => controlsRef.current?.resume()}
-      onFocus={() => controlsRef.current?.pause()}
+      aria-atomic="true"
+      onPointerEnter={() => progressRef.current?.pause()}
+      onPointerLeave={() => progressRef.current?.resume()}
+      onFocus={() => progressRef.current?.pause()}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-          controlsRef.current?.resume()
+          progressRef.current?.resume()
         }
       }}
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
     >
-      <p className="undo-toast-message">{pending.message}</p>
-      <div className="undo-toast-actions">
-        <button
-          type="button"
-          className="undo-toast-undo"
-          onClick={() => {
-            controlsRef.current?.pause()
-            onUndo(pending)
-          }}
-        >
-          <RotateCcw aria-hidden="true" />
-          Undo
-        </button>
-        <button
-          type="button"
-          className="undo-toast-dismiss"
-          onClick={() => callbacksRef.current.onDismiss()}
-          aria-label="Dismiss notification"
-        >
-          <X aria-hidden="true" />
-        </button>
+      {/* Progress bar for auto-dismiss timer */}
+      <div className="undo-toast-progress" aria-hidden="true" />
+
+      <div className="undo-toast-content">
+        <p className="undo-toast-message">{pending.message}</p>
+        <div className="undo-toast-actions">
+          <button
+            type="button"
+            className="undo-toast-undo"
+            onClick={handleUndoClick}
+            aria-label={`Undo: ${pending.message}`}
+          >
+            <RotateCcw aria-hidden="true" />
+            <span>Undo</span>
+          </button>
+          <button
+            type="button"
+            className="undo-toast-dismiss"
+            onClick={handleDismissClick}
+            aria-label="Dismiss notification"
+          >
+            <X aria-hidden="true" />
+          </button>
+        </div>
       </div>
     </div>
   )

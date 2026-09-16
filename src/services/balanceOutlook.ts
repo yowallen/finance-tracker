@@ -6,6 +6,11 @@ import { computeMonthlySummary, filterByMonth } from './transactions'
 import type { RecurringBill } from '../types/recurringBill'
 import type { Transaction } from '../types/transaction'
 
+/** Checks if a transaction is a credit card payment (bill type with creditCardPayment flag). */
+function isCreditCardPayment(tx: Transaction): boolean {
+  return tx.type === 'bill' && tx.creditCardPayment === true
+}
+
 export interface MonthBalanceOutlook {
   year: number
   month: number
@@ -79,6 +84,10 @@ export function computeMonthBalance(
       .map((tx) => tx.recurringBillId as string),
   )
 
+  // Credit card payments (bill type with creditCardPayment: true) are treated as bill outflows
+  const creditCardPayments = monthly.filter(isCreditCardPayment)
+  const creditCardPaymentTotal = creditCardPayments.reduce((sum, tx) => sum + tx.amount, 0)
+
   const dueBills = bills.filter(
     (bill) => bill.active && isBillDueInMonth(bill, year, month),
   )
@@ -99,6 +108,7 @@ export function computeMonthBalance(
     summary.income -
     summary.expenses -
     summary.bills -
+    creditCardPaymentTotal -
     summary.savings -
     unpaidScheduledBills
 
@@ -177,16 +187,29 @@ export function computeMonthNetThroughDay(
   let income = 0
   let expenses = 0
   let recordedBills = 0
+  let creditCardPayments = 0
   let savingsDeposits = 0
   let savingsWithdrawals = 0
   const paidRecurringIds = new Set<string>()
 
   for (const tx of monthly) {
     if (tx.type === 'income') income += tx.amount
-    else if (tx.type === 'expense') expenses += tx.amount
-    else if (tx.type === 'bill') {
-      recordedBills += tx.amount
-      if (tx.recurringBillId) paidRecurringIds.add(tx.recurringBillId)
+    else if (tx.type === 'expense') {
+      // Exclude credit card expenses from cash flow - they're paid later via creditCardPayment
+      if (tx.creditCardId) {
+        // Track as credit card charge but don't count as cash expense
+      } else {
+        expenses += tx.amount
+      }
+    } else if (tx.type === 'bill') {
+      if (tx.creditCardPayment === true) {
+        creditCardPayments += tx.amount
+      } else if (tx.creditCardId) {
+        // Credit card bill (not a payment) - don't count as cash bill, paid later via creditCardPayment
+      } else {
+        recordedBills += tx.amount
+        if (tx.recurringBillId) paidRecurringIds.add(tx.recurringBillId)
+      }
     } else if (tx.savingsDirection === 'withdraw') {
       savingsWithdrawals += tx.amount
     } else if (tx.type === 'savings') {
@@ -208,6 +231,7 @@ export function computeMonthNetThroughDay(
     savingsWithdrawals -
     expenses -
     recordedBills -
+    creditCardPayments -
     savingsDeposits -
     unpaidScheduledBills
   )

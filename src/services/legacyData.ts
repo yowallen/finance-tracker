@@ -33,7 +33,7 @@ export async function claimLegacyPersonalData(uid: string): Promise<void> {
   if (!uid || alreadyClaimed(uid)) return
 
   const { fs, db } = await getFirestoreClient()
-  const collections = ['transactions', 'recurringBills'] as const
+  const collections = ['transactions', 'recurringBills', 'creditCards'] as const
 
   for (const name of collections) {
     const snap = await fs.getDocs(

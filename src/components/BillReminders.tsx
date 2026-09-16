@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent, type MouseEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { Bell, Plus } from 'lucide-react'
 import { formatMoney, formatYearMonth, monthLabel, toMonthInputValue } from '../lib/format'
 import {
@@ -7,10 +7,10 @@ import {
 } from '../services/recurringBills'
 import { CATEGORIES } from '../types/transaction'
 import type {
-  BillReminder,
   DurationUnit,
   RecurringBill,
   RecurringBillInput,
+  BillReminder,
 } from '../types/recurringBill'
 import { LoadingState } from './LoadingState'
 
@@ -201,18 +201,13 @@ export function BillReminders({
     closeForm()
   }
 
-  async function handleMarkPaid(
-    reminder: BillReminder,
-    event: MouseEvent<HTMLButtonElement>,
-  ) {
-    const row = event.currentTarget.closest<HTMLElement>('.reminder-item')
+  async function handleMarkPaid(reminder: BillReminder) {
     setPayingId(reminder.bill.id)
     try {
       await onMarkPaid(reminder)
     } finally {
       setPayingId(null)
-      // Row stays mounted across the paid-state change; re-anchor focus there.
-      requestAnimationFrame(() => row?.focus())
+      requestAnimationFrame(() => returnFocusRef.current?.focus())
     }
   }
 
@@ -436,7 +431,7 @@ export function BillReminders({
                       type="button"
                       className="link-btn"
                       disabled={payingId === reminder.bill.id}
-                      onClick={(event) => void handleMarkPaid(reminder, event)}
+                      onClick={() => void handleMarkPaid(reminder)}
                     >
                       {payingId === reminder.bill.id ? 'Saving…' : 'Mark paid'}
                     </button>

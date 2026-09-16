@@ -16,16 +16,18 @@ import {
   type TransactionInput,
   type TransactionType,
 } from '../types/transaction'
+import type { CreditCard } from '../types/creditCard'
 import { dateInputToIso, toDateInputValue } from '../lib/format'
 
 interface TransactionFormProps {
   editing: Transaction | null
+  creditCards: CreditCard[]
   onSubmit: (input: TransactionInput) => Promise<void>
   onCancelEdit: () => void
 }
 
-/** Types offered when creating a new transaction (bills/savings come from elsewhere). */
-const CREATE_TYPES: TransactionType[] = ['expense', 'income']
+/** Types offered when creating a new transaction (savings comes from elsewhere). */
+const CREATE_TYPES: TransactionType[] = ['expense', 'income', 'bill']
 
 function createInitialState(editing: Transaction | null) {
   if (editing) {
@@ -71,6 +73,7 @@ const TYPE_ICONS: Record<TransactionType, typeof ShoppingBag> = {
 
 export function TransactionForm({
   editing,
+  creditCards,
   onSubmit,
   onCancelEdit,
 }: TransactionFormProps) {
@@ -83,10 +86,12 @@ export function TransactionForm({
   const [savingsDirection, setSavingsDirection] = useState<SavingsDirection>(
     initial.savingsDirection,
   )
+  const [creditCardId, setCreditCardId] = useState(editing?.creditCardId ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const types = availableTypes(editing)
+  const activeCards = creditCards.filter((c) => c.active)
 
   function selectType(next: TransactionType) {
     setType(next)
@@ -97,6 +102,8 @@ export function TransactionForm({
     } else {
       setCategory((prev) => (options.includes(prev) ? prev : options[0]))
     }
+    // Reset credit card when type changes
+    setCreditCardId('')
   }
 
   function selectSavingsDirection(next: SavingsDirection) {
@@ -127,11 +134,13 @@ export function TransactionForm({
         description: description.trim(),
         occurredAt: dateInputToIso(occurredAt),
         ...(type === 'savings' ? { savingsDirection } : {}),
+        ...(creditCardId && (type === 'expense' || type === 'bill') ? { creditCardId } : {}),
       })
       if (!editing) {
         setAmount('')
         setDescription('')
         setOccurredAt(toDateInputValue(new Date()))
+        setCreditCardId('')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save transaction.')
@@ -234,7 +243,21 @@ export function TransactionForm({
           )}
         </div>
 
-        <label>
+        {(type === 'expense' || type === 'bill') && activeCards.length > 0 && (
+          <label>
+            Credit card <span className="optional-hint">(optional)</span>
+            <select value={creditCardId} onChange={(e) => setCreditCardId(e.target.value)}>
+              <option value="">No credit card (cash/debit)</option>
+              {activeCards.map((card) => (
+                <option key={card.id} value={card.id}>
+                  {card.name} •••• {card.lastFour}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        <label className="description-label">
           Description <span className="optional-hint">(optional)</span>
           <input
             type="text"

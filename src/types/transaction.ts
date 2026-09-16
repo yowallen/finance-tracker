@@ -15,6 +15,10 @@ export interface Transaction {
   createdAt: string
   /** Links a payment to a recurring monthly bill reminder. */
   recurringBillId?: string
+  /** Links a transaction to a credit card. */
+  creditCardId?: string
+  /** True when this transaction is a payment toward a credit card balance. */
+  creditCardPayment?: boolean
   /** Required when type is savings. */
   savingsDirection?: SavingsDirection
 }
@@ -26,6 +30,8 @@ export interface TransactionInput {
   description: string
   occurredAt: string
   recurringBillId?: string
+  creditCardId?: string
+  creditCardPayment?: boolean
   savingsDirection?: SavingsDirection
 }
 

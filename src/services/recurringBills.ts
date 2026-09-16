@@ -332,7 +332,7 @@ export function dueDateForMonth(
   return new Date(year, month, day, 23, 59, 59, 999)
 }
 
-function startOfLocalDay(d: Date): Date {
+export function startOfLocalDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate())
 }
 

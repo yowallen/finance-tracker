@@ -34,6 +34,8 @@ function mapDoc(
   const description = data.description
   const occurredAt = data.occurredAt
   const savingsDirection = data.savingsDirection
+  const creditCardId = data.creditCardId
+  const creditCardPayment = data.creditCardPayment
 
   if (
     typeof userId !== 'string' ||
@@ -69,6 +71,8 @@ function mapDoc(
     ...(typeof data.recurringBillId === 'string'
       ? { recurringBillId: data.recurringBillId }
       : {}),
+    ...(typeof creditCardId === 'string' ? { creditCardId } : {}),
+    ...(typeof creditCardPayment === 'boolean' ? { creditCardPayment } : {}),
     ...(type === 'savings'
       ? { savingsDirection: savingsDirection as SavingsDirection }
       : {}),
@@ -173,6 +177,12 @@ export async function createTransaction(
   if (input.recurringBillId) {
     payload.recurringBillId = input.recurringBillId
   }
+  if (input.creditCardId) {
+    payload.creditCardId = input.creditCardId
+  }
+  if (input.creditCardPayment) {
+    payload.creditCardPayment = true
+  }
   if (input.type === 'savings' && input.savingsDirection) {
     payload.savingsDirection = input.savingsDirection
   }
@@ -205,6 +215,17 @@ export async function updateTransaction(
     payload.savingsDirection = null
   }
 
+  if (input.creditCardId) {
+    payload.creditCardId = input.creditCardId
+  } else {
+    payload.creditCardId = null
+  }
+  if (input.creditCardPayment) {
+    payload.creditCardPayment = true
+  } else {
+    payload.creditCardPayment = null
+  }
+
   await fs.updateDoc(fs.doc(db, COLLECTION, id), payload)
 }
 
@@ -235,9 +256,21 @@ export function computeMonthlySummary(
 
   for (const tx of transactions) {
     if (tx.type === 'income') income += tx.amount
-    else if (tx.type === 'expense') expenses += tx.amount
-    else if (tx.type === 'bill') bills += tx.amount
-    else if (tx.savingsDirection === 'withdraw') savingsWithdrawals += tx.amount
+    else if (tx.type === 'expense') {
+      // Exclude credit card expenses from cash flow - they're paid later via creditCardPayment
+      if (tx.creditCardId) {
+        // Track as credit card charge but don't count as cash expense
+      } else {
+        expenses += tx.amount
+      }
+    } else if (tx.type === 'bill') {
+      // Exclude credit card bills from cash flow - they're paid later via creditCardPayment
+      if (tx.creditCardId) {
+        // Track as credit card charge but don't count as cash bill
+      } else {
+        bills += tx.amount
+      }
+    } else if (tx.savingsDirection === 'withdraw') savingsWithdrawals += tx.amount
     else savingsDeposits += tx.amount
   }
 

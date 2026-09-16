@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { BookMarked, LogOut } from 'lucide-react'
 import type { User } from 'firebase/auth'
 import { BillReminders } from './BillReminders'
+import { CreditCards } from './CreditCards'
 import { FinanceCalendar } from './FinanceCalendar'
 import { LoadingState } from './LoadingState'
 import { MonthSummary } from './MonthSummary'
@@ -12,6 +13,7 @@ import { ThemeToggle } from './ThemeToggle'
 import { TransactionForm } from './TransactionForm'
 import { TransactionList } from './TransactionList'
 import { UndoToast, type PendingUndo, type UndoResource } from './UndoToast'
+import { useCreditCards } from '../hooks/useCreditCards'
 import { useRecurringBills } from '../hooks/useRecurringBills'
 import { useSavingsGoals } from '../hooks/useSavingsGoals'
 import { useTransactions } from '../hooks/useTransactions'
@@ -28,6 +30,7 @@ import {
   computeMonthlySpendingStats,
 } from '../services/transactions'
 import type { BillReminder, RecurringBill, RecurringBillInput } from '../types/recurringBill'
+import type { CreditCard, CreditCardInput } from '../types/creditCard'
 import type { SavingsGoal, SavingsGoalInput } from '../types/savingsGoal'
 import type { ThemeMode } from '../lib/theme'
 import type { Transaction, TransactionInput } from '../types/transaction'
@@ -37,6 +40,7 @@ const UNDO_FOCUS_TARGET: Record<UndoResource, string> = {
   transaction: 'list-heading',
   bill: 'reminders-heading',
   goal: 'savings-heading',
+  card: 'cc-heading',
 }
 
 interface LedgerAppProps {
@@ -82,9 +86,10 @@ function txToInput(tx: Transaction): TransactionInput {
 }
 
 function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
-  const now = new Date()
+  const now = useMemo(() => new Date(), [])
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth())
+  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth()
   const [editing, setEditing] = useState<Transaction | null>(null)
   const [saving, setSaving] = useState(false)
   const [pendingUndo, setPendingUndo] = useState<PendingUndo | null>(null)
@@ -104,14 +109,20 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
   } = useTransactions(userId, year, month)
 
   const {
-    bills,
-    reminders,
-    loading: billLoading,
-    error: billError,
-    add: addBill,
-    update: updateBill,
-    remove: removeBill,
-  } = useRecurringBills(userId, year, month, transactions)
+    cards,
+    activeCards,
+    statements,
+    interestProjections,
+    totalOutstanding,
+    totalAvailableCredit,
+    nextDueStatement,
+    cardById,
+    loading: ccLoading,
+    error: ccError,
+    add: addCard,
+    update: updateCard,
+    remove: removeCard,
+  } = useCreditCards(userId, allTransactions, year, month)
 
   const {
     journey: savingsJourney,
@@ -123,11 +134,20 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
     remove: removeGoal,
   } = useSavingsGoals(userId, allTransactions)
 
+  const {
+    bills,
+    reminders,
+    loading: billLoading,
+    error: billError,
+    add: addBill,
+    update: updateBill,
+    remove: removeBill,
+  } = useRecurringBills(userId, year, month, transactions, cards, statements)
+
   const dataLoading = txLoading || billLoading || goalsLoading
 
   const monthBalance = useMemo(() => {
     const base = computeRunningBalanceForMonth(bills, allTransactions, year, month)
-    const isCurrentMonth = year === now.getFullYear() && month === now.getMonth()
 
     if (!isCurrentMonth) {
       return base
@@ -150,7 +170,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
         now.getDate(),
       ),
     }
-  }, [bills, allTransactions, year, month, now])
+  }, [bills, allTransactions, year, month])
 
   const outlookRows = useMemo(
     () => buildBalanceOutlook(bills, allTransactions, year, month, 11),
@@ -280,23 +300,67 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
   }
 
   async function handleMarkPaid(reminder: BillReminder) {
-    const isCurrentMonth =
-      year === now.getFullYear() && month === now.getMonth()
     const day = isCurrentMonth ? now.getDate() : reminder.dueDate.getDate()
     const occurred = new Date(year, month, day, 12, 0, 0, 0)
 
-    setSaving(true)
-    try {
-      await add({
+    // Check if this is a credit card payment bill
+    const isCreditCardPayment = (reminder as BillReminder & { isCreditCardPayment?: boolean }).isCreditCardPayment
+    const creditCardId = (reminder as BillReminder & { creditCardId?: string }).creditCardId
+
+    let transaction: TransactionInput
+
+    if (isCreditCardPayment && creditCardId) {
+      // Credit card payment: pay off the credit card balance
+      transaction = {
+        type: 'bill',
+        amount: reminder.bill.amount,
+        category: 'Credit card payment',
+        description: `Payment to ${reminder.bill.notes || `•••• ${creditCardId.slice(-4)}`}`,
+        occurredAt: occurred.toISOString(),
+        creditCardId,
+        creditCardPayment: true,
+      }
+    } else {
+      // Regular recurring bill payment
+      transaction = {
         type: 'bill',
         amount: reminder.bill.amount,
         category: reminder.bill.category,
         description: reminder.bill.name,
         occurredAt: occurred.toISOString(),
         recurringBillId: reminder.bill.id,
+      }
+    }
+
+    setSaving(true)
+    try {
+      await add(transaction)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleRemoveCard(card: CreditCard) {
+    setSaving(true)
+    try {
+      await removeCard(card.id)
+      stageUndo(`Removed “${card.name}”`, 'card', async () => {
+        await addCard(cardToInput(card))
       })
     } finally {
       setSaving(false)
+    }
+  }
+
+  function cardToInput(card: CreditCard): CreditCardInput {
+    return {
+      name: card.name,
+      lastFour: card.lastFour,
+      limit: card.limit,
+      statementDay: card.statementDay,
+      dueDayOffset: card.dueDayOffset,
+      color: card.color,
+      active: card.active,
     }
   }
 
@@ -354,12 +418,21 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
               unpaidCount={monthBalance.unpaidCount}
               monthNet={monthBalance.monthNet}
               runningBalance={monthBalance.runningBalance}
-              isCurrentMonth={year === now.getFullYear() && month === now.getMonth()}
+              isCurrentMonth={isCurrentMonth}
               savingsPot={savingsJourney.savedAmount}
               outlookRows={outlookRows}
               onPrev={() => shiftMonth(-1)}
               onNext={() => shiftMonth(1)}
               onSelectMonth={selectMonth}
+              hasActiveCards={activeCards.length > 0}
+              totalOutstanding={totalOutstanding}
+              totalAvailableCredit={totalAvailableCredit}
+              nextDueStatement={nextDueStatement}
+              onNavigateToCards={() => {
+                const ccSection = document.getElementById('cc-heading')
+                ccSection?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                ccSection?.focus()
+              }}
             />
 
             {txError && (
@@ -419,10 +492,23 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
               onDelete={handleRemoveGoal}
             />
 
+            <CreditCards
+              cards={cards}
+              statements={statements}
+              interestProjections={interestProjections}
+              loading={ccLoading}
+              error={ccError}
+              isCurrentMonth={isCurrentMonth}
+              onAdd={addCard}
+              onUpdate={updateCard}
+              onDelete={handleRemoveCard}
+            />
+
             <div className="workspace">
               <TransactionForm
                 key={editing?.id ?? 'new'}
                 editing={editing}
+                creditCards={activeCards}
                 onSubmit={handleSubmit}
                 onCancelEdit={() => setEditing(null)}
               />
@@ -431,6 +517,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
                 loading={txLoading}
                 onEdit={setEditing}
                 onDelete={handleDelete}
+                cardById={cardById}
               />
             </div>
           </>

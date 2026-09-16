@@ -48,6 +48,13 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
+    match /creditCards/{cardId} {
+      allow read: if canRead();
+      allow create: if isCreatingOwn();
+      allow update: if isOwner() || isClaimingLegacy();
+      allow delete: if isOwner();
+    }
+
     match /savingsPools/{poolId} {
       allow read: if isSignedIn() && request.auth.uid == poolId;
       allow create: if isSignedIn()

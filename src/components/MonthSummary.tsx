@@ -2,6 +2,7 @@ import { useState } from 'react'
 import {
   ChevronLeft,
   ChevronRight,
+  CreditCard as CreditCardIcon,
   PiggyBank,
   Receipt,
   ShoppingBag,
@@ -12,6 +13,7 @@ import { BalanceOutlook } from './BalanceOutlook'
 import type { MonthBalanceOutlook } from '../services/balanceOutlook'
 import type { MonthlySummary } from '../types/transaction'
 import { formatMoney, monthLabel } from '../lib/format'
+import type { CreditCard, CreditCardStatement } from '../types/creditCard'
 
 const OUTLOOK_STORAGE_KEY = 'ledger.showBalanceOutlook'
 
@@ -31,6 +33,13 @@ interface MonthSummaryProps {
   onPrev: () => void
   onNext: () => void
   onSelectMonth: (year: number, month: number) => void
+  /** Whether the user has at least one active credit card. */
+  hasActiveCards: boolean
+  /** Credit card summary data */
+  totalOutstanding?: number
+  totalAvailableCredit?: number
+  nextDueStatement?: { card: CreditCard; statement: CreditCardStatement } | null
+  onNavigateToCards?: () => void
 }
 
 function readStoredOutlookVisibility(): boolean {
@@ -55,10 +64,21 @@ export function MonthSummary({
   onPrev,
   onNext,
   onSelectMonth,
+  hasActiveCards,
+  totalOutstanding,
+  totalAvailableCredit,
+  nextDueStatement,
+  onNavigateToCards,
 }: MonthSummaryProps) {
   const netPositive = runningBalance >= 0
   const billsTotal = summary.bills + unpaidScheduledBills
   const [outlookVisible, setOutlookVisible] = useState(readStoredOutlookVisibility)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const dueDate = nextDueStatement?.statement.dueDate
+  const nextDueIsOverdue = Boolean(
+    isCurrentMonth && dueDate && dueDate.getTime() < today.getTime(),
+  )
 
   function toggleOutlook() {
     setOutlookVisible((prev) => {
@@ -128,6 +148,60 @@ export function MonthSummary({
           )}
         </article>
       </div>
+
+      {hasActiveCards && (
+        <div className="summary-credit-cards" aria-labelledby="cc-summary-heading">
+          <h3 id="cc-summary-heading" className="cc-summary-title">
+            <CreditCardIcon className="section-icon" aria-hidden="true" />
+            Credit card snapshot
+            {onNavigateToCards && (
+              <button
+                type="button"
+                className="text-btn cc-summary-link"
+                onClick={onNavigateToCards}
+              >
+                Manage
+              </button>
+            )}
+          </h3>
+          <div className="cc-summary-grid">
+            {totalOutstanding !== undefined && (
+              <article className="cc-stat outstanding">
+                <span className="cc-stat-label">Total outstanding</span>
+                <strong className="cc-stat-value">{formatMoney(totalOutstanding)}</strong>
+              </article>
+            )}
+            {totalAvailableCredit !== undefined && (
+              <article className="cc-stat available">
+                <span className="cc-stat-label">Available credit</span>
+                <strong className="cc-stat-value">{formatMoney(totalAvailableCredit)}</strong>
+              </article>
+            )}
+            {nextDueStatement && (
+              <article className={`cc-stat due ${nextDueIsOverdue ? 'overdue' : ''}`}>
+                <span className="cc-stat-label">Next due</span>
+                <strong className="cc-stat-value">
+                  {formatMoney(nextDueStatement.statement.minimumPayment)}
+                </strong>
+                <span className="cc-stat-meta">
+                  Minimum payment · {nextDueStatement.card.name} · ••••{' '}
+                  {nextDueStatement.card.lastFour}
+                </span>
+                <span className={`cc-stat-due-status ${nextDueIsOverdue ? 'danger' : ''}`}>
+                  {nextDueIsOverdue ? 'Overdue · ' : 'Due '}
+                  {nextDueStatement.statement.dueDate.toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    year: nextDueStatement.statement.dueDate.getFullYear() !== today.getFullYear()
+                      ? 'numeric'
+                      : undefined,
+                  })}
+                </span>
+              </article>
+            )}
+          </div>
+        </div>
+      )}
 
       {outlookRows.length > 0 && (
         <div className="summary-outlook">
