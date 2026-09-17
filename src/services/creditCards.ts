@@ -10,6 +10,7 @@ import type {
 } from '../types/creditCard'
 import { validateCreditCardInput } from '../types/creditCard'
 import type { Transaction } from '../types/transaction'
+import { nextPhilippineBankingDay } from './recurringBills'
 
 const COLLECTION = 'creditCards'
 
@@ -33,12 +34,14 @@ function mapDoc(
   const lastFour = data.lastFour
   const limit = data.limit
   const statementDay = data.statementDay
+  const dueDay = data.dueDay
   const dueDayOffset = data.dueDayOffset
   const color = data.color
   const active = data.active
   const apr = data.apr
   const interestCalculationMethod = data.interestCalculationMethod
   const gracePeriodDays = data.gracePeriodDays
+  const minimumPaymentOverride = data.minimumPaymentOverride
 
   if (
     typeof userId !== 'string' ||
@@ -46,11 +49,13 @@ function mapDoc(
     typeof lastFour !== 'string' ||
     typeof limit !== 'number' ||
     typeof statementDay !== 'number' ||
-    typeof dueDayOffset !== 'number' ||
+    (dueDay === undefined && typeof dueDayOffset !== 'number') ||
+    (dueDay !== undefined && typeof dueDay !== 'number') ||
     (color !== undefined && typeof color !== 'string') ||
     (apr !== undefined && typeof apr !== 'number') ||
     (interestCalculationMethod !== undefined && typeof interestCalculationMethod !== 'string') ||
-    (gracePeriodDays !== undefined && typeof gracePeriodDays !== 'number')
+    (gracePeriodDays !== undefined && typeof gracePeriodDays !== 'number') ||
+    (minimumPaymentOverride !== undefined && typeof minimumPaymentOverride !== 'number')
   ) {
     return null
   }
@@ -62,13 +67,15 @@ function mapDoc(
     lastFour,
     limit,
     statementDay,
-    dueDayOffset,
+    ...(typeof dueDay === 'number' ? { dueDay } : {}),
+    ...(typeof dueDayOffset === 'number' ? { dueDayOffset } : {}),
     ...(typeof color === 'string' ? { color } : {}),
     ...(typeof apr === 'number' ? { apr } : {}),
     ...(typeof interestCalculationMethod === 'string' && (interestCalculationMethod === 'daily' || interestCalculationMethod === 'monthly')
       ? { interestCalculationMethod }
       : {}),
     ...(typeof gracePeriodDays === 'number' ? { gracePeriodDays } : {}),
+    ...(typeof minimumPaymentOverride === 'number' ? { minimumPaymentOverride } : {}),
     active: typeof active === 'boolean' ? active : true,
     createdAt: toIso(data.createdAt, timestampCtor),
   }
@@ -147,9 +154,14 @@ export async function createCreditCard(
     lastFour: input.lastFour.trim(),
     limit: input.limit,
     statementDay: input.statementDay,
-    dueDayOffset: input.dueDayOffset,
     active: input.active ?? true,
     createdAt: fs.serverTimestamp(),
+  }
+  if (input.dueDay !== undefined) {
+    payload.dueDay = input.dueDay
+  }
+  if (input.dueDayOffset !== undefined) {
+    payload.dueDayOffset = input.dueDayOffset
   }
   if (input.color?.trim()) {
     payload.color = input.color.trim()
@@ -162,6 +174,9 @@ export async function createCreditCard(
   }
   if (input.gracePeriodDays !== undefined) {
     payload.gracePeriodDays = input.gracePeriodDays
+  }
+  if (input.minimumPaymentOverride !== undefined) {
+    payload.minimumPaymentOverride = input.minimumPaymentOverride
   }
 
   const ref = await fs.addDoc(fs.collection(db, COLLECTION), payload)
@@ -182,8 +197,13 @@ export async function updateCreditCard(
     lastFour: input.lastFour.trim(),
     limit: input.limit,
     statementDay: input.statementDay,
-    dueDayOffset: input.dueDayOffset,
     active: input.active ?? true,
+  }
+  if (input.dueDay !== undefined) {
+    payload.dueDay = input.dueDay
+  }
+  if (input.dueDayOffset !== undefined) {
+    payload.dueDayOffset = input.dueDayOffset
   }
   if (input.color?.trim()) {
     payload.color = input.color.trim()
@@ -200,6 +220,11 @@ export async function updateCreditCard(
   }
   if (input.gracePeriodDays !== undefined) {
     payload.gracePeriodDays = input.gracePeriodDays
+  }
+  if (input.minimumPaymentOverride !== undefined) {
+    payload.minimumPaymentOverride = input.minimumPaymentOverride
+  } else {
+    payload.minimumPaymentOverride = null
   }
 
   await fs.updateDoc(fs.doc(db, COLLECTION, id), payload)
@@ -235,12 +260,19 @@ export function computeStatementPeriod(
 ): StatementPeriod {
   const statementDate = new Date(year, month, card.statementDay)
   const startDate = new Date(year, month - 1, card.statementDay + 1)
-  const dueDate = new Date(statementDate)
-  dueDate.setDate(dueDate.getDate() + card.dueDayOffset)
+  let dueDate = new Date(statementDate)
+  if (card.dueDay !== undefined) {
+    const dueMonth = month + (card.dueDay <= card.statementDay ? 1 : 0)
+    const lastDay = new Date(year, dueMonth + 1, 0).getDate()
+    dueDate = new Date(year, dueMonth, Math.min(card.dueDay, lastDay))
+  } else {
+    dueDate.setDate(dueDate.getDate() + (card.dueDayOffset ?? 21))
+  }
+  const adjustedDueDate = nextPhilippineBankingDay(dueDate)
 
   return {
     statementDate,
-    dueDate,
+    dueDate: adjustedDueDate,
     startDate,
     endDate: statementDate,
   }
@@ -259,7 +291,9 @@ export function getStatementTransactions(
 ): Transaction[] {
   const { startDate, endDate } = computeStatementPeriod(card, year, month)
   const start = startDate.getTime()
-  const end = endDate.getTime()
+  const endOfStatementDay = new Date(endDate)
+  endOfStatementDay.setHours(23, 59, 59, 999)
+  const end = endOfStatementDay.getTime()
 
   return transactions
     .filter((tx) => {
@@ -298,9 +332,11 @@ export function computeStatement(
   const previousBalance = computePreviousBalance(card, allTransactions, year, month)
   const interest = computeInterest(card, previousBalance, newCharges, paymentsCredits, statementDate, dueDate)
   const statementBalance = Math.max(0, previousBalance + newCharges - paymentsCredits + interest)
-  const minimumPayment = card.apr && card.apr > 0
-    ? computeMinimumPaymentWithInterest(statementBalance, card.apr)
-    : Math.min(statementBalance, Math.max(statementBalance * 0.03, 100))
+  const minimumPayment = card.minimumPaymentOverride !== undefined
+    ? Math.min(statementBalance, card.minimumPaymentOverride)
+    : card.apr && card.apr > 0
+      ? computeMinimumPaymentWithInterest(statementBalance, card.apr)
+      : Math.min(statementBalance, Math.max(statementBalance * 0.03, 100))
   const availableCredit = Math.max(0, card.limit - statementBalance)
   const isPaid = statementBalance <= 0
 

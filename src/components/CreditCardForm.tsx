@@ -29,9 +29,10 @@ interface FieldErrors {
   name?: string
   lastFour?: string
   limit?: string
-  dueDayOffset?: string
+  dueDay?: string
   apr?: string
   gracePeriodDays?: string
+  minimumPaymentOverride?: string
 }
 
 function createInitialState(editing: CreditCard | null): CreditCardInput {
@@ -41,12 +42,19 @@ function createInitialState(editing: CreditCard | null): CreditCardInput {
       lastFour: editing.lastFour,
       limit: editing.limit,
       statementDay: editing.statementDay,
-      dueDayOffset: editing.dueDayOffset,
+      dueDay: editing.dueDay !== undefined
+        ? editing.dueDay
+        : (() => {
+            const date = new Date(2026, 0, editing.statementDay)
+            date.setDate(date.getDate() + (editing.dueDayOffset ?? 21))
+            return date.getDate()
+          })(),
       color: editing.color ?? CARD_COLORS[0],
       active: editing.active,
       apr: editing.apr,
       interestCalculationMethod: editing.interestCalculationMethod,
       gracePeriodDays: editing.gracePeriodDays,
+      minimumPaymentOverride: editing.minimumPaymentOverride,
     }
   }
 
@@ -55,7 +63,7 @@ function createInitialState(editing: CreditCard | null): CreditCardInput {
     lastFour: '',
     limit: 50000,
     statementDay: 15,
-    dueDayOffset: 21,
+    dueDay: 5,
     color: CARD_COLORS[0],
     active: true,
     apr: undefined,
@@ -81,21 +89,23 @@ export function CreditCardForm({
   const [lastFour, setLastFour] = useState(initial.lastFour)
   const [limit, setLimit] = useState(String(initial.limit))
   const [statementDay, setStatementDay] = useState(String(initial.statementDay))
-  const [dueDayOffset, setDueDayOffset] = useState(String(initial.dueDayOffset))
+  const [dueDay, setDueDay] = useState(String(initial.dueDay))
   const [color, setColor] = useState(initial.color ?? CARD_COLORS[0])
   const [active, setActive] = useState(initial.active ?? true)
   const [apr, setApr] = useState(initial.apr !== undefined ? String(initial.apr) : '')
   const [interestCalculationMethod, setInterestCalculationMethod] = useState(initial.interestCalculationMethod ?? 'daily')
   const [gracePeriodDays, setGracePeriodDays] = useState(initial.gracePeriodDays !== undefined ? String(initial.gracePeriodDays) : '21')
+  const [minimumPaymentOverride, setMinimumPaymentOverride] = useState(initial.minimumPaymentOverride !== undefined ? String(initial.minimumPaymentOverride) : '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [errors, setErrors] = useState<FieldErrors>({})
   const nameRef = useRef<HTMLInputElement>(null)
   const lastFourRef = useRef<HTMLInputElement>(null)
   const limitRef = useRef<HTMLInputElement>(null)
-  const dueDayOffsetRef = useRef<HTMLInputElement>(null)
+  const dueDayRef = useRef<HTMLInputElement>(null)
   const aprRef = useRef<HTMLInputElement>(null)
   const gracePeriodDaysRef = useRef<HTMLInputElement>(null)
+  const minimumPaymentOverrideRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     requestAnimationFrame(() => nameRef.current?.focus())
@@ -108,12 +118,14 @@ export function CreditCardForm({
       lastFourRef.current?.focus()
     } else if (nextErrors.limit) {
       limitRef.current?.focus()
-    } else if (nextErrors.dueDayOffset) {
-      dueDayOffsetRef.current?.focus()
+    } else if (nextErrors.dueDay) {
+      dueDayRef.current?.focus()
     } else if (nextErrors.apr) {
       aprRef.current?.focus()
     } else if (nextErrors.gracePeriodDays) {
       gracePeriodDaysRef.current?.focus()
+    } else if (nextErrors.minimumPaymentOverride) {
+      minimumPaymentOverrideRef.current?.focus()
     }
   }
 
@@ -124,9 +136,10 @@ export function CreditCardForm({
 
     const parsedLimit = Number.parseFloat(limit)
     const parsedStatementDay = Number.parseInt(statementDay, 10)
-    const parsedDueDayOffset = Number.parseInt(dueDayOffset, 10)
+    const parsedDueDay = Number.parseInt(dueDay, 10)
     const parsedApr = apr ? Number.parseFloat(apr) : undefined
     const parsedGracePeriodDays = gracePeriodDays ? Number.parseInt(gracePeriodDays, 10) : undefined
+    const parsedMinimumPaymentOverride = minimumPaymentOverride ? Number.parseFloat(minimumPaymentOverride) : undefined
     const nextErrors: FieldErrors = {}
 
     if (!name.trim()) {
@@ -139,17 +152,20 @@ export function CreditCardForm({
       nextErrors.limit = 'Enter a credit limit greater than zero.'
     }
     if (
-      !Number.isInteger(parsedDueDayOffset) ||
-      parsedDueDayOffset < 1 ||
-      parsedDueDayOffset > 31
+      !Number.isInteger(parsedDueDay) ||
+      parsedDueDay < 1 ||
+      parsedDueDay > 31
     ) {
-      nextErrors.dueDayOffset = 'Enter a whole number from 1 to 31.'
+      nextErrors.dueDay = 'Enter a whole number from 1 to 31.'
     }
     if (parsedApr !== undefined && (!Number.isFinite(parsedApr) || parsedApr < 0 || parsedApr > 100)) {
       nextErrors.apr = 'APR must be between 0 and 100.'
     }
     if (parsedGracePeriodDays !== undefined && (!Number.isInteger(parsedGracePeriodDays) || parsedGracePeriodDays < 0 || parsedGracePeriodDays > 60)) {
       nextErrors.gracePeriodDays = 'Grace period must be between 0 and 60.'
+    }
+    if (parsedMinimumPaymentOverride !== undefined && (!Number.isFinite(parsedMinimumPaymentOverride) || parsedMinimumPaymentOverride < 0)) {
+      nextErrors.minimumPaymentOverride = 'Enter zero or a positive amount.'
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -165,12 +181,13 @@ export function CreditCardForm({
         lastFour,
         limit: parsedLimit,
         statementDay: parsedStatementDay,
-        dueDayOffset: parsedDueDayOffset,
+        dueDay: parsedDueDay,
         color,
         active,
         apr: parsedApr,
         interestCalculationMethod,
         gracePeriodDays: parsedGracePeriodDays,
+        minimumPaymentOverride: parsedMinimumPaymentOverride,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save credit card.')
@@ -280,31 +297,31 @@ export function CreditCardForm({
 
         <div className="form-row">
           <label>
-            Due day offset
+            Due day of month
             <input
-              ref={dueDayOffsetRef}
+              ref={dueDayRef}
               type="number"
               inputMode="numeric"
               min="1"
               max="31"
               step="1"
               required
-              value={dueDayOffset}
-              onChange={(e) => setDueDayOffset(e.target.value)}
-              placeholder="21"
-              aria-invalid={errors.dueDayOffset ? true : undefined}
+              value={dueDay}
+              onChange={(e) => setDueDay(e.target.value)}
+              placeholder="5"
+              aria-invalid={errors.dueDay ? true : undefined}
               aria-describedby={
-                errors.dueDayOffset
-                  ? 'cc-form-error-due-day-offset'
-                  : 'cc-form-hint-due-day-offset'
+                errors.dueDay
+                  ? 'cc-form-error-due-day'
+                  : 'cc-form-hint-due-day'
               }
             />
-            <span id="cc-form-hint-due-day-offset" className="field-hint">
-              Days after the statement date
+            <span id="cc-form-hint-due-day" className="field-hint">
+              Moved to the next banking day when needed
             </span>
-            {errors.dueDayOffset && (
-              <span id="cc-form-error-due-day-offset" className="field-error" role="alert">
-                {errors.dueDayOffset}
+            {errors.dueDay && (
+              <span id="cc-form-error-due-day" className="field-error" role="alert">
+                {errors.dueDay}
               </span>
             )}
           </label>
@@ -371,6 +388,30 @@ export function CreditCardForm({
             )}
           </label>
         </div>
+
+        <label>
+          Minimum payment override (₱)
+          <input
+            ref={minimumPaymentOverrideRef}
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.01"
+            value={minimumPaymentOverride}
+            onChange={(e) => setMinimumPaymentOverride(e.target.value)}
+            placeholder="e.g. 850"
+            aria-invalid={errors.minimumPaymentOverride ? true : undefined}
+            aria-describedby={errors.minimumPaymentOverride ? 'cc-form-error-minimum-payment' : 'cc-form-hint-minimum-payment'}
+          />
+          <span id="cc-form-hint-minimum-payment" className="field-hint">
+            Optional issuer amount; leave blank to estimate
+          </span>
+          {errors.minimumPaymentOverride && (
+            <span id="cc-form-error-minimum-payment" className="field-error" role="alert">
+              {errors.minimumPaymentOverride}
+            </span>
+          )}
+        </label>
 
         <div className="form-row">
           <fieldset className="cc-color-field">

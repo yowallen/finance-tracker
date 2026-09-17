@@ -205,12 +205,11 @@
 }
 
 .theme-toggle {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 0.45rem;
   border: none;
   border-radius: 999px;
-  padding: 0.5rem 0.9rem 0.5rem 0.65rem;
+  padding: 1rem;
   min-height: 2.75rem;
   background: var(--md-sys-color-secondary-container);
   color: var(--md-sys-color-on-secondary-container);
@@ -679,12 +678,12 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
 }
 
 .btn-ghost {
-  border: 1px solid var(--line);
+  border: none;
   background: transparent;
   color: var(--accent);
   font-weight: 600;
   border-radius: 999px;
-  padding: 0.65rem 1.15rem;
+  padding: 1rem;
   letter-spacing: 0.02em;
   transition: background-color 0.15s ease, border-color 0.15s ease;
   white-space: nowrap;
@@ -2258,6 +2257,25 @@ html[data-theme='dark'] .undo-toast-undo:hover {
   color: var(--muted);
 }
 
+.cc-projection-btn {
+  border: 1px solid var(--line);
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  gap: 0.35rem;
+}
+
+.cc-projection-icon {
+  margin: 0;
+}
+
+.cc-projection-label {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding-top: 0.2rem;
+}
+
 /* --- Credit Card Badge (TransactionList) --- */
 
 .tx-cc-badge {
@@ -2571,7 +2589,7 @@ html[data-theme='dark'] .undo-toast-undo:hover {
 
 .cc-card-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.55rem;
 }
 
@@ -3003,10 +3021,6 @@ html[data-theme='dark'] .undo-toast-undo:hover {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .cc-card-stat:last-child {
-    grid-column: 1 / -1;
-  }
-
   .cc-card-dates {
     grid-template-columns: 1fr;
   }
@@ -3034,14 +3048,6 @@ html[data-theme='dark'] .undo-toast-undo:hover {
 }
 
 @media (max-width: 380px) {
-  .cc-card-stats {
-    grid-template-columns: 1fr;
-  }
-
-  .cc-card-stat:last-child {
-    grid-column: auto;
-  }
-
   .cc-card-name {
     font-size: 0.92rem;
   }

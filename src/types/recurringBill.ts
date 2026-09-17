@@ -42,4 +42,11 @@ export interface BillReminder {
   paymentNumber: number
   totalPayments: number
   endsOn: string
+  /** Suggested date to pay a credit-card bill before its due date. */
+  recommendedPaymentDate?: Date
+  /** Actual creditor due date when the reminder uses an earlier recommended date. */
+  actualDueDate?: Date
+  isCreditCardPayment?: boolean
+  creditCardId?: string
+  cardColor?: string
 }

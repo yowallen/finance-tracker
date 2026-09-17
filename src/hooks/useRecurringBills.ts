@@ -6,6 +6,7 @@ import {
   subscribeRecurringBills,
   updateRecurringBill,
 } from '../services/recurringBills'
+import { computeStatement } from '../services/creditCards'
 import {
   generateCreditCardPaymentBills,
   creditCardBillToReminder,
@@ -21,6 +22,7 @@ export function useRecurringBills(
   monthTransactions: Transaction[],
   cards: CreditCard[],
   statements: CreditCardStatement[],
+  allTransactions: Transaction[],
 ) {
   const [bills, setBills] = useState<RecurringBill[]>([])
   const [loading, setLoading] = useState(true)
@@ -52,8 +54,23 @@ export function useRecurringBills(
 
   // Generate credit card payment bills from cards and statements
   const ccPaymentBills = useMemo(
-    () => generateCreditCardPaymentBills(cards, statements),
-    [cards, statements],
+    () => {
+      const previousDate = new Date(year, month - 1, 1)
+      const statementCandidates = [
+        ...statements,
+        ...cards.map((card) => computeStatement(
+          card,
+          allTransactions,
+          previousDate.getFullYear(),
+          previousDate.getMonth(),
+        )),
+      ]
+      return generateCreditCardPaymentBills(cards, statementCandidates)
+        .filter((bill) =>
+          bill.dueDate.getFullYear() === year && bill.dueDate.getMonth() === month,
+        )
+    },
+    [cards, statements, allTransactions, year, month],
   )
 
   // Combine regular reminders with credit card payment reminders

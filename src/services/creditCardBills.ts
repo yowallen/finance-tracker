@@ -2,7 +2,7 @@ import type { CreditCard } from '../types/creditCard'
 import type { CreditCardStatement } from '../types/creditCard'
 import type { RecurringBill, BillReminder, BillReminderStatus } from '../types/recurringBill'
 import type { Transaction } from '../types/transaction'
-import { dueDateForMonth, startOfLocalDay } from './recurringBills'
+import { previousPhilippineBankingDay, startOfLocalDay } from './recurringBills'
 
 /**
  * A virtual recurring bill representing a credit card payment.
@@ -19,7 +19,11 @@ export interface CreditCardPaymentBill {
   lastFour: string
   /** Statement balance for the current month (amount to pay) */
   amount: number
-  /** Due day of month (derived from card's statement day + dueDayOffset) */
+  /** Actual due date for this statement */
+  dueDate: Date
+  /** Configured payment date before banking-day adjustment */
+  scheduledDueDate: Date
+  /** Configured day of month */
   dueDay: number
   /** Category for the payment transaction */
   category: string
@@ -37,26 +41,35 @@ export function generateCreditCardPaymentBills(
 ): CreditCardPaymentBill[] {
   const bills: CreditCardPaymentBill[] = []
 
-  for (const card of cards) {
+  for (const statement of statements) {
+    const card = cards.find((candidate) => candidate.id === statement.card.id)
+    if (!card) continue
     if (!card.active) continue
-
-    const statement = statements.find((s) => s.card.id === card.id)
-    if (!statement) continue
 
     // Only create a payment bill if there's a balance to pay
     if (statement.statementBalance <= 0) continue
 
-    // Calculate due day: statement day + due day offset
-    // Statement day is when the statement cuts, dueDayOffset days after
-    const dueDay = card.statementDay + card.dueDayOffset
+    const dueDate = new Date(statement.dueDate)
+    const scheduledDueDate = new Date(dueDate)
+    if (card.dueDay !== undefined) {
+      const scheduledMonth = statement.statementDate.getMonth() + (card.dueDay <= card.statementDay ? 1 : 0)
+      const lastDay = new Date(statement.statementDate.getFullYear(), scheduledMonth + 1, 0).getDate()
+      scheduledDueDate.setFullYear(
+        statement.statementDate.getFullYear(),
+        scheduledMonth,
+        Math.min(card.dueDay, lastDay),
+      )
+    }
 
     bills.push({
-      id: `cc-payment:${card.id}`,
+      id: `cc-payment:${card.id}:${statement.statementDate.toISOString().slice(0, 10)}`,
       cardId: card.id,
       cardName: card.name,
       lastFour: card.lastFour,
       amount: statement.statementBalance,
-      dueDay,
+      dueDate,
+      scheduledDueDate,
+      dueDay: previousPhilippineBankingDay(dueDate, 3).getDate(),
       category: 'Credit card payment',
       color: card.color,
     })
@@ -82,8 +95,10 @@ export function creditCardBillToReminder(
     year < today.getFullYear() ||
     (year === today.getFullYear() && month < today.getMonth())
 
-  const dueDate = dueDateForMonth(year, month, ccBill.dueDay)
-  const dueStart = startOfLocalDay(dueDate)
+  const actualDueDate = new Date(ccBill.dueDate)
+  const recommendedPaymentDate = previousPhilippineBankingDay(actualDueDate, 3)
+  const dueDate = recommendedPaymentDate
+  const dueStart = startOfLocalDay(actualDueDate)
   const msPerDay = 24 * 60 * 60 * 1000
   const daysUntilDue = Math.round((dueStart.getTime() - todayStart.getTime()) / msPerDay)
 
@@ -94,7 +109,7 @@ export function creditCardBillToReminder(
       tx.creditCardPayment === true &&
       tx.creditCardId === ccBill.cardId &&
       // Check if transaction is in the same statement period
-      isInStatementPeriod(tx.occurredAt, ccBill.dueDay, year, month),
+      isInStatementPeriod(tx.occurredAt, actualDueDate),
   )
 
   let status: BillReminderStatus
@@ -118,8 +133,8 @@ export function creditCardBillToReminder(
     amount: ccBill.amount,
     category: ccBill.category,
     dueDay: ccBill.dueDay,
-    startsOn: '2024-01', // Placeholder
-    durationValue: 999,
+    startsOn: `${recommendedPaymentDate.getFullYear()}-${String(recommendedPaymentDate.getMonth() + 1).padStart(2, '0')}`,
+    durationValue: 1,
     durationUnit: 'months',
     notes: `•••• ${ccBill.lastFour}`,
     active: true,
@@ -133,8 +148,10 @@ export function creditCardBillToReminder(
     daysUntilDue,
     paidTransactionId: paid?.id ?? null,
     paymentNumber: 1,
-    totalPayments: 999,
-    endsOn: 'ongoing',
+    totalPayments: 1,
+    endsOn: `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`,
+    recommendedPaymentDate,
+    actualDueDate,
     // Mark this as a credit card payment bill for special handling
     isCreditCardPayment: true,
     creditCardId: ccBill.cardId,
@@ -148,12 +165,9 @@ export function creditCardBillToReminder(
  */
 function isInStatementPeriod(
   occurredAt: string,
-  dueDay: number,
-  year: number,
-  month: number,
+  dueDate: Date,
 ): boolean {
   const txDate = new Date(occurredAt)
-  const dueDate = dueDateForMonth(year, month, dueDay)
   // Consider a window around the due date (e.g., 5 days before to 5 days after)
   const windowStart = new Date(dueDate)
   windowStart.setDate(windowStart.getDate() - 5)
@@ -190,14 +204,5 @@ export function createCreditCardPaymentTransaction(
     occurredAt: occurred.toISOString(),
     creditCardId: ccBill.cardId,
     creditCardPayment: true,
-  }
-}
-
-// Extend BillReminder type to include credit card payment flag
-declare module '../types/recurringBill' {
-  interface BillReminder {
-    isCreditCardPayment?: boolean
-    creditCardId?: string
-    cardColor?: string
   }
 }

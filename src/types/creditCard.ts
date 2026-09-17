@@ -7,7 +7,10 @@ export interface CreditCard {
   lastFour: string
   limit: number
   statementDay: number
-  dueDayOffset: number
+  /** Actual calendar day the payment is due; legacy cards may use dueDayOffset. */
+  dueDay?: number
+  /** Legacy number of days after the statement date. */
+  dueDayOffset?: number
   color?: string
   active: boolean
   createdAt: string
@@ -17,6 +20,8 @@ export interface CreditCard {
   interestCalculationMethod?: 'daily' | 'monthly'
   /** Grace period in days after due date before interest accrues */
   gracePeriodDays?: number
+  /** Issuer-provided minimum payment override */
+  minimumPaymentOverride?: number
 }
 
 export interface CreditCardInput {
@@ -24,12 +29,14 @@ export interface CreditCardInput {
   lastFour: string
   limit: number
   statementDay: number
-  dueDayOffset: number
+  dueDay?: number
+  dueDayOffset?: number
   color?: string
   active?: boolean
   apr?: number
   interestCalculationMethod?: 'daily' | 'monthly'
   gracePeriodDays?: number
+  minimumPaymentOverride?: number
 }
 
 export interface StatementPeriod {
@@ -80,7 +87,13 @@ export function validateCreditCardInput(input: CreditCardInput): void {
   if (!Number.isInteger(input.statementDay) || input.statementDay < 1 || input.statementDay > 28) {
     throw new Error('Statement day must be between 1 and 28.')
   }
-  if (!Number.isInteger(input.dueDayOffset) || input.dueDayOffset < 1 || input.dueDayOffset > 31) {
+  if (input.dueDay === undefined && input.dueDayOffset === undefined) {
+    throw new Error('Due day is required.')
+  }
+  if (input.dueDay !== undefined && (!Number.isInteger(input.dueDay) || input.dueDay < 1 || input.dueDay > 31)) {
+    throw new Error('Due day must be between 1 and 31.')
+  }
+  if (input.dueDayOffset !== undefined && (!Number.isInteger(input.dueDayOffset) || input.dueDayOffset < 1 || input.dueDayOffset > 31)) {
     throw new Error('Due day offset must be between 1 and 31.')
   }
   if (input.apr !== undefined && (!Number.isFinite(input.apr) || input.apr < 0 || input.apr > 100)) {
@@ -88,6 +101,9 @@ export function validateCreditCardInput(input: CreditCardInput): void {
   }
   if (input.gracePeriodDays !== undefined && (!Number.isInteger(input.gracePeriodDays) || input.gracePeriodDays < 0 || input.gracePeriodDays > 60)) {
     throw new Error('Grace period must be a whole number between 0 and 60.')
+  }
+  if (input.minimumPaymentOverride !== undefined && (!Number.isFinite(input.minimumPaymentOverride) || input.minimumPaymentOverride < 0)) {
+    throw new Error('Minimum payment override must be zero or greater.')
   }
 }
 

@@ -22,7 +22,6 @@ export function ThemeToggle({ theme, onToggle }: ThemeToggleProps) {
       ) : (
         <Moon className="theme-toggle-icon" aria-hidden="true" />
       )}
-      <span className="theme-toggle-label">{isDark ? 'Light' : 'Dark'}</span>
     </button>
   )
 }

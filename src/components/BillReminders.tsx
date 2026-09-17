@@ -1,5 +1,5 @@
-import { useRef, useState, type FormEvent } from 'react'
-import { Bell, Plus } from 'lucide-react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Bell, Check, CreditCard as CreditCardIcon, Plus, WalletCards, X } from 'lucide-react'
 import { formatMoney, formatYearMonth, monthLabel, toMonthInputValue } from '../lib/format'
 import {
   durationInMonths,
@@ -12,6 +12,7 @@ import type {
   RecurringBillInput,
   BillReminder,
 } from '../types/recurringBill'
+import type { CreditCard } from '../types/creditCard'
 import { LoadingState } from './LoadingState'
 
 interface BillRemindersProps {
@@ -23,7 +24,8 @@ interface BillRemindersProps {
   onAdd: (input: RecurringBillInput) => Promise<void>
   onUpdate: (id: string, input: RecurringBillInput) => Promise<void>
   onDelete: (bill: RecurringBill) => Promise<void>
-  onMarkPaid: (reminder: BillReminder) => Promise<void>
+  creditCards: CreditCard[]
+  onMarkPaid: (reminder: BillReminder, creditCardId?: string) => Promise<void>
 }
 
 function statusLabel(reminder: BillReminder): string {
@@ -102,6 +104,7 @@ export function BillReminders({
   onAdd,
   onUpdate,
   onDelete,
+  creditCards,
   onMarkPaid,
 }: BillRemindersProps) {
   const [showForm, setShowForm] = useState(false)
@@ -111,10 +114,21 @@ export function BillReminders({
   const [busy, setBusy] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [payingId, setPayingId] = useState<string | null>(null)
+  const [paymentReminder, setPaymentReminder] = useState<BillReminder | null>(null)
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('cash')
+  const [paymentCardId, setPaymentCardId] = useState('')
+  const paymentDialogRef = useRef<HTMLDialogElement>(null)
 
   // Remember where the form was opened from so focus can return there.
   const addTriggerRef = useRef<HTMLButtonElement>(null)
   const returnFocusRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    const dialog = paymentDialogRef.current
+    if (!dialog) return
+    if (paymentReminder && !dialog.open) dialog.showModal()
+    if (!paymentReminder && dialog.open) dialog.close()
+  }, [paymentReminder])
 
   const needsAttention = reminders.filter(
     (r) => r.status === 'overdue' || r.status === 'due-soon',
@@ -202,12 +216,26 @@ export function BillReminders({
   }
 
   async function handleMarkPaid(reminder: BillReminder) {
-    setPayingId(reminder.bill.id)
+    returnFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+    setPaymentReminder(reminder)
+    setPaymentMethod('cash')
+    setPaymentCardId(creditCards[0]?.id ?? '')
+  }
+
+  async function confirmPayment() {
+    if (!paymentReminder) return
+    setPayingId(paymentReminder.bill.id)
     try {
-      await onMarkPaid(reminder)
+      await onMarkPaid(
+        paymentReminder,
+        paymentMethod === 'card' ? paymentCardId : undefined,
+      )
+      setPaymentReminder(null)
+      requestAnimationFrame(() => returnFocusRef.current?.focus())
     } finally {
       setPayingId(null)
-      requestAnimationFrame(() => returnFocusRef.current?.focus())
     }
   }
 
@@ -422,6 +450,14 @@ export function BillReminders({
                   {reminder.totalPayments} · ends {formatYearMonth(reminder.endsOn)}
                   {reminder.bill.notes ? ` · ${reminder.bill.notes}` : ''}
                 </p>
+                {reminder.isCreditCardPayment && reminder.recommendedPaymentDate && (
+                  <p className="reminder-due">
+                    Recommended payment date: {formatDueDate(reminder.recommendedPaymentDate)}
+                    {reminder.actualDueDate
+                      ? ` · Actual due date: ${formatDueDate(reminder.actualDueDate)}`
+                      : ''}
+                  </p>
+                )}
               </div>
               <div className="reminder-side">
                 <strong className="tx-amount bill">{formatMoney(reminder.bill.amount)}</strong>
@@ -456,6 +492,90 @@ export function BillReminders({
           ))}
         </ul>
       )}
+
+      <dialog
+        ref={paymentDialogRef}
+        className="payment-modal"
+        aria-labelledby="payment-modal-heading"
+        onCancel={() => setPaymentReminder(null)}
+      >
+        {paymentReminder && (
+          <div className="payment-modal-content">
+            <div className="payment-modal-header">
+              <div className="payment-modal-bill">
+                <span className="payment-modal-bill-category">Payment method</span>
+                <h3 id="payment-modal-heading" className="payment-modal-bill-name">
+                  {paymentReminder.bill.name}
+                </h3>
+              </div>
+              <strong className="payment-modal-amount">
+                {formatMoney(paymentReminder.bill.amount)}
+              </strong>
+            </div>
+
+            <div className="payment-method-options">
+              <button
+                type="button"
+                className={`payment-method-card ${paymentMethod === 'cash' ? 'selected' : ''}`}
+                onClick={() => setPaymentMethod('cash')}
+              >
+                <span className="payment-method-card-icon cash"><WalletCards className="payment-method-svg" aria-hidden="true" /></span>
+                <span className="payment-method-card-content">
+                  <span className="payment-method-card-title">Cash or debit</span>
+                  <span className="payment-method-card-subtitle">Pay from your bank or wallet</span>
+                </span>
+                {paymentMethod === 'cash' && <span className="payment-method-card-check"><Check className="payment-method-check-svg" aria-hidden="true" /></span>}
+              </button>
+              <button
+                type="button"
+                className={`payment-method-card ${paymentMethod === 'card' ? 'selected' : ''}`}
+                onClick={() => setPaymentMethod('card')}
+                disabled={creditCards.length === 0}
+              >
+                <span className="payment-method-card-icon card"><CreditCardIcon className="payment-method-svg" aria-hidden="true" /></span>
+                <span className="payment-method-card-content">
+                  <span className="payment-method-card-title">Credit card</span>
+                  <span className="payment-method-card-subtitle">Charge this bill to a card</span>
+                </span>
+                {paymentMethod === 'card' && <span className="payment-method-card-check"><Check className="payment-method-check-svg" aria-hidden="true" /></span>}
+              </button>
+            </div>
+
+            {paymentMethod === 'card' && creditCards.length > 0 && (
+              <div className="payment-card-select">
+                <p className="payment-card-select-label">Choose card</p>
+                <div className="payment-card-options">
+                  {creditCards.map((card) => (
+                    <button
+                      key={card.id}
+                      type="button"
+                      className={`payment-card-option ${paymentCardId === card.id ? 'selected' : ''}`}
+                      onClick={() => setPaymentCardId(card.id)}
+                    >
+                      <span className="payment-card-option-main">
+                        <span className="payment-card-info">
+                          <span className="payment-card-name">{card.name}</span>
+                          <span className="payment-card-last4">•••• {card.lastFour}</span>
+                        </span>
+                      </span>
+                      {paymentCardId === card.id && <span className="payment-card-check"><Check className="payment-method-check-svg" aria-hidden="true" /></span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="form-actions">
+              <button type="button" className="btn-ghost" onClick={() => setPaymentReminder(null)}>
+                <X aria-hidden="true" /> Cancel
+              </button>
+              <button type="button" className="btn-primary" disabled={payingId !== null || (paymentMethod === 'card' && !paymentCardId)} onClick={() => void confirmPayment()}>
+                {payingId ? 'Saving…' : 'Confirm payment'}
+              </button>
+            </div>
+          </div>
+        )}
+      </dialog>
     </section>
   )
 }

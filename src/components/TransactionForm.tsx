@@ -245,7 +245,9 @@ export function TransactionForm({
 
         {(type === 'expense' || type === 'bill') && activeCards.length > 0 && (
           <label>
-            Credit card <span className="optional-hint">(optional)</span>
+            <p style={{ margin: 0 }}>
+              Credit Card <span className="optional-hint">(optional)</span>
+            </p>
             <select value={creditCardId} onChange={(e) => setCreditCardId(e.target.value)}>
               <option value="">No credit card (cash/debit)</option>
               {activeCards.map((card) => (
@@ -257,8 +259,10 @@ export function TransactionForm({
           </label>
         )}
 
-        <label className="description-label">
-          Description <span className="optional-hint">(optional)</span>
+        <label>
+          <p style={{ margin: 0 }}>
+            Description <span className="optional-hint">(optional)</span>
+          </p>
           <input
             type="text"
             maxLength={120}

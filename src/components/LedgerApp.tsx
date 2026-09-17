@@ -142,7 +142,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
     add: addBill,
     update: updateBill,
     remove: removeBill,
-  } = useRecurringBills(userId, year, month, transactions, cards, statements)
+  } = useRecurringBills(userId, year, month, transactions, cards, statements, allTransactions)
 
   const dataLoading = txLoading || billLoading || goalsLoading
 
@@ -299,7 +299,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
     }
   }
 
-  async function handleMarkPaid(reminder: BillReminder) {
+  async function handleMarkPaid(reminder: BillReminder, paymentCreditCardId?: string) {
     const day = isCurrentMonth ? now.getDate() : reminder.dueDate.getDate()
     const occurred = new Date(year, month, day, 12, 0, 0, 0)
 
@@ -329,6 +329,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
         description: reminder.bill.name,
         occurredAt: occurred.toISOString(),
         recurringBillId: reminder.bill.id,
+        ...(paymentCreditCardId ? { creditCardId: paymentCreditCardId } : {}),
       }
     }
 
@@ -358,9 +359,14 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
       lastFour: card.lastFour,
       limit: card.limit,
       statementDay: card.statementDay,
+      dueDay: card.dueDay,
       dueDayOffset: card.dueDayOffset,
       color: card.color,
       active: card.active,
+      apr: card.apr,
+      interestCalculationMethod: card.interestCalculationMethod,
+      gracePeriodDays: card.gracePeriodDays,
+      minimumPaymentOverride: card.minimumPaymentOverride,
     }
   }
 
@@ -479,6 +485,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
               onAdd={addBill}
               onUpdate={updateBill}
               onDelete={handleRemoveBill}
+              creditCards={activeCards}
               onMarkPaid={handleMarkPaid}
             />
 

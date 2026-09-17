@@ -434,11 +434,6 @@ export function CreditCards({
                     </div>
 
                     <div className="cc-card-footer">
-                      {statement.statementBalance > 0 && card.active && isCurrentMonth && (
-                        <span className="cc-payment-hint">
-                          Pay via <strong>Bill Reminders</strong> →
-                        </span>
-                      )}
                       {card.apr && card.apr > 0 && projectionByCardId.has(card.id) && (
                         <button
                           type="button"
@@ -447,7 +442,9 @@ export function CreditCards({
                           aria-label={`View interest projection for ${card.name}`}
                         >
                           <BarChart2 className="cc-projection-icon" aria-hidden="true" />
-                          View projection
+                          <p className="cc-projection-label">
+                            View Projection
+                          </p>
                         </button>
                       )}
                     </div>

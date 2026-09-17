@@ -332,6 +332,87 @@ export function dueDateForMonth(
   return new Date(year, month, day, 23, 59, 59, 999)
 }
 
+const FIXED_PHILIPPINE_REGULAR_HOLIDAYS = [
+  [0, 1], // New Year's Day
+  [3, 9], // Araw ng Kagitingan
+  [4, 1], // Labor Day
+  [5, 12], // Independence Day
+  [10, 30], // Bonifacio Day
+  [11, 25], // Christmas Day
+  [11, 30], // Rizal Day
+] as const
+
+function lastMondayOfAugust(year: number): Date {
+  const date = new Date(year, 7, 31)
+  date.setDate(31 - ((date.getDay() + 6) % 7))
+  return date
+}
+
+function easterSunday(year: number): Date {
+  const a = year % 19
+  const b = Math.floor(year / 100)
+  const c = year % 100
+  const d = Math.floor(b / 4)
+  const e = b % 4
+  const f = Math.floor((b + 8) / 25)
+  const g = Math.floor((b - f + 1) / 3)
+  const h = (19 * a + b - d - g + 15) % 30
+  const i = Math.floor(c / 4)
+  const k = c % 4
+  const l = (32 + 2 * e + 2 * i - h - k) % 7
+  const m = Math.floor((a + 11 * h + 22 * l) / 451)
+  const month = Math.floor((h + l - 7 * m + 114) / 31)
+  const day = ((h + l - 7 * m + 114) % 31) + 1
+  return new Date(year, month - 1, day)
+}
+
+function localDateKey(date: Date): string {
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+}
+
+/** Return whether a date is a Philippine weekend or regular national holiday. */
+export function isPhilippineNonBankingDay(date: Date): boolean {
+  const day = date.getDay()
+  if (day === 0 || day === 6) return true
+
+  if (FIXED_PHILIPPINE_REGULAR_HOLIDAYS.some(([month, holidayDay]) =>
+    date.getMonth() === month && date.getDate() === holidayDay,
+  )) {
+    return true
+  }
+
+  if (date.getMonth() === 7 && localDateKey(date) === localDateKey(lastMondayOfAugust(date.getFullYear()))) {
+    return true
+  }
+
+  const easter = easterSunday(date.getFullYear())
+  const maundyThursday = new Date(easter)
+  maundyThursday.setDate(easter.getDate() - 3)
+  const goodFriday = new Date(easter)
+  goodFriday.setDate(easter.getDate() - 2)
+  return localDateKey(date) === localDateKey(maundyThursday) || localDateKey(date) === localDateKey(goodFriday)
+}
+
+/** Move a due date forward to the next Philippine banking day. */
+export function nextPhilippineBankingDay(date: Date): Date {
+  const adjusted = new Date(date)
+  while (isPhilippineNonBankingDay(adjusted)) {
+    adjusted.setDate(adjusted.getDate() + 1)
+  }
+  return adjusted
+}
+
+/** Find a recommended payment date a number of banking days before a due date. */
+export function previousPhilippineBankingDay(date: Date, bankingDays: number): Date {
+  const recommended = new Date(date)
+  let remaining = bankingDays
+  while (remaining > 0) {
+    recommended.setDate(recommended.getDate() - 1)
+    if (!isPhilippineNonBankingDay(recommended)) remaining -= 1
+  }
+  return recommended
+}
+
 export function startOfLocalDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate())
 }
