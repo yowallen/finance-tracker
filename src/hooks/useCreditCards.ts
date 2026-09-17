@@ -3,6 +3,8 @@ import {
   computeStatement,
   computeTotalAvailableCredit,
   computeTotalOutstanding,
+  computeAggregateUtilization,
+  buildUtilizationHistory,
   createCreditCard,
   deleteCreditCard,
   getNextDueStatement,
@@ -25,12 +27,9 @@ export function useCreditCards(
 
   useEffect(() => {
     if (!userId) {
-      setCards([])
-      setLoading(false)
       return
     }
 
-    setLoading(true)
     const unsubscribe = subscribeCreditCards(
       userId,
       (items) => {
@@ -47,44 +46,56 @@ export function useCreditCards(
     return unsubscribe
   }, [userId])
 
+  const visibleCards = useMemo(() => (userId ? cards : []), [userId, cards])
+
   const activeCards = useMemo(
-    () => cards.filter((card) => card.active),
-    [cards],
+    () => visibleCards.filter((card) => card.active),
+    [visibleCards],
   )
 
   const statements = useMemo(
-    () => cards.map((card) => computeStatement(card, allTransactions, year, month)),
-    [cards, allTransactions, year, month],
+    () => visibleCards.map((card) => computeStatement(card, allTransactions, year, month)),
+    [visibleCards, allTransactions, year, month],
   )
 
   const totalOutstanding = useMemo(
-    () => computeTotalOutstanding(cards, allTransactions, year, month),
-    [cards, allTransactions, year, month],
+    () => computeTotalOutstanding(visibleCards, allTransactions, year, month),
+    [visibleCards, allTransactions, year, month],
   )
 
   const totalAvailableCredit = useMemo(
-    () => computeTotalAvailableCredit(cards, allTransactions, year, month),
-    [cards, allTransactions, year, month],
+    () => computeTotalAvailableCredit(visibleCards, allTransactions, year, month),
+    [visibleCards, allTransactions, year, month],
   )
 
   const nextDueStatement = useMemo(
-    () => getNextDueStatement(cards, allTransactions, year, month),
-    [cards, allTransactions, year, month],
+    () => getNextDueStatement(visibleCards, allTransactions, year, month),
+    [visibleCards, allTransactions, year, month],
   )
 
   const interestProjections = useMemo(
-    () => cards
+    () => visibleCards
       .filter((card) => card.active && card.apr && card.apr > 0)
       .map((card) => {
         const statement = computeStatement(card, allTransactions, year, month)
         return projectInterest(card, statement.statementBalance, 24)
       }),
-    [cards, allTransactions, year, month],
+    [visibleCards, allTransactions, year, month],
+  )
+
+  const utilizationHistories = useMemo(
+    () => activeCards.map((card) => buildUtilizationHistory(card, allTransactions, year, month, 12)),
+    [activeCards, allTransactions, year, month],
+  )
+
+  const aggregateUtilization = useMemo(
+    () => computeAggregateUtilization(activeCards, allTransactions, year, month),
+    [activeCards, allTransactions, year, month],
   )
 
   const cardById = useMemo(
-    () => new Map(cards.map((card) => [card.id, card])),
-    [cards],
+    () => new Map(visibleCards.map((card) => [card.id, card])),
+    [visibleCards],
   )
 
   async function add(input: CreditCardInput): Promise<void> {
@@ -101,15 +112,17 @@ export function useCreditCards(
   }
 
   return {
-    cards,
+    cards: visibleCards,
     activeCards,
     statements,
     totalOutstanding,
     totalAvailableCredit,
     nextDueStatement,
     interestProjections,
+    utilizationHistories,
+    aggregateUtilization,
     cardById,
-    loading,
+    loading: userId ? loading : false,
     error,
     add,
     update,

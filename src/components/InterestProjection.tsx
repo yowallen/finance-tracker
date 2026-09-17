@@ -11,6 +11,7 @@ import {
   BarChart2,
 } from 'lucide-react'
 import { formatMoney } from '../lib/format'
+import { projectInterest } from '../services/creditCards'
 import type { InterestProjection } from '../types/creditCard'
 
 interface InterestProjectionProps {
@@ -89,12 +90,13 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
   const [viewMode, setViewMode] = useState<'fixed' | 'min'>('fixed')
   const [customFixedPayment, setCustomFixedPayment] = useState(projection.fixedPaymentAmount)
   const [showTable, setShowTable] = useState(false)
-  const [reducedMotion, setReducedMotion] = useState(false)
+  const [reducedMotion, setReducedMotion] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  )
 
   // Detect reduced motion preference
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
-    setReducedMotion(mediaQuery.matches)
     const handler = (e: MediaQueryListEvent) => setReducedMotion(e.matches)
     mediaQuery.addEventListener?.('change', handler)
     return () => mediaQuery.removeEventListener?.('change', handler)
@@ -115,6 +117,25 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
   const modalRef = useFocusTrap(true)
 
   const currentProjection = useMemo(() => {
+    const recalculated = viewMode === 'fixed'
+      ? projectInterest(
+          {
+            id: projection.cardId,
+            name: projection.cardName,
+            apr: projection.apr,
+            userId: '',
+            lastFour: '',
+            limit: Number.POSITIVE_INFINITY,
+            statementDay: 1,
+            active: true,
+            createdAt: '',
+            dueDay: 1,
+          },
+          projection.currentBalance,
+          24,
+          customFixedPayment,
+        )
+      : projection
     if (viewMode === 'min') {
       return {
         totalInterest: projection.totalInterestIfMinPay,
@@ -124,10 +145,10 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
       }
     }
     return {
-      totalInterest: projection.totalInterestIfFixedPay,
-      monthsToPayoff: projection.monthsToPayoffFixedPay,
+      totalInterest: recalculated.totalInterestIfFixedPay,
+      monthsToPayoff: recalculated.monthsToPayoffFixedPay,
       monthlyPayment: formatMoney(customFixedPayment),
-      projectedBalances: projection.projectedBalances.filter(p => p.month < projection.monthsToPayoffFixedPay),
+      projectedBalances: recalculated.projectedBalances.filter(p => p.month < recalculated.monthsToPayoffFixedPay),
     }
   }, [viewMode, projection, customFixedPayment])
 
@@ -156,7 +177,7 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
       return { x, y }
     })
     return points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
-  }, [currentProjection.projectedBalances, maxBalance])
+  }, [currentProjection.projectedBalances, maxBalance, chartWidth, chartPadding.bottom, chartPadding.left, chartPadding.right, chartPadding.top])
 
   useEffect(() => {
     const resizeObserver = new ResizeObserver((entries) => {
@@ -182,22 +203,22 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
         label: monthLabel(p.month % 12, p.year),
         x: chartPadding.left + (idx * step / Math.max(1, currentProjection.projectedBalances.length - 1)) * (chartWidth - chartPadding.left - chartPadding.right),
       }))
-  }, [currentProjection.projectedBalances, chartWidth])
+  }, [currentProjection.projectedBalances, chartWidth, chartPadding.left, chartPadding.right])
 
   // Generate y-axis labels
   const yAxisLabels = useMemo(() => {
-    return [0, 0.25, 0.5, 0.75, 1].map((ratio, _i) => ({
+    return [0, 0.25, 0.5, 0.75, 1].map((ratio) => ({
       value: formatMoney(maxBalance * ratio),
       y: chartPadding.top + (1 - ratio) * (chartHeight - chartPadding.top - chartPadding.bottom),
     }))
-  }, [maxBalance])
+  }, [maxBalance, chartPadding.bottom, chartPadding.top])
 
   // Generate grid lines
   const gridLines = useMemo(() => {
-    return [0, 0.25, 0.5, 0.75, 1].map((ratio, _i) => ({
+    return [0, 0.25, 0.5, 0.75, 1].map((ratio) => ({
       y: chartPadding.top + ratio * (chartHeight - chartPadding.top - chartPadding.bottom),
     }))
-  }, [])
+  }, [chartPadding.bottom, chartPadding.top])
 
   return (
     <div

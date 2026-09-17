@@ -7,6 +7,8 @@ import type {
   StatementPeriod,
   InterestProjection,
   ProjectedBalance,
+  UtilizationHistory,
+  UtilizationSnapshot,
 } from '../types/creditCard'
 import { validateCreditCardInput } from '../types/creditCard'
 import type { Transaction } from '../types/transaction'
@@ -437,6 +439,81 @@ export function computeTotalAvailableCredit(
         total + computeStatement(card, allTransactions, year, month).availableCredit,
       0,
     )
+}
+
+export function getUtilizationForMonth(
+  card: CreditCard,
+  allTransactions: Transaction[],
+  year: number,
+  month: number,
+): UtilizationSnapshot {
+  const statement = computeStatement(card, allTransactions, year, month)
+  const utilizationPercent = card.limit > 0
+    ? Math.min(100, (statement.statementBalance / card.limit) * 100)
+    : 0
+  return {
+    date: new Date(year, month, 1).toISOString(),
+    year,
+    month,
+    statementBalance: statement.statementBalance,
+    limit: card.limit,
+    utilizationPercent,
+    cardId: card.id,
+  }
+}
+
+export function buildUtilizationHistory(
+  card: CreditCard,
+  allTransactions: Transaction[],
+  endYear: number,
+  endMonth: number,
+  monthsBack = 12,
+): UtilizationHistory {
+  const snapshots: UtilizationSnapshot[] = []
+  for (let offset = monthsBack - 1; offset >= 0; offset -= 1) {
+    const date = new Date(endYear, endMonth - offset, 1)
+    snapshots.push(getUtilizationForMonth(card, allTransactions, date.getFullYear(), date.getMonth()))
+  }
+  const total = snapshots.reduce((sum, snapshot) => sum + snapshot.utilizationPercent, 0)
+  const peak = snapshots.reduce(
+    (highest, snapshot) => snapshot.utilizationPercent > highest.utilizationPercent ? snapshot : highest,
+    snapshots[0],
+  )
+  const first = snapshots[0]?.utilizationPercent ?? 0
+  const current = snapshots.at(-1)?.utilizationPercent ?? 0
+  const change = current - first
+  return {
+    cardId: card.id,
+    cardName: card.name,
+    limit: card.limit,
+    snapshots,
+    averageUtilization: snapshots.length > 0 ? total / snapshots.length : 0,
+    peakUtilization: {
+      percent: peak?.utilizationPercent ?? 0,
+      date: peak?.date ?? new Date(endYear, endMonth, 1).toISOString(),
+    },
+    currentUtilization: current,
+    trend: change < -1 ? 'improving' : change > 1 ? 'worsening' : 'stable',
+  }
+}
+
+export function computeAggregateUtilization(
+  cards: CreditCard[],
+  allTransactions: Transaction[],
+  year: number,
+  month: number,
+): { totalBalance: number; totalLimit: number; utilizationPercent: number } {
+  const activeCards = cards.filter((card) => card.active)
+  const totalBalance = activeCards.reduce(
+    (sum, card) => sum + computeStatement(card, allTransactions, year, month).statementBalance,
+    0,
+  )
+  const totalLimit = activeCards.reduce((sum, card) => sum + card.limit, 0)
+  return {
+    totalBalance,
+    totalLimit,
+    utilizationPercent: totalLimit > 0 ? Math.min(100, (totalBalance / totalLimit) * 100) : 0,
+  }
 }
 
 /**

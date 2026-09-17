@@ -21,9 +21,9 @@ export interface CreditCardPaymentBill {
   amount: number
   /** Actual due date for this statement */
   dueDate: Date
-  /** Configured payment date before banking-day adjustment */
+  /** Recommended payment date before the actual bank deadline */
   scheduledDueDate: Date
-  /** Configured day of month */
+  /** Recommended payment day of month */
   dueDay: number
   /** Category for the payment transaction */
   category: string
@@ -60,6 +60,7 @@ export function generateCreditCardPaymentBills(
         Math.min(card.dueDay, lastDay),
       )
     }
+    const recommendedPaymentDate = previousPhilippineBankingDay(dueDate, 3)
 
     bills.push({
       id: `cc-payment:${card.id}:${statement.statementDate.toISOString().slice(0, 10)}`,
@@ -68,8 +69,8 @@ export function generateCreditCardPaymentBills(
       lastFour: card.lastFour,
       amount: statement.statementBalance,
       dueDate,
-      scheduledDueDate,
-      dueDay: previousPhilippineBankingDay(dueDate, 3).getDate(),
+      scheduledDueDate: recommendedPaymentDate,
+      dueDay: recommendedPaymentDate.getDate(),
       category: 'Credit card payment',
       color: card.color,
     })
@@ -96,9 +97,9 @@ export function creditCardBillToReminder(
     (year === today.getFullYear() && month < today.getMonth())
 
   const actualDueDate = new Date(ccBill.dueDate)
-  const recommendedPaymentDate = previousPhilippineBankingDay(actualDueDate, 3)
+  const recommendedPaymentDate = new Date(ccBill.scheduledDueDate)
   const dueDate = recommendedPaymentDate
-  const dueStart = startOfLocalDay(actualDueDate)
+  const dueStart = startOfLocalDay(dueDate)
   const msPerDay = 24 * 60 * 60 * 1000
   const daysUntilDue = Math.round((dueStart.getTime() - todayStart.getTime()) / msPerDay)
 

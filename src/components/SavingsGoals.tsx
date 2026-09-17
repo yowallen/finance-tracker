@@ -5,7 +5,7 @@ import {
   type FormEvent,
   type MouseEvent,
 } from 'react'
-import { Check, MapPinned, PiggyBank, Plus } from 'lucide-react'
+import { Check, MapPinned, PiggyBank, Plus, Pencil, Trash2 } from 'lucide-react'
 import { formatMoney } from '../lib/format'
 import { fileToFirestoreImageDataUrl } from '../lib/imageData'
 import type {
@@ -500,17 +500,21 @@ export function SavingsGoals({
                 <div className="tx-actions">
                   <button
                     type="button"
-                    className="link-btn"
+                    className="icon-btn icon-btn--edit"
                     onClick={() => openEdit(stop.goal)}
+                    aria-label={`Edit ${stop.goal.name}`}
+                    title="Edit stop"
                   >
-                    Edit
+                    <Pencil aria-hidden="true" />
                   </button>
                   <button
                     type="button"
-                    className="link-btn danger"
+                    className="icon-btn danger"
                     onClick={(event) => void handleDelete(stop.goal, event)}
+                    aria-label={`Remove ${stop.goal.name}`}
+                    title="Remove stop"
                   >
-                    Remove
+                    <Trash2 aria-hidden="true" />
                   </button>
                 </div>
               </li>

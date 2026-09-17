@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, CreditCard } from 'lucide-react'
 import { formatMoney, formatDate, monthLabel } from '../lib/format'
 import {
   computeAverageDailyBalance,
   computeRunningBalanceForDay,
 } from '../services/balanceOutlook'
-import type { BillReminder, RecurringBill } from '../types/recurringBill'
+import type { BillReminder, RecurringBill, RecurringBillInput } from '../types/recurringBill'
+import type { CreditCardPaymentBill } from '../services/creditCardBills'
 import type { Transaction } from '../types/transaction'
 import { isSavingsWithdraw } from '../types/transaction'
 
@@ -18,8 +19,10 @@ interface FinanceCalendarProps {
   /** Month-scoped transactions for day markers. */
   transactions: Transaction[]
   bills: RecurringBill[]
+  ccPaymentBills: CreditCardPaymentBill[]
   onPrev: () => void
   onNext: () => void
+  onUpdate: (id: string, input: RecurringBillInput) => Promise<void>
 }
 
 interface DayEvents {
@@ -102,8 +105,10 @@ export function FinanceCalendar({
   allTransactions,
   transactions,
   bills,
+  ccPaymentBills,
   onPrev,
   onNext,
+  onUpdate,
 }: FinanceCalendarProps) {
   const today = new Date()
   const isCurrentMonth =
@@ -154,6 +159,7 @@ export function FinanceCalendar({
     year,
     month,
     activeDay,
+    ccPaymentBills,
   )
   const balancePositive = dayRunningBalance >= 0
 
@@ -163,8 +169,40 @@ export function FinanceCalendar({
     year,
     month,
     isCurrentMonth ? today.getDate() : undefined,
+    ccPaymentBills,
   )
   const adbPositive = averageDaily.averageDailyBalance >= 0
+
+  /** Toggle whether a bill for the current viewed month should be paid with a credit card. */
+  async function handleToggleCreditCardPayment(reminder: BillReminder) {
+    const bill = reminder.bill
+    const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`
+    const currentMonths = bill.creditCardMonths ?? []
+    const isEnabled = currentMonths.includes(monthKey)
+    const updatedMonths = isEnabled
+      ? currentMonths.filter((m) => m !== monthKey)
+      : [...currentMonths, monthKey]
+
+    await onUpdate(bill.id, {
+      ...formFromBill(bill),
+      creditCardMonths: updatedMonths,
+    })
+  }
+
+  function formFromBill(bill: RecurringBill): RecurringBillInput {
+    return {
+      name: bill.name,
+      amount: bill.amount,
+      category: bill.category,
+      dueDay: bill.dueDay,
+      startsOn: bill.startsOn,
+      durationValue: bill.durationValue,
+      durationUnit: bill.durationUnit,
+      notes: bill.notes,
+      active: bill.active,
+      creditCardMonths: bill.creditCardMonths,
+    }
+  }
 
   return (
     <section className="finance-calendar" aria-labelledby="calendar-heading">
@@ -284,10 +322,39 @@ export function FinanceCalendar({
                         : `Bill due · Payment ${bill.paymentNumber}/${bill.totalPayments}`}
                     </p>
                   </div>
-                  <strong className={`tx-amount ${bill.status === 'paid' ? 'bill' : 'bill'}`}>
-                    {bill.status === 'paid' ? '−' : ''}
-                    {formatMoney(bill.bill.amount)}
-                  </strong>
+                  <div className="calendar-detail-actions" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <strong className={`tx-amount ${bill.status === 'paid' ? 'bill' : 'bill'}`}>
+                      {bill.status === 'paid' ? '−' : ''}
+                      {formatMoney(bill.bill.amount)}
+                    </strong>
+                    {bill.status !== 'paid' && !bill.isCreditCardPayment && (
+                      <button
+                        type="button"
+                        className={`icon-btn icon-btn--cc ${bill.payWithCreditCard ? 'active' : ''}`}
+                        onClick={() => void handleToggleCreditCardPayment(bill)}
+                        aria-label={bill.payWithCreditCard
+                          ? 'Remove credit card payment flag'
+                          : 'Mark as paid with credit card (excluded from daily balance)'}
+                        aria-pressed={bill.payWithCreditCard}
+                        title={bill.payWithCreditCard
+                          ? 'This bill is flagged as paid with credit card. Click to remove flag.'
+                          : 'Flag this bill to be paid with credit card (excluded from daily balance)'}
+                      >
+                        <CreditCard aria-hidden="true" />
+                      </button>
+                    )}
+                    {bill.status !== 'paid' && bill.isCreditCardPayment && (
+                      <button
+                        type="button"
+                        className="icon-btn icon-btn--cc"
+                        disabled
+                        aria-label="Credit card payments can only be paid with cash or debit"
+                        title="Credit card payments can only be paid with cash or debit"
+                      >
+                        <CreditCard aria-hidden="true" />
+                      </button>
+                    )}
+                  </div>
                 </li>
               ))}
               {visibleTransactions?.map((tx) => {

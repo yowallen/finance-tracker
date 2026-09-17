@@ -391,21 +391,23 @@ export function TransactionList({
                   <div className="tx-actions">
                     <button
                       type="button"
-                      className="link-btn btn-with-icon"
+                      className="icon-btn icon-btn--edit"
                       onClick={() => onEdit(tx)}
+                      aria-label={`Edit ${tx.description.trim() || tx.category}`}
+                      title="Edit transaction"
                     >
                       <Pencil aria-hidden="true" />
-                      Edit
                     </button>
                     <button
                       type="button"
-                      className="link-btn danger btn-with-icon"
+                      className="icon-btn danger"
                       onClick={() => {
                         void handleDelete(tx.id)
                       }}
+                      aria-label={`Delete ${tx.description.trim() || tx.category}`}
+                      title="Delete transaction"
                     >
                       <Trash2 aria-hidden="true" />
-                      Delete
                     </button>
                   </div>
                 </div>

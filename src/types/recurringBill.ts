@@ -16,6 +16,9 @@ export interface RecurringBill {
   notes: string
   active: boolean
   createdAt: string
+  /** Months (YYYY-MM) where this bill will be paid with a credit card.
+   *  These months are excluded from daily balance/cash flow computations. */
+  creditCardMonths?: string[]
 }
 
 export interface RecurringBillInput {
@@ -28,6 +31,7 @@ export interface RecurringBillInput {
   durationUnit: DurationUnit
   notes: string
   active?: boolean
+  creditCardMonths?: string[]
 }
 
 export type BillReminderStatus = 'paid' | 'overdue' | 'due-soon' | 'upcoming' | 'unpaid'
@@ -49,4 +53,7 @@ export interface BillReminder {
   isCreditCardPayment?: boolean
   creditCardId?: string
   cardColor?: string
+  /** True when this bill is flagged to be paid with a credit card for the viewed month.
+   *  When true, the bill is excluded from daily balance/cash flow computations. */
+  payWithCreditCard?: boolean
 }

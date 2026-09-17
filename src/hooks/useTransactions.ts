@@ -16,12 +16,9 @@ export function useTransactions(userId: string | undefined, year: number, month:
 
   useEffect(() => {
     if (!userId) {
-      setAll([])
-      setLoading(false)
       return
     }
 
-    setLoading(true)
     const unsubscribe = subscribeTransactions(
       userId,
       (transactions) => {
@@ -38,9 +35,11 @@ export function useTransactions(userId: string | undefined, year: number, month:
     return unsubscribe
   }, [userId])
 
+  const visibleAll = useMemo(() => (userId ? all : []), [userId, all])
+
   const monthly = useMemo(
-    () => filterByMonth(all, year, month),
-    [all, year, month],
+    () => filterByMonth(visibleAll, year, month),
+    [visibleAll, year, month],
   )
 
   const summary = useMemo(
@@ -63,9 +62,9 @@ export function useTransactions(userId: string | undefined, year: number, month:
 
   return {
     transactions: monthly,
-    allTransactions: all,
+    allTransactions: visibleAll,
     summary,
-    loading,
+    loading: userId ? loading : false,
     error,
     add,
     update,

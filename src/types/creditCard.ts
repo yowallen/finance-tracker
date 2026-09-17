@@ -134,3 +134,46 @@ export interface InterestProjection {
   monthsToPayoffFixedPay: number
   fixedPaymentAmount: number
 }
+
+export interface UtilizationSnapshot {
+  date: string
+  year: number
+  month: number
+  statementBalance: number
+  limit: number
+  utilizationPercent: number
+  cardId: string
+}
+
+export interface UtilizationHistory {
+  cardId: string
+  cardName: string
+  limit: number
+  snapshots: UtilizationSnapshot[]
+  averageUtilization: number
+  peakUtilization: { percent: number; date: string }
+  currentUtilization: number
+  trend: 'improving' | 'stable' | 'worsening'
+}
+
+export type PaymentAllocationStrategy =
+  | 'highest-interest-first'
+  | 'lowest-balance-first'
+  | 'proportional'
+
+export interface PaymentAllocation {
+  cardId: string
+  cardName: string
+  cardApr: number
+  currentBalance: number
+  minimumPayment: number
+  allocatedAmount: number
+  isMinimumOnly: boolean
+}
+
+export interface PaymentAllocationPlan {
+  strategy: PaymentAllocationStrategy
+  totalPayment: number
+  allocations: PaymentAllocation[]
+  remainingUnallocated: number
+}

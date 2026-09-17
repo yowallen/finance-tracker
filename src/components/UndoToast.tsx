@@ -113,8 +113,6 @@ export function UndoToast({ pending, onUndo, onDismiss }: UndoToastProps) {
   if (!isVisible && isExiting) return null
 
   return (
-    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
-    // eslint-disable-next-line jsx-a11y/tabindex-no-positive
     <div
       ref={toastRef}
       className={`undo-toast ${isExiting ? 'undo-toast--exiting' : ''}`}

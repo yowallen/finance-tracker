@@ -19,18 +19,21 @@ import {
 import { CreditCardForm } from './CreditCardForm'
 import { LoadingState } from './LoadingState'
 import { InterestProjection as InterestProjectionComponent } from './InterestProjection'
+import { UtilizationChart } from './UtilizationChart'
 import { formatDate, formatMoney } from '../lib/format'
 import type {
   CreditCard,
   CreditCardInput,
   CreditCardStatement,
   InterestProjection,
+  UtilizationHistory,
 } from '../types/creditCard'
 
 interface CreditCardsProps {
   cards: CreditCard[]
   statements: CreditCardStatement[]
   interestProjections: InterestProjection[]
+  utilizationHistories: UtilizationHistory[]
   loading: boolean
   error: string | null
   isCurrentMonth?: boolean
@@ -82,6 +85,7 @@ export function CreditCards({
   cards,
   statements,
   interestProjections,
+  utilizationHistories,
   loading,
   error,
   isCurrentMonth = true,
@@ -102,6 +106,10 @@ export function CreditCards({
   const projectionByCardId = useMemo(
     () => new Map(interestProjections.map((p) => [p.cardId, p])),
     [interestProjections],
+  )
+  const utilizationByCardId = useMemo(
+    () => new Map(utilizationHistories.map((history) => [history.cardId, history])),
+    [utilizationHistories],
   )
 
   useEffect(
@@ -293,6 +301,7 @@ export function CreditCards({
                 const status = statementStatus(statement, isCurrentMonth)
                 const utilization = utilizationPercent(statement)
                 const cardColor = card.color ?? '#3B82F6'
+                const utilizationHistory = utilizationByCardId.get(card.id)
 
                 return (
                   <article
@@ -414,6 +423,8 @@ export function CreditCards({
                           {formatMoney(statement.statementBalance)} of {formatMoney(card.limit)} limit
                         </p>
                       </div>
+
+                      {utilizationHistory && <UtilizationChart history={utilizationHistory} />}
 
                       <div className="cc-card-dates">
                         <div className="cc-date-row">

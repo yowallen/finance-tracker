@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Bell, Check, CreditCard as CreditCardIcon, Plus, WalletCards, X } from 'lucide-react'
+import { Bell, Check, CreditCard as CreditCardIcon, Plus, WalletCards, X, Pencil, Trash2 } from 'lucide-react'
 import { formatMoney, formatYearMonth, monthLabel, toMonthInputValue } from '../lib/format'
 import {
   durationInMonths,
@@ -13,6 +13,8 @@ import type {
   BillReminder,
 } from '../types/recurringBill'
 import type { CreditCard } from '../types/creditCard'
+import type { CreditCardStatement, PaymentAllocationPlan } from '../types/creditCard'
+import { PaymentAllocation } from './PaymentAllocation'
 import { LoadingState } from './LoadingState'
 
 interface BillRemindersProps {
@@ -25,6 +27,8 @@ interface BillRemindersProps {
   onUpdate: (id: string, input: RecurringBillInput) => Promise<void>
   onDelete: (bill: RecurringBill) => Promise<void>
   creditCards: CreditCard[]
+  statements: CreditCardStatement[]
+  onApplyAllocation: (plan: PaymentAllocationPlan) => Promise<void>
   onMarkPaid: (reminder: BillReminder, creditCardId?: string) => Promise<void>
 }
 
@@ -92,6 +96,7 @@ function formFromBill(bill: RecurringBill): RecurringBillInput {
     durationUnit: bill.durationUnit,
     notes: bill.notes,
     active: bill.active,
+    creditCardMonths: bill.creditCardMonths,
   }
 }
 
@@ -105,6 +110,8 @@ export function BillReminders({
   onUpdate,
   onDelete,
   creditCards,
+  statements,
+  onApplyAllocation,
   onMarkPaid,
 }: BillRemindersProps) {
   const [showForm, setShowForm] = useState(false)
@@ -132,6 +139,9 @@ export function BillReminders({
 
   const needsAttention = reminders.filter(
     (r) => r.status === 'overdue' || r.status === 'due-soon',
+  ).length
+  const dueCreditCardCount = reminders.filter(
+    (reminder) => reminder.isCreditCardPayment && reminder.status !== 'paid',
   ).length
 
   function openCreate() {
@@ -259,6 +269,23 @@ export function BillReminders({
         }
       })
     }
+  }
+
+  /** Toggle whether a bill for the current viewed month should be paid with a credit card.
+   *  When enabled, the bill is excluded from daily balance/cash flow computations. */
+  async function handleToggleCreditCardPayment(reminder: BillReminder) {
+    const bill = reminder.bill
+    const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`
+    const currentMonths = bill.creditCardMonths ?? []
+    const isEnabled = currentMonths.includes(monthKey)
+    const updatedMonths = isEnabled
+      ? currentMonths.filter((m) => m !== monthKey)
+      : [...currentMonths, monthKey]
+
+    await onUpdate(bill.id, {
+      ...formFromBill(bill),
+      creditCardMonths: updatedMonths,
+    })
   }
 
   const submitLabel = busy ? 'Saving…' : editing ? 'Save bill' : 'Add reminder'
@@ -395,8 +422,10 @@ export function BillReminders({
             </label>
           </div>
           <p className="schedule-hint">{scheduleSummary(form)}</p>
-          <label>
-            Notes <span className="optional-hint">(optional)</span>
+          <label style={{display: 'block', }}>
+            <p style={{ marginBottom: '0.5rem' }}>
+              Notes <span className="optional-hint">(optional)</span>
+            </p>
             <input
               type="text"
               maxLength={160}
@@ -419,6 +448,14 @@ export function BillReminders({
             </button>
           </div>
         </form>
+      )}
+
+      {dueCreditCardCount > 1 && (
+        <PaymentAllocation
+          cards={creditCards}
+          statements={statements}
+          onApply={onApplyAllocation}
+        />
       )}
 
       {loading ? (
@@ -446,45 +483,81 @@ export function BillReminders({
                 </div>
                 <p className="tx-desc">{reminder.bill.name}</p>
                 <p className="reminder-due">
-                  Due {formatDueDate(reminder.dueDate)} · Payment {reminder.paymentNumber} of{' '}
+                  Due {formatDueDate(reminder.actualDueDate ?? reminder.dueDate)} · Payment {reminder.paymentNumber} of{' '}
                   {reminder.totalPayments} · ends {formatYearMonth(reminder.endsOn)}
                   {reminder.bill.notes ? ` · ${reminder.bill.notes}` : ''}
                 </p>
-                {reminder.isCreditCardPayment && reminder.recommendedPaymentDate && (
-                  <p className="reminder-due">
-                    Recommended payment date: {formatDueDate(reminder.recommendedPaymentDate)}
-                    {reminder.actualDueDate
-                      ? ` · Actual due date: ${formatDueDate(reminder.actualDueDate)}`
-                      : ''}
-                  </p>
-                )}
               </div>
               <div className="reminder-side">
                 <strong className="tx-amount bill">{formatMoney(reminder.bill.amount)}</strong>
                 <div className="tx-actions">
+                  {/* Mark Paid button - only shows when not paid */}
                   {reminder.status !== 'paid' && (
                     <button
                       type="button"
-                      className="link-btn"
+                      className="icon-btn icon-btn--paid"
                       disabled={payingId === reminder.bill.id}
                       onClick={() => void handleMarkPaid(reminder)}
+                      aria-label={payingId === reminder.bill.id ? 'Saving…' : 'Mark as paid'}
+                      title={payingId === reminder.bill.id ? 'Saving…' : 'Mark as paid'}
                     >
-                      {payingId === reminder.bill.id ? 'Saving…' : 'Mark paid'}
+                      {payingId === reminder.bill.id ? (
+                        <span className="loading-spinner" style={{width: '1rem', height: '1rem', borderWidth: '2px'}} />
+                      ) : (
+                        <Check aria-hidden="true" />
+                      )}
                     </button>
                   )}
+                  {/* Credit Card Toggle - disabled when bill is paid, being paid, or is a credit card payment bill */}
+                  {!reminder.isCreditCardPayment && (
+                    <button
+                      type="button"
+                      className={`icon-btn icon-btn--cc ${reminder.payWithCreditCard ? 'active' : ''}`}
+                      onClick={() => void handleToggleCreditCardPayment(reminder)}
+                      disabled={reminder.status === 'paid' || payingId === reminder.bill.id}
+                      aria-label={reminder.payWithCreditCard
+                        ? 'Remove credit card payment flag'
+                        : 'Mark as paid with credit card (excluded from daily balance)'}
+                      aria-pressed={reminder.payWithCreditCard}
+                      title={reminder.payWithCreditCard
+                        ? 'This bill is flagged as paid with credit card. Click to remove flag.'
+                        : 'Flag this bill to be paid with credit card (excluded from daily balance)'}
+                    >
+                      <CreditCardIcon aria-hidden="true" />
+                    </button>
+                  )}
+                  {reminder.isCreditCardPayment && (
+                    <button
+                      type="button"
+                      className="icon-btn icon-btn--cc"
+                      disabled
+                      aria-label="Credit card payments can only be paid with cash or debit"
+                      title="Credit card payments can only be paid with cash or debit"
+                    >
+                      <CreditCardIcon aria-hidden="true" />
+                    </button>
+                  )}
+                  {/* Edit - disabled when bill is paid or being paid */}
                   <button
                     type="button"
-                    className="link-btn"
+                    className="icon-btn icon-btn--edit"
                     onClick={() => openEdit(reminder.bill)}
+                    disabled={reminder.status === 'paid' || payingId === reminder.bill.id}
+                    aria-label={`Edit ${reminder.bill.name}`}
+                    title="Edit bill"
                   >
-                    Edit
+                    <Pencil aria-hidden="true" />
                   </button>
+                  {/* Delete - disabled when bill is being paid */}
                   <button
                     type="button"
-                    className="link-btn danger"
+                    className="icon-btn danger"
                     onClick={() => void handleRemove(reminder)}
+                    disabled={payingId === reminder.bill.id}
+                    aria-label={`Delete ${reminder.bill.name}`}
+                    title="Delete bill"
                   >
-                    Remove
+                    <Trash2 aria-hidden="true" />
                   </button>
                 </div>
               </div>

@@ -30,12 +30,9 @@ export function useRecurringBills(
 
   useEffect(() => {
     if (!userId) {
-      setBills([])
-      setLoading(false)
       return
     }
 
-    setLoading(true)
     const unsubscribe = subscribeRecurringBills(
       userId,
       (items) => {
@@ -52,6 +49,8 @@ export function useRecurringBills(
     return unsubscribe
   }, [userId])
 
+  const visibleBills = useMemo(() => (userId ? bills : []), [userId, bills])
+
   // Generate credit card payment bills from cards and statements
   const ccPaymentBills = useMemo(
     () => {
@@ -67,7 +66,7 @@ export function useRecurringBills(
       ]
       return generateCreditCardPaymentBills(cards, statementCandidates)
         .filter((bill) =>
-          bill.dueDate.getFullYear() === year && bill.dueDate.getMonth() === month,
+          bill.scheduledDueDate.getFullYear() === year && bill.scheduledDueDate.getMonth() === month,
         )
     },
     [cards, statements, allTransactions, year, month],
@@ -75,7 +74,7 @@ export function useRecurringBills(
 
   // Combine regular reminders with credit card payment reminders
   const reminders = useMemo(() => {
-    const regularReminders = buildBillReminders(bills, monthTransactions, year, month)
+    const regularReminders = buildBillReminders(visibleBills, monthTransactions, year, month)
     const ccReminders = ccPaymentBills.map((ccBill) =>
       creditCardBillToReminder(ccBill, year, month, monthTransactions),
     )
@@ -93,7 +92,7 @@ export function useRecurringBills(
       const bRank = rank[b.status] ?? 99
       return aRank - bRank || a.dueDate.getTime() - b.dueDate.getTime()
     })
-  }, [bills, monthTransactions, year, month, ccPaymentBills])
+  }, [visibleBills, monthTransactions, year, month, ccPaymentBills])
 
   async function add(input: RecurringBillInput): Promise<void> {
     if (!userId) throw new Error('Missing user id.')
@@ -109,9 +108,10 @@ export function useRecurringBills(
   }
 
   return {
-    bills,
+    bills: visibleBills,
     reminders,
-    loading,
+    ccPaymentBills,
+    loading: userId ? loading : false,
     error,
     add,
     update,

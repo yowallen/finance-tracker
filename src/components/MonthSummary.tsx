@@ -39,6 +39,7 @@ interface MonthSummaryProps {
   totalOutstanding?: number
   totalAvailableCredit?: number
   nextDueStatement?: { card: CreditCard; statement: CreditCardStatement } | null
+  aggregateUtilization?: { totalBalance: number; totalLimit: number; utilizationPercent: number }
   onNavigateToCards?: () => void
 }
 
@@ -68,6 +69,7 @@ export function MonthSummary({
   totalOutstanding,
   totalAvailableCredit,
   nextDueStatement,
+  aggregateUtilization,
   onNavigateToCards,
 }: MonthSummaryProps) {
   const netPositive = runningBalance >= 0
@@ -175,6 +177,15 @@ export function MonthSummary({
               <article className="cc-stat available">
                 <span className="cc-stat-label">Available credit</span>
                 <strong className="cc-stat-value">{formatMoney(totalAvailableCredit)}</strong>
+              </article>
+            )}
+            {aggregateUtilization && (
+              <article className="cc-stat utilization">
+                <span className="cc-stat-label">Utilization</span>
+                <strong className="cc-stat-value">{aggregateUtilization.utilizationPercent.toFixed(1)}%</strong>
+                <span className="cc-stat-meta">
+                  {formatMoney(aggregateUtilization.totalBalance)} of {formatMoney(aggregateUtilization.totalLimit)} used
+                </span>
               </article>
             )}
             {nextDueStatement && (

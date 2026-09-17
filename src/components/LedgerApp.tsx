@@ -34,6 +34,7 @@ import type { CreditCard, CreditCardInput } from '../types/creditCard'
 import type { SavingsGoal, SavingsGoalInput } from '../types/savingsGoal'
 import type { ThemeMode } from '../lib/theme'
 import type { Transaction, TransactionInput } from '../types/transaction'
+import type { PaymentAllocationPlan } from '../types/creditCard'
 
 /** Heading id to refocus after an Undo restores a deleted item. */
 const UNDO_FOCUS_TARGET: Record<UndoResource, string> = {
@@ -116,6 +117,8 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
     totalOutstanding,
     totalAvailableCredit,
     nextDueStatement,
+    utilizationHistories,
+    aggregateUtilization,
     cardById,
     loading: ccLoading,
     error: ccError,
@@ -137,6 +140,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
   const {
     bills,
     reminders,
+    ccPaymentBills,
     loading: billLoading,
     error: billError,
     add: addBill,
@@ -147,7 +151,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
   const dataLoading = txLoading || billLoading || goalsLoading
 
   const monthBalance = useMemo(() => {
-    const base = computeRunningBalanceForMonth(bills, allTransactions, year, month)
+    const base = computeRunningBalanceForMonth(bills, allTransactions, year, month, ccPaymentBills)
 
     if (!isCurrentMonth) {
       return base
@@ -161,6 +165,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
         year,
         month,
         now.getDate(),
+        ccPaymentBills,
       ),
       monthNet: computeMonthNetThroughDay(
         bills,
@@ -168,13 +173,14 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
         year,
         month,
         now.getDate(),
+        ccPaymentBills,
       ),
     }
-  }, [bills, allTransactions, year, month])
+  }, [bills, allTransactions, ccPaymentBills, year, month, isCurrentMonth, now])
 
   const outlookRows = useMemo(
-    () => buildBalanceOutlook(bills, allTransactions, year, month, 11),
-    [bills, allTransactions, year, month],
+    () => buildBalanceOutlook(bills, allTransactions, year, month, 11, ccPaymentBills),
+    [bills, allTransactions, ccPaymentBills, year, month],
   )
 
   const spendingStats = useMemo(
@@ -341,6 +347,22 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
     }
   }
 
+  async function handleApplyAllocation(plan: PaymentAllocationPlan) {
+    const occurred = new Date(year, month, isCurrentMonth ? now.getDate() : 1, 12, 0, 0, 0)
+    for (const allocation of plan.allocations) {
+      if (allocation.allocatedAmount <= 0) continue
+      await add({
+        type: 'bill',
+        amount: allocation.allocatedAmount,
+        category: 'Credit card payment',
+        description: `Allocated payment to ${allocation.cardName}`,
+        occurredAt: occurred.toISOString(),
+        creditCardId: allocation.cardId,
+        creditCardPayment: true,
+      })
+    }
+  }
+
   async function handleRemoveCard(card: CreditCard) {
     setSaving(true)
     try {
@@ -434,6 +456,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
               totalOutstanding={totalOutstanding}
               totalAvailableCredit={totalAvailableCredit}
               nextDueStatement={nextDueStatement}
+              aggregateUtilization={aggregateUtilization}
               onNavigateToCards={() => {
                 const ccSection = document.getElementById('cc-heading')
                 ccSection?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -452,10 +475,12 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
               month={month}
               reminders={reminders}
               bills={bills}
+              ccPaymentBills={ccPaymentBills}
               allTransactions={allTransactions}
               transactions={transactions}
               onPrev={() => shiftMonth(-1)}
               onNext={() => shiftMonth(1)}
+              onUpdate={updateBill}
             />
 
             <div className="stats-row">
@@ -486,6 +511,8 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
               onUpdate={updateBill}
               onDelete={handleRemoveBill}
               creditCards={activeCards}
+              statements={statements}
+              onApplyAllocation={handleApplyAllocation}
               onMarkPaid={handleMarkPaid}
             />
 
@@ -503,6 +530,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
               cards={cards}
               statements={statements}
               interestProjections={interestProjections}
+              utilizationHistories={utilizationHistories}
               loading={ccLoading}
               error={ccError}
               isCurrentMonth={isCurrentMonth}

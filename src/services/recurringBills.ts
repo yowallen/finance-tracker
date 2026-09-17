@@ -156,6 +156,7 @@ function mapDoc(
       notes,
       active,
       createdAt: toIso(data.createdAt, timestampCtor),
+      creditCardMonths: (data.creditCardMonths as string[] | undefined) ?? undefined,
     },
     needsScheduleMigration,
   }
@@ -268,6 +269,7 @@ export async function createRecurringBill(
     durationUnit: input.durationUnit,
     notes: input.notes.trim(),
     active: input.active ?? true,
+    creditCardMonths: input.creditCardMonths ?? [],
     createdAt: fs.serverTimestamp(),
   })
   return ref.id
@@ -290,6 +292,7 @@ export async function updateRecurringBill(
     durationUnit: input.durationUnit,
     notes: input.notes.trim(),
     active: input.active ?? true,
+    creditCardMonths: input.creditCardMonths ?? [],
   })
 }
 
@@ -417,6 +420,16 @@ export function startOfLocalDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate())
 }
 
+/** Check if a bill is flagged to be paid with credit card for a given month. */
+function isBillPaidWithCreditCardForMonth(
+  bill: RecurringBill,
+  year: number,
+  month: number,
+): boolean {
+  const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`
+  return bill.creditCardMonths?.includes(monthKey) ?? false
+}
+
 export function buildBillReminders(
   bills: RecurringBill[],
   monthTransactions: Transaction[],
@@ -458,6 +471,8 @@ export function buildBillReminders(
         status = 'upcoming'
       }
 
+      const payWithCreditCard = isBillPaidWithCreditCardForMonth(bill, year, month)
+
       return {
         bill,
         dueDate,
@@ -467,6 +482,7 @@ export function buildBillReminders(
         paymentNumber: paymentNumberForMonth(bill, year, month),
         totalPayments: totalPaymentsFor(bill),
         endsOn: endsOnFor(bill),
+        payWithCreditCard,
       }
     })
     .sort((a, b) => {
