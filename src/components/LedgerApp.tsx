@@ -1,17 +1,20 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { BookMarked, LogOut } from 'lucide-react'
 import type { User } from 'firebase/auth'
+import { AnalyticsSection } from './AnalyticsSection'
 import { BillReminders } from './BillReminders'
 import { CreditCards } from './CreditCards'
 import { FinanceCalendar } from './FinanceCalendar'
 import { LoadingState } from './LoadingState'
+import { MobileBottomNav } from './MobileBottomNav'
+import { MonthSelector } from './MonthSelector'
 import { MonthSummary } from './MonthSummary'
+import { QuickActions } from './QuickActions'
 import { SavingsGoals } from './SavingsGoals'
-import { SavingsStats } from './SavingsStats'
-import { SpendingStats } from './SpendingStats'
 import { ThemeToggle } from './ThemeToggle'
 import { TransactionForm } from './TransactionForm'
 import { TransactionList } from './TransactionList'
+import { TransactionSheet } from './TransactionSheet'
 import { UndoToast, type PendingUndo, type UndoResource } from './UndoToast'
 import { useCreditCards } from '../hooks/useCreditCards'
 import { useRecurringBills } from '../hooks/useRecurringBills'
@@ -35,6 +38,8 @@ import type { SavingsGoal, SavingsGoalInput } from '../types/savingsGoal'
 import type { ThemeMode } from '../lib/theme'
 import type { Transaction, TransactionInput } from '../types/transaction'
 import type { PaymentAllocationPlan } from '../types/creditCard'
+import { formatMoney } from '../lib/format'
+import { scrollToSection } from '../lib/scrollToSection'
 
 /** Heading id to refocus after an Undo restores a deleted item. */
 const UNDO_FOCUS_TARGET: Record<UndoResource, string> = {
@@ -86,12 +91,37 @@ function txToInput(tx: Transaction): TransactionInput {
   }
 }
 
+function formatAttentionDue(date: Date): string {
+  return new Intl.DateTimeFormat('en-PH', {
+    month: 'short',
+    day: 'numeric',
+  }).format(date)
+}
+
+function reminderStatusLabel(reminder: BillReminder): string {
+  switch (reminder.status) {
+    case 'paid':
+      return 'Paid'
+    case 'overdue':
+      return `Overdue by ${Math.abs(reminder.daysUntilDue)} day${Math.abs(reminder.daysUntilDue) === 1 ? '' : 's'}`
+    case 'due-soon':
+      return reminder.daysUntilDue === 0
+        ? 'Due today'
+        : `Due in ${reminder.daysUntilDue} day${reminder.daysUntilDue === 1 ? '' : 's'}`
+    case 'unpaid':
+      return 'Not paid'
+    default:
+      return `Due day ${reminder.bill.dueDay}`
+  }
+}
+
 function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
   const now = useMemo(() => new Date(), [])
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth())
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth()
   const [editing, setEditing] = useState<Transaction | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [pendingUndo, setPendingUndo] = useState<PendingUndo | null>(null)
   const undoIdRef = useRef(0)
@@ -149,6 +179,18 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
   } = useRecurringBills(userId, year, month, transactions, cards, statements, allTransactions)
 
   const dataLoading = txLoading || billLoading || goalsLoading
+
+  const attentionReminders = useMemo(
+    () =>
+      reminders
+        .filter((item) => item.status === 'overdue' || item.status === 'due-soon')
+        .slice(0, 3),
+    [reminders],
+  )
+
+  const attentionTone = attentionReminders.some((item) => item.status === 'overdue')
+    ? 'overdue'
+    : 'due-soon'
 
   const monthBalance = useMemo(() => {
     const base = computeRunningBalanceForMonth(bills, allTransactions, year, month, ccPaymentBills)
@@ -246,19 +288,25 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
     [],
   )
 
+  function openTransactionSheet(nextEditing: Transaction | null = null) {
+    setEditing(nextEditing)
+    setSheetOpen(true)
+  }
+
+  function closeTransactionSheet() {
+    setSheetOpen(false)
+    setEditing(null)
+  }
+
   async function handleSubmit(input: TransactionInput) {
     setSaving(true)
     try {
       if (editing) {
         await update(editing.id, input)
-        setEditing(null)
-        // The form remounts back to "Add" mode; anchor keyboard/SR users there.
-        requestAnimationFrame(() => {
-          document.getElementById('form-heading')?.focus()
-        })
       } else {
         await add(input)
       }
+      closeTransactionSheet()
     } finally {
       setSaving(false)
     }
@@ -266,7 +314,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
 
   async function handleDelete(id: string) {
     const target = allTransactions.find((tx) => tx.id === id)
-    if (editing?.id === id) setEditing(null)
+    if (editing?.id === id) closeTransactionSheet()
     setSaving(true)
     try {
       await remove(id)
@@ -410,7 +458,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
             aria-label="Log out"
             title="Log out"
             onClick={() => {
-              setEditing(null)
+              closeTransactionSheet()
               dismissUndo()
               onLogOut()
             }}
@@ -432,6 +480,13 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
       )}
 
       <main className="main" aria-busy={dataLoading || saving}>
+        <MonthSelector
+          year={year}
+          month={month}
+          onPrev={() => shiftMonth(-1)}
+          onNext={() => shiftMonth(1)}
+        />
+
         {dataLoading ? (
           <section className="month-summary">
             <LoadingState variant="page" label="Reloading your ledger…" />
@@ -449,19 +504,13 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
               isCurrentMonth={isCurrentMonth}
               savingsPot={savingsJourney.savedAmount}
               outlookRows={outlookRows}
-              onPrev={() => shiftMonth(-1)}
-              onNext={() => shiftMonth(1)}
               onSelectMonth={selectMonth}
               hasActiveCards={activeCards.length > 0}
               totalOutstanding={totalOutstanding}
               totalAvailableCredit={totalAvailableCredit}
               nextDueStatement={nextDueStatement}
               aggregateUtilization={aggregateUtilization}
-              onNavigateToCards={() => {
-                const ccSection = document.getElementById('cc-heading')
-                ccSection?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                ccSection?.focus()
-              }}
+              onNavigateToCards={() => scrollToSection('credit-cards')}
             />
 
             {txError && (
@@ -470,36 +519,47 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
               </p>
             )}
 
-            <FinanceCalendar
-              year={year}
-              month={month}
-              reminders={reminders}
-              bills={bills}
-              ccPaymentBills={ccPaymentBills}
-              allTransactions={allTransactions}
-              transactions={transactions}
-              onPrev={() => shiftMonth(-1)}
-              onNext={() => shiftMonth(1)}
-              onUpdate={updateBill}
+            {attentionReminders.length > 0 && (
+              <section
+                className={`overview-attention tone-${attentionTone}`}
+                aria-live="polite"
+              >
+                <div className="overview-attention-header">
+                  <h3>Needs attention</h3>
+                  <button type="button" className="text-btn" onClick={() => scrollToSection('reminders')}>
+                    Review bills
+                  </button>
+                </div>
+                <ul>
+                  {attentionReminders.map((item) => (
+                    <li key={item.bill.id} className={`attention-item status-${item.status}`}>
+                      <div className="attention-item-copy">
+                        <span>{item.bill.name}</span>
+                        <small>
+                          {reminderStatusLabel(item)} · {formatAttentionDue(item.actualDueDate ?? item.dueDate)}
+                        </small>
+                      </div>
+                      <strong>{formatMoney(item.bill.amount)}</strong>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            <QuickActions
+              onAddTransaction={() => openTransactionSheet()}
+              onReviewBills={() => scrollToSection('reminders')}
+              onOpenCalendar={() => scrollToSection('calendar')}
+              onOpenHistory={() => scrollToSection('history')}
             />
 
-            <div className="stats-row">
-              <SpendingStats
-                year={year}
-                month={month}
-                stats={spendingStats}
-                history={spendingHistory}
-                onSelectMonth={selectMonth}
-              />
-
-              <SavingsStats
-                year={year}
-                month={month}
-                stats={savingsStats}
-                history={savingsHistory}
-                onSelectMonth={selectMonth}
-              />
-            </div>
+            <TransactionList
+              transactions={transactions}
+              loading={txLoading}
+              onEdit={(tx) => openTransactionSheet(tx)}
+              onDelete={handleDelete}
+              cardById={cardById}
+            />
 
             <BillReminders
               year={year}
@@ -514,6 +574,17 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
               statements={statements}
               onApplyAllocation={handleApplyAllocation}
               onMarkPaid={handleMarkPaid}
+            />
+
+            <FinanceCalendar
+              year={year}
+              month={month}
+              reminders={reminders}
+              bills={bills}
+              ccPaymentBills={ccPaymentBills}
+              allTransactions={allTransactions}
+              transactions={transactions}
+              onUpdate={updateBill}
             />
 
             <SavingsGoals
@@ -539,22 +610,37 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
               onDelete={handleRemoveCard}
             />
 
-            <div className="workspace">
+            <AnalyticsSection
+              year={year}
+              month={month}
+              spendingStats={spendingStats}
+              spendingHistory={spendingHistory}
+              savingsStats={savingsStats}
+              savingsHistory={savingsHistory}
+              onSelectMonth={selectMonth}
+            />
+
+            <TransactionSheet
+              open={sheetOpen}
+              title={editing ? 'Edit transaction' : 'Add transaction'}
+              onClose={closeTransactionSheet}
+            >
               <TransactionForm
                 key={editing?.id ?? 'new'}
                 editing={editing}
+                hideHeading
                 creditCards={activeCards}
                 onSubmit={handleSubmit}
-                onCancelEdit={() => setEditing(null)}
+                onCancelEdit={closeTransactionSheet}
               />
-              <TransactionList
-                transactions={transactions}
-                loading={txLoading}
-                onEdit={setEditing}
-                onDelete={handleDelete}
-                cardById={cardById}
-              />
-            </div>
+            </TransactionSheet>
+
+            <MobileBottomNav
+              onGoOverview={() => scrollToSection('overview')}
+              onGoCalendar={() => scrollToSection('calendar')}
+              onOpenAdd={() => openTransactionSheet()}
+              onGoHistory={() => scrollToSection('history')}
+            />
           </>
         )}
       </main>

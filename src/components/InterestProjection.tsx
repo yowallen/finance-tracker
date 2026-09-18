@@ -24,9 +24,21 @@ function monthLabel(month: number, year: number): string {
   return date.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
 }
 
+function formatAxisMoney(amount: number): string {
+  return new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+    notation: 'compact',
+    maximumFractionDigits: amount >= 1000 ? 1 : 0,
+  }).format(amount)
+}
+
 function formatPercent(value: number): string {
   return `${(value * 100).toFixed(2)}%`
 }
+
+const CHART_HEIGHT = 228
+const CHART_PADDING = { top: 16, right: 16, bottom: 40, left: 48 }
 
 // Focus trap hook for modal accessibility
 function useFocusTrap(isActive: boolean) {
@@ -154,30 +166,39 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
 
   const maxBalance = useMemo(() => {
     const balances = currentProjection.projectedBalances.map(p => p.startingBalance)
-    return Math.max(...balances, projection.currentBalance)
+    return Math.max(...balances, projection.currentBalance, 1)
   }, [currentProjection.projectedBalances, projection.currentBalance])
 
   const savingsAmount = projection.totalInterestIfMinPay - projection.totalInterestIfFixedPay
   const monthsSaved = projection.monthsToPayoffMinPay - projection.monthsToPayoffFixedPay
 
-  // Chart dimensions - responsive
-  const chartHeight = 200
-  const chartPadding = { top: 20, right: 20, bottom: 40, left: 60 }
-
-  // Chart width based on container
   const [chartWidth, setChartWidth] = useState(480)
   const chartContainerRef = useRef<HTMLDivElement>(null)
 
-  // Generate chart path data
-  const chartPath = useMemo(() => {
-    if (currentProjection.projectedBalances.length === 0) return ''
-    const points = currentProjection.projectedBalances.map((p, i) => {
-      const x = chartPadding.left + (i / Math.max(1, currentProjection.projectedBalances.length - 1)) * (chartWidth - chartPadding.left - chartPadding.right)
-      const y = chartPadding.top + (1 - p.endingBalance / maxBalance) * (chartHeight - chartPadding.top - chartPadding.bottom)
-      return { x, y }
-    })
-    return points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
-  }, [currentProjection.projectedBalances, maxBalance, chartWidth, chartPadding.bottom, chartPadding.left, chartPadding.right, chartPadding.top])
+  const chartPoints = useMemo(() => {
+    if (currentProjection.projectedBalances.length === 0) return []
+    const count = Math.max(1, currentProjection.projectedBalances.length - 1)
+    const plotWidth = chartWidth - CHART_PADDING.left - CHART_PADDING.right
+    const plotHeight = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom
+    return currentProjection.projectedBalances.map((point, index) => ({
+      x: CHART_PADDING.left + (index / count) * plotWidth,
+      y: CHART_PADDING.top + (1 - point.endingBalance / maxBalance) * plotHeight,
+      data: point,
+    }))
+  }, [currentProjection.projectedBalances, maxBalance, chartWidth])
+
+  const chartPath = useMemo(
+    () => chartPoints.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' '),
+    [chartPoints],
+  )
+
+  const chartAreaPath = useMemo(() => {
+    if (chartPoints.length === 0) return ''
+    const first = chartPoints[0]
+    const last = chartPoints[chartPoints.length - 1]
+    const baseline = CHART_HEIGHT - CHART_PADDING.bottom
+    return `M ${first.x} ${baseline} ${chartPoints.map((point) => `L ${point.x} ${point.y}`).join(' ')} L ${last.x} ${baseline} Z`
+  }, [chartPoints])
 
   useEffect(() => {
     const resizeObserver = new ResizeObserver((entries) => {
@@ -191,34 +212,33 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
     return () => resizeObserver.disconnect()
   }, [])
 
-  // Generate x-axis labels
   const xAxisLabels = useMemo(() => {
-    if (currentProjection.projectedBalances.length === 0) return []
-    const step = Math.max(1, Math.ceil(currentProjection.projectedBalances.length / 6))
-    return currentProjection.projectedBalances
-      .filter((_, idx) => idx % step === 0)
-      .map((p, idx) => ({
-        month: p.month,
-        year: p.year,
-        label: monthLabel(p.month % 12, p.year),
-        x: chartPadding.left + (idx * step / Math.max(1, currentProjection.projectedBalances.length - 1)) * (chartWidth - chartPadding.left - chartPadding.right),
+    if (chartPoints.length === 0) return []
+    const step = Math.max(1, Math.ceil(chartPoints.length / 6))
+    return chartPoints
+      .filter((_, index) => index % step === 0 || index === chartPoints.length - 1)
+      .map((point) => ({
+        month: point.data.month,
+        year: point.data.year,
+        label: monthLabel(point.data.month % 12, point.data.year),
+        x: point.x,
       }))
-  }, [currentProjection.projectedBalances, chartWidth, chartPadding.left, chartPadding.right])
+  }, [chartPoints])
 
-  // Generate y-axis labels
   const yAxisLabels = useMemo(() => {
+    const plotHeight = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom
     return [0, 0.25, 0.5, 0.75, 1].map((ratio) => ({
-      value: formatMoney(maxBalance * ratio),
-      y: chartPadding.top + (1 - ratio) * (chartHeight - chartPadding.top - chartPadding.bottom),
+      value: formatAxisMoney(maxBalance * ratio),
+      y: CHART_PADDING.top + (1 - ratio) * plotHeight,
     }))
-  }, [maxBalance, chartPadding.bottom, chartPadding.top])
+  }, [maxBalance])
 
-  // Generate grid lines
   const gridLines = useMemo(() => {
+    const plotHeight = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom
     return [0, 0.25, 0.5, 0.75, 1].map((ratio) => ({
-      y: chartPadding.top + ratio * (chartHeight - chartPadding.top - chartPadding.bottom),
+      y: CHART_PADDING.top + ratio * plotHeight,
     }))
-  }, [chartPadding.bottom, chartPadding.top])
+  }, [])
 
   return (
     <div
@@ -302,9 +322,13 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
           {/* Fixed Payment Input */}
           {viewMode === 'fixed' && (
             <div className="ip-fixed-input">
-              <label className="ip-fixed-label">
-                <span>Monthly payment amount:</span>
+              <label className="ip-fixed-label" htmlFor="ip-fixed-amount">
+                Monthly payment amount
+              </label>
+              <div className="ip-fixed-field">
+                <span className="ip-fixed-prefix" aria-hidden="true">₱</span>
                 <input
+                  id="ip-fixed-amount"
                   type="number"
                   inputMode="decimal"
                   min="100"
@@ -314,7 +338,7 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
                   className="ip-fixed-input-field"
                   aria-label="Fixed monthly payment amount in pesos"
                 />
-              </label>
+              </div>
             </div>
           )}
 
@@ -353,15 +377,12 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
                 <p className="ip-comparison-months">{projection.monthsToPayoffFixedPay} months</p>
               </div>
               <div className="ip-comparison-savings">
-                <TrendingDown className="ip-savings-icon" aria-hidden="true" />
-                <div className="ip-savings-details">
-                  <span>
-                    Save <strong>{formatMoney(savingsAmount)}</strong> in interest
-                  </span>
-                  <span>
-                    Pay off <strong>{monthsSaved}</strong> months faster
-                  </span>
-                </div>
+                <h4>
+                  <TrendingDown className="ip-savings-icon" aria-hidden="true" />
+                  You save
+                </h4>
+                <p className="ip-comparison-interest">{formatMoney(savingsAmount)}</p>
+                <p className="ip-comparison-months">{monthsSaved} months faster</p>
               </div>
             </div>
           </div>
@@ -426,75 +447,67 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
                 role="img"
                 aria-label={`Line chart showing balance projection from ${formatMoney(projection.currentBalance)} to ${formatMoney(currentProjection.projectedBalances[currentProjection.projectedBalances.length - 1]?.endingBalance ?? 0)} over ${currentProjection.projectedBalances.length} months`}
               >
-                <svg width="100%" height={chartHeight} viewBox={`0 0 ${chartWidth} ${chartHeight}`}>
-                  {/* Grid lines */}
+                <svg
+                  width="100%"
+                  viewBox={`0 0 ${chartWidth} ${CHART_HEIGHT}`}
+                  preserveAspectRatio="xMidYMid meet"
+                >
                   <g className="ip-chart-grid" stroke="var(--line)" strokeWidth="0.5">
                     {gridLines.map((line, i) => (
                       <line
                         key={i}
-                        x1={chartPadding.left}
+                        x1={CHART_PADDING.left}
                         y1={line.y}
-                        x2={chartWidth - chartPadding.right}
+                        x2={chartWidth - CHART_PADDING.right}
                         y2={line.y}
                       />
                     ))}
                   </g>
 
-                  {/* Y-axis labels */}
                   <g className="ip-chart-y-labels" fontSize="11" fill="var(--muted)" textAnchor="end" dominantBaseline="middle">
                     {yAxisLabels.map((label, i) => (
-                      <text key={i} x={chartPadding.left - 8} y={label.y}>
+                      <text key={i} x={CHART_PADDING.left - 8} y={label.y}>
                         {label.value}
                       </text>
                     ))}
                   </g>
 
-                  {/* X-axis labels */}
                   <g className="ip-chart-x-labels" fontSize="11" fill="var(--muted)" textAnchor="middle" dominantBaseline="hanging">
                     {xAxisLabels.map((label) => (
-                      <text key={label.month} x={label.x} y={chartHeight - chartPadding.bottom + 8}>
+                      <text key={`${label.year}-${label.month}`} x={label.x} y={CHART_HEIGHT - CHART_PADDING.bottom + 10}>
                         {label.label}
                       </text>
                     ))}
                   </g>
 
-                  {/* X-axis line */}
                   <line
-                    x1={chartPadding.left}
-                    y1={chartHeight - chartPadding.bottom}
-                    x2={chartWidth - chartPadding.right}
-                    y2={chartHeight - chartPadding.bottom}
+                    x1={CHART_PADDING.left}
+                    y1={CHART_HEIGHT - CHART_PADDING.bottom}
+                    x2={chartWidth - CHART_PADDING.right}
+                    y2={CHART_HEIGHT - CHART_PADDING.bottom}
                     stroke="var(--line)"
                     strokeWidth="1"
                   />
 
-                  {/* Y-axis line */}
                   <line
-                    x1={chartPadding.left}
-                    y1={chartPadding.top}
-                    x2={chartPadding.left}
-                    y2={chartHeight - chartPadding.bottom}
+                    x1={CHART_PADDING.left}
+                    y1={CHART_PADDING.top}
+                    x2={CHART_PADDING.left}
+                    y2={CHART_HEIGHT - CHART_PADDING.bottom}
                     stroke="var(--line)"
                     strokeWidth="1"
                   />
 
-                  {/* Area under curve (optional subtle fill) */}
-                  {currentProjection.projectedBalances.length > 0 && (
+                  {chartAreaPath && (
                     <path
                       className="ip-chart-area"
-                      d={[
-                        `M ${chartPadding.left} ${chartHeight - chartPadding.bottom}`,
-                        chartPath,
-                        `L ${chartWidth - chartPadding.right} ${chartHeight - chartPadding.bottom}`,
-                        'Z',
-                      ].join(' ')}
+                      d={chartAreaPath}
                       fill="var(--accent-soft)"
-                      opacity="0.3"
+                      opacity="0.35"
                     />
                   )}
 
-                  {/* Balance line */}
-                  {currentProjection.projectedBalances.length > 0 && (
+                  {chartPath && (
                     <path
                       className="ip-chart-line"
                       d={chartPath}
@@ -506,32 +519,21 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
                     />
                   )}
 
-                  {/* Data points */}
-                  {currentProjection.projectedBalances.map((p, i) => {
-                    const x = chartPadding.left + (i / Math.max(1, currentProjection.projectedBalances.length - 1)) * (chartWidth - chartPadding.left - chartPadding.right)
-                    const y = chartPadding.top + (1 - p.endingBalance / maxBalance) * (chartHeight - chartPadding.top - chartPadding.bottom)
-                    return (
-                      <circle
-                        key={i}
-                        className="ip-chart-point"
-                        cx={x}
-                        cy={y}
-                        r="5"
-                        fill="var(--accent)"
-                        stroke="var(--surface)"
-                        strokeWidth="2"
-                        tabIndex={0}
-                        role="button"
-                        aria-label={`${monthLabel(p.month % 12, p.year)}: Balance ${formatMoney(p.endingBalance)}, Interest ${formatMoney(p.interestCharged)}, Payment ${formatMoney(p.payment)}`}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            // Could show tooltip here
-                          }
-                        }}
-                      />
-                    )
-                  })}
+                  {chartPoints.map((point) => (
+                    <circle
+                      key={`${point.data.year}-${point.data.month}`}
+                      className="ip-chart-point"
+                      cx={point.x}
+                      cy={point.y}
+                      r="4.5"
+                      fill="var(--accent)"
+                      stroke="var(--surface)"
+                      strokeWidth="2"
+                      tabIndex={0}
+                      role="img"
+                      aria-label={`${monthLabel(point.data.month % 12, point.data.year)}: Balance ${formatMoney(point.data.endingBalance)}, Interest ${formatMoney(point.data.interestCharged)}, Payment ${formatMoney(point.data.payment)}`}
+                    />
+                  ))}
                 </svg>
                 <p className="ip-chart-caption">
                   Line shows ending balance each month. Assumes no new charges.

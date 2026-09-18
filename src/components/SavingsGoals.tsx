@@ -225,10 +225,10 @@ export function SavingsGoals({
   const submitLabel = busy ? 'Saving…' : editing ? 'Save stop' : 'Add stop'
 
   return (
-    <section className="savings-goals" aria-labelledby="savings-heading">
+    <section id="savings" className="savings-goals" aria-labelledby="savings-heading">
       <div className="reminders-header">
         <div>
-          <h2 id="savings-heading" className="section-title">
+          <h2 id="savings-heading" tabIndex={-1} className="section-title">
             <MapPinned className="section-icon" aria-hidden="true" />
             Savings track
           </h2>

@@ -224,7 +224,7 @@ export function CreditCards({
   }).length
 
   return (
-    <section className="cc-section" aria-labelledby="cc-heading">
+    <section id="credit-cards" className="cc-section" aria-labelledby="cc-heading">
       <div className="cc-header">
         <div>
           <h2 ref={headingRef} id="cc-heading" tabIndex={-1} className="section-title">
@@ -319,6 +319,7 @@ export function CreditCards({
                         <div className="cc-card-heading">
                           <h4 className="cc-card-name">{card.name}</h4>
                           <p className="cc-card-number">**** **** **** {card.lastFour}</p>
+                          <span className={`cc-status ${status.tone}`}>{status.label}</span>
                         </div>
                       </div>
                       <div className="cc-card-actions">
@@ -353,7 +354,6 @@ export function CreditCards({
                             {formatMoney(statement.statementBalance)}
                           </strong>
                         </div>
-                        <span className={`cc-status ${status.tone}`}>{status.label}</span>
                       </div>
 
                       <div className="cc-card-stats">

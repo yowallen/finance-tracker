@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarDays, ChevronLeft, ChevronRight, CreditCard } from 'lucide-react'
+import { CalendarDays, CreditCard } from 'lucide-react'
 import { formatMoney, formatDate, monthLabel } from '../lib/format'
 import {
   computeAverageDailyBalance,
@@ -20,8 +20,6 @@ interface FinanceCalendarProps {
   transactions: Transaction[]
   bills: RecurringBill[]
   ccPaymentBills: CreditCardPaymentBill[]
-  onPrev: () => void
-  onNext: () => void
   onUpdate: (id: string, input: RecurringBillInput) => Promise<void>
 }
 
@@ -106,8 +104,6 @@ export function FinanceCalendar({
   transactions,
   bills,
   ccPaymentBills,
-  onPrev,
-  onNext,
   onUpdate,
 }: FinanceCalendarProps) {
   const today = new Date()
@@ -205,19 +201,13 @@ export function FinanceCalendar({
   }
 
   return (
-    <section className="finance-calendar" aria-labelledby="calendar-heading">
+    <section id="calendar" className="finance-calendar" aria-labelledby="calendar-heading">
       <div className="calendar-header">
         <div className="month-nav">
-          <button type="button" className="icon-btn" onClick={onPrev} aria-label="Previous month">
-            <ChevronLeft aria-hidden="true" />
-          </button>
-          <h2 id="calendar-heading" className="section-title">
+          <h2 id="calendar-heading" tabIndex={-1} className="section-title">
             <CalendarDays className="section-icon" aria-hidden="true" />
-            {monthLabel(year, month)}
+            Calendar
           </h2>
-          <button type="button" className="icon-btn" onClick={onNext} aria-label="Next month">
-            <ChevronRight aria-hidden="true" />
-          </button>
         </div>
         <p className="calendar-legend">
           <span className="legend-dot bill" />Bill due
@@ -313,7 +303,7 @@ export function FinanceCalendar({
             <ul className="calendar-detail-list">
               {selected.bills.map((bill) => (
                 <li key={`bill-${bill.bill.id}`} className={`calendar-detail-item bill status-${bill.status}`}>
-                  <div>
+                  <div className="calendar-detail-main">
                     <span className={`reminder-status status-${bill.status}`}>{statusShort(bill)}</span>
                     <p className="tx-desc">{bill.bill.name}</p>
                     <p className="reminder-due">
@@ -322,7 +312,7 @@ export function FinanceCalendar({
                         : `Bill due · Payment ${bill.paymentNumber}/${bill.totalPayments}`}
                     </p>
                   </div>
-                  <div className="calendar-detail-actions" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div className="calendar-detail-actions">
                     <strong className={`tx-amount ${bill.status === 'paid' ? 'bill' : 'bill'}`}>
                       {bill.status === 'paid' ? '−' : ''}
                       {formatMoney(bill.bill.amount)}
@@ -362,17 +352,19 @@ export function FinanceCalendar({
                 const amountClass = isInflow ? 'income' : tx.type === 'bill' ? 'bill' : tx.type
                 return (
                 <li key={`tx-${tx.id}`} className={`calendar-detail-item ${tx.type}`}>
-                  <div>
+                  <div className="calendar-detail-main">
                     <span className={`tx-type-badge ${tx.type}`}>{tx.type}</span>
                     <p className="tx-desc">{tx.description.trim() || tx.category}</p>
                     <time className="tx-when" dateTime={tx.occurredAt}>
                       {formatDate(tx.occurredAt)}
                     </time>
                   </div>
-                  <strong className={`tx-amount ${amountClass}`}>
-                    {isInflow ? '+' : tx.type === 'bill' ? '−' : '−'}
-                    {formatMoney(tx.amount)}
-                  </strong>
+                  <div className="calendar-detail-actions">
+                    <strong className={`tx-amount ${amountClass}`}>
+                      {isInflow ? '+' : tx.type === 'bill' ? '−' : '−'}
+                      {formatMoney(tx.amount)}
+                    </strong>
+                  </div>
                 </li>
                 )
               })}

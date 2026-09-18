@@ -1,7 +1,5 @@
 import { useState } from 'react'
 import {
-  ChevronLeft,
-  ChevronRight,
   CreditCard as CreditCardIcon,
   PiggyBank,
   Receipt,
@@ -12,7 +10,7 @@ import {
 import { BalanceOutlook } from './BalanceOutlook'
 import type { MonthBalanceOutlook } from '../services/balanceOutlook'
 import type { MonthlySummary } from '../types/transaction'
-import { formatMoney, monthLabel } from '../lib/format'
+import { formatMoney } from '../lib/format'
 import type { CreditCard, CreditCardStatement } from '../types/creditCard'
 
 const OUTLOOK_STORAGE_KEY = 'ledger.showBalanceOutlook'
@@ -30,8 +28,6 @@ interface MonthSummaryProps {
   /** Total currently in the shared savings pot. */
   savingsPot: number
   outlookRows: MonthBalanceOutlook[]
-  onPrev: () => void
-  onNext: () => void
   onSelectMonth: (year: number, month: number) => void
   /** Whether the user has at least one active credit card. */
   hasActiveCards: boolean
@@ -62,8 +58,6 @@ export function MonthSummary({
   isCurrentMonth,
   savingsPot,
   outlookRows,
-  onPrev,
-  onNext,
   onSelectMonth,
   hasActiveCards,
   totalOutstanding,
@@ -95,18 +89,28 @@ export function MonthSummary({
   }
 
   return (
-    <section className="month-summary" aria-labelledby="month-heading">
+    <section id="overview" className="month-summary" aria-labelledby="month-heading">
       <div className="month-nav">
-        <button type="button" className="icon-btn" onClick={onPrev} aria-label="Previous month">
-          <ChevronLeft aria-hidden="true" />
-        </button>
-        <h2 id="month-heading">{monthLabel(year, month)}</h2>
-        <button type="button" className="icon-btn" onClick={onNext} aria-label="Next month">
-          <ChevronRight aria-hidden="true" />
-        </button>
+        <h2 id="month-heading" tabIndex={-1}>Overview</h2>
       </div>
 
       <div className="summary-grid">
+        <article className={`stat net ${netPositive ? 'positive' : 'negative'}`}>
+          <span className="stat-label">
+            <Wallet className="stat-icon" aria-hidden="true" />
+            Running balance
+          </span>
+          <strong className="stat-value">{formatMoney(runningBalance)}</strong>
+          <span className="stat-meta">
+            {isCurrentMonth ? 'So far this month' : 'This month'} {formatMoney(monthNet)} · carries over from prior months
+          </span>
+          {savingsPot > 0 && (
+            <span className="stat-meta savings-earmark">
+              <PiggyBank className="stat-icon" aria-hidden="true" />
+              In savings {formatMoney(savingsPot)}
+            </span>
+          )}
+        </article>
         <article className="stat income">
           <span className="stat-label">
             <TrendingUp className="stat-icon" aria-hidden="true" />
@@ -130,22 +134,6 @@ export function MonthSummary({
           {unpaidCount > 0 && (
             <span className="stat-meta">
               {formatMoney(unpaidScheduledBills)} unpaid upcoming
-            </span>
-          )}
-        </article>
-        <article className={`stat net ${netPositive ? 'positive' : 'negative'}`}>
-          <span className="stat-label">
-            <Wallet className="stat-icon" aria-hidden="true" />
-            Running balance
-          </span>
-          <strong className="stat-value">{formatMoney(runningBalance)}</strong>
-          <span className="stat-meta">
-            {isCurrentMonth ? 'So far this month' : 'This month'} {formatMoney(monthNet)} · carries over from prior months
-          </span>
-          {savingsPot > 0 && (
-            <span className="stat-meta savings-earmark">
-              <PiggyBank className="stat-icon" aria-hidden="true" />
-              In savings {formatMoney(savingsPot)}
             </span>
           )}
         </article>

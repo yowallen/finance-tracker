@@ -11,10 +11,21 @@ function formatMonth(date: string): string {
   return new Intl.DateTimeFormat('en-PH', { month: 'short' }).format(new Date(date))
 }
 
-function trendLabel(trend: UtilizationHistory['trend']): string {
-  if (trend === 'improving') return 'Improving'
-  if (trend === 'worsening') return 'Worsening'
-  return 'Stable'
+function chartScaleMax(values: number[]): number {
+  const peak = Math.max(0, ...values)
+  if (peak <= 22) return 30
+  if (peak <= 42) return 50
+  return 100
+}
+
+function trendCopy(
+  trend: UtilizationHistory['trend'],
+  currentUtilization: number,
+): { label: string; tone: 'improving' | 'stable' | 'worsening' | 'rising' } {
+  if (trend === 'improving') return { label: 'Improving', tone: 'improving' }
+  if (trend === 'worsening' && currentUtilization < 30) return { label: 'Rising', tone: 'rising' }
+  if (trend === 'worsening') return { label: 'Worsening', tone: 'worsening' }
+  return { label: 'Stable', tone: 'stable' }
 }
 
 const TrendIcon = ({ trend }: { trend: UtilizationHistory['trend'] }) => {
@@ -51,7 +62,7 @@ export function UtilizationChart({ history }: UtilizationChartProps) {
       if (!reducedMotion) {
         content.style.height = '0px'
         // Force reflow
-        content.offsetHeight
+        void content.offsetHeight
         content.style.height = `${height}px`
       } else {
         content.style.height = `${height}px`
@@ -60,7 +71,7 @@ export function UtilizationChart({ history }: UtilizationChartProps) {
       const height = content.scrollHeight
       content.style.height = `${height}px`
       // Force reflow
-      content.offsetHeight
+      void content.offsetHeight
       if (!reducedMotion) {
         content.style.height = '0px'
       } else {
@@ -86,10 +97,12 @@ export function UtilizationChart({ history }: UtilizationChartProps) {
   }, [isOpen, reducedMotion])
 
   const values = history.snapshots.map((snapshot) => snapshot.utilizationPercent)
-  const maxValue = Math.max(100, ...values)
+  const maxValue = chartScaleMax(values)
+  const thresholds = [30, 50].filter((threshold) => threshold <= maxValue)
+  const trend = trendCopy(history.trend, history.currentUtilization)
   const chartWidth = 520
-  const chartHeight = 150
-  const padding = { top: 12, right: 12, bottom: 28, left: 12 }
+  const chartHeight = 168
+  const padding = { top: 18, right: 36, bottom: 32, left: 8 }
   const usableWidth = chartWidth - padding.left - padding.right
   const usableHeight = chartHeight - padding.top - padding.bottom
 
@@ -102,16 +115,16 @@ export function UtilizationChart({ history }: UtilizationChartProps) {
   const path = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')
 
   return (
-    <details className="utilization-panel" open={isOpen} onToggle={() => setIsOpen(!isOpen)}>
+    <details className="utilization-panel" open={isOpen} onToggle={() => setIsOpen((value) => !value)}>
       <summary ref={summaryRef} className="utilization-panel-summary" aria-expanded={isOpen}>
         <div className="utilization-panel-header">
           <div>
             <h4 className="utilization-panel-title">Utilization history</h4>
             <p className="utilization-panel-subtitle">Last {history.snapshots.length} statement cycles</p>
           </div>
-          <span className={`utilization-trend ${history.trend}`}>
+          <span className={`utilization-trend ${trend.tone}`}>
             <TrendIcon trend={history.trend} />
-            {trendLabel(history.trend)}
+            {trend.label}
           </span>
         </div>
         <div className="utilization-metrics">
@@ -127,7 +140,7 @@ export function UtilizationChart({ history }: UtilizationChartProps) {
       </summary>
 
       <div ref={contentRef} className="utilization-panel-content" style={{ overflow: 'hidden' }}>
-        <div className="utilization-chart-wrap" style={{ paddingTop: '0.55rem' }}>
+        <div className="utilization-chart-wrap">
           {history.snapshots.length > 0 ? (
             <svg
               className="utilization-chart"
@@ -135,12 +148,25 @@ export function UtilizationChart({ history }: UtilizationChartProps) {
               role="img"
               aria-label={`${history.cardName} utilization history. Current ${history.currentUtilization.toFixed(1)} percent.`}
             >
-              {[30, 50].map((threshold) => {
+              {[0, ...thresholds].map((threshold) => {
                 const y = padding.top + (1 - threshold / maxValue) * usableHeight
                 return (
                   <g key={threshold}>
-                    <line x1={padding.left} x2={chartWidth - padding.right} y1={y} y2={y} className={`utilization-threshold threshold-${threshold}`} />
-                    <text x={chartWidth - padding.right} y={y - 3} textAnchor="end" className="utilization-threshold-label">{threshold}%</text>
+                    <line
+                      x1={padding.left}
+                      x2={chartWidth - padding.right}
+                      y1={y}
+                      y2={y}
+                      className={`utilization-threshold threshold-${threshold}`}
+                    />
+                    <text
+                      x={chartWidth - padding.right}
+                      y={y - 4}
+                      textAnchor="end"
+                      className="utilization-threshold-label"
+                    >
+                      {threshold}%
+                    </text>
                   </g>
                 )
               })}

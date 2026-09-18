@@ -291,7 +291,7 @@ export function BillReminders({
   const submitLabel = busy ? 'Saving…' : editing ? 'Save bill' : 'Add reminder'
 
   return (
-    <section className="bill-reminders" aria-labelledby="reminders-heading">
+    <section id="reminders" className="bill-reminders" aria-labelledby="reminders-heading">
       <div className="reminders-header">
         <div>
           <h2 id="reminders-heading" tabIndex={-1} className="section-title">

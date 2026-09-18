@@ -24,6 +24,7 @@ interface TransactionFormProps {
   creditCards: CreditCard[]
   onSubmit: (input: TransactionInput) => Promise<void>
   onCancelEdit: () => void
+  hideHeading?: boolean
 }
 
 /** Types offered when creating a new transaction (savings comes from elsewhere). */
@@ -76,6 +77,7 @@ export function TransactionForm({
   creditCards,
   onSubmit,
   onCancelEdit,
+  hideHeading = false,
 }: TransactionFormProps) {
   const initial = createInitialState(editing)
   const [type, setType] = useState<TransactionType>(initial.type)
@@ -156,15 +158,20 @@ export function TransactionForm({
       : 'Add entry'
 
   return (
-    <section className="tx-form-section" aria-labelledby="form-heading">
-      <h2 id="form-heading" tabIndex={-1} className="section-title">
-        {editing ? (
-          <Pencil className="section-icon" aria-hidden="true" />
-        ) : (
-          <PlusCircle className="section-icon" aria-hidden="true" />
-        )}
-        {editing ? 'Edit transaction' : 'Add transaction'}
-      </h2>
+    <section
+      className={`tx-form-section${hideHeading ? ' tx-form-section--embedded' : ''}`}
+      {...(hideHeading ? {} : { 'aria-labelledby': 'form-heading' })}
+    >
+      {!hideHeading && (
+        <h2 id="form-heading" tabIndex={-1} className="section-title">
+          {editing ? (
+            <Pencil className="section-icon" aria-hidden="true" />
+          ) : (
+            <PlusCircle className="section-icon" aria-hidden="true" />
+          )}
+          {editing ? 'Edit transaction' : 'Add transaction'}
+        </h2>
+      )}
 
       <form className="tx-form" onSubmit={handleSubmit}>
         {types.length > 1 && (
@@ -222,6 +229,7 @@ export function TransactionForm({
               min="0.01"
               step="0.01"
               required
+              autoFocus
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"

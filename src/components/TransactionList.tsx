@@ -292,7 +292,7 @@ export function TransactionList({
   }
 
   return (
-    <section className="tx-list-section" aria-labelledby="list-heading">
+    <section id="history" className="tx-list-section" aria-labelledby="list-heading">
       <div className="tx-list-header">
         <h2 ref={headingRef} id="list-heading" tabIndex={-1} className="section-title">
           <List className="section-icon" aria-hidden="true" />
@@ -347,7 +347,7 @@ export function TransactionList({
         <LoadingState variant="section" label="Loading transactions…" />
       ) : sortedTransactions.length === 0 ? (
         <p className="empty-state">
-          No transactions this month yet. Add an expense or income above.
+          No transactions this month yet. Use Add to record an expense or income.
         </p>
       ) : (
         <ul ref={listRef} className="tx-list" role="list">
