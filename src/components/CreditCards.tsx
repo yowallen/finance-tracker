@@ -476,7 +476,13 @@ export function CreditCards({
                             Cycle
                           </span>
                           <strong>
-                            {formatDate(new Date(statement.statementDate.getFullYear(), statement.statementDate.getMonth(), Math.max(1, card.statementDay + 1)).toISOString())}
+                            {formatDate(
+                              new Date(
+                                statement.statementDate.getFullYear(),
+                                statement.statementDate.getMonth() - 1,
+                                card.statementDay + 1,
+                              ).toISOString(),
+                            )}
                             {' – '}
                             {formatDate(statement.statementDate.toISOString())}
                           </strong>
