@@ -1,6 +1,7 @@
 import { getFirestoreClient } from '../lib/firebase'
 import type { Timestamp, Unsubscribe } from 'firebase/firestore'
 import type {
+  CashbackRule,
   CreditCard,
   CreditCardInput,
   CreditCardStatement,
@@ -26,38 +27,113 @@ function toIso(value: unknown, timestampCtor: typeof Timestamp): string {
   return new Date().toISOString()
 }
 
+function coerceNumeric(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) {
+      return parsed
+    }
+  }
+
+  return undefined
+}
+
+function coerceStringArray(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) {
+    const items = value
+      .map((item) => (typeof item === 'string' ? item.trim() : String(item).trim()))
+      .filter(Boolean)
+    return items.length > 0 ? items : undefined
+  }
+
+  if (typeof value === 'string') {
+    const items = value
+      .split(/[;,]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+    return items.length > 0 ? items : undefined
+  }
+
+  return undefined
+}
+
+function normalizeLegacyCashbackRules(value: unknown): CreditCard['cashbackRules'] | undefined {
+  if (value === undefined || value === null) {
+    return undefined
+  }
+
+  const bucket = Array.isArray(value) ? value : [value]
+  const normalized: CashbackRule[] = []
+
+  for (const rule of bucket) {
+    if (!rule || typeof rule !== 'object') {
+      continue
+    }
+
+    const rawRate = coerceNumeric((rule as Record<string, unknown>).rate) ?? coerceNumeric((rule as Record<string, unknown>).value)
+    const rawCategories = coerceStringArray((rule as Record<string, unknown>).categories)
+      ?? coerceStringArray((rule as Record<string, unknown>).category)
+      ?? (() => {
+        const label = (rule as Record<string, unknown>).label
+        if (typeof label === 'string') {
+          return [label]
+        }
+        return undefined
+      })()
+
+    if (rawRate === undefined || rawCategories === undefined || rawCategories.length === 0) {
+      continue
+    }
+
+    normalized.push({
+      id: typeof (rule as Record<string, unknown>).id === 'string' ? String((rule as Record<string, unknown>).id) : undefined,
+      label: typeof (rule as Record<string, unknown>).label === 'string' ? String((rule as Record<string, unknown>).label) : undefined,
+      rate: rawRate,
+      categories: rawCategories,
+    })
+  }
+
+  return normalized.length > 0 ? normalized : undefined
+}
+
 function mapDoc(
   id: string,
   data: Record<string, unknown>,
   timestampCtor: typeof Timestamp,
 ): CreditCard | null {
-  const userId = data.userId
-  const name = data.name
-  const lastFour = data.lastFour
-  const limit = data.limit
-  const statementDay = data.statementDay
-  const dueDay = data.dueDay
-  const dueDayOffset = data.dueDayOffset
-  const color = data.color
+  const userId = typeof data.userId === 'string' ? data.userId : undefined
+  const name = typeof data.name === 'string' ? data.name : undefined
+  const lastFour = typeof data.lastFour === 'string' ? data.lastFour : undefined
+  const limit = coerceNumeric(data.limit)
+  const statementDay = coerceNumeric(data.statementDay)
+  const dueDay = coerceNumeric(data.dueDay)
+  const dueDayOffset = coerceNumeric(data.dueDayOffset)
+  const color = typeof data.color === 'string' ? data.color : undefined
   const active = data.active
-  const apr = data.apr
-  const interestCalculationMethod = data.interestCalculationMethod
-  const gracePeriodDays = data.gracePeriodDays
-  const minimumPaymentOverride = data.minimumPaymentOverride
+  const apr = coerceNumeric(data.apr)
+  const interestCalculationMethod = typeof data.interestCalculationMethod === 'string' ? data.interestCalculationMethod : undefined
+  const gracePeriodDays = coerceNumeric(data.gracePeriodDays)
+  const minimumPaymentOverride = coerceNumeric(data.minimumPaymentOverride)
+  const rewardName = typeof data.rewardName === 'string' ? data.rewardName : undefined
+  const cashbackRate = coerceNumeric(data.cashbackRate)
+  const cashbackCap = coerceNumeric(data.cashbackCap)
+  const cashbackStartingBalance = coerceNumeric(data.cashbackStartingBalance)
+  const cashbackMinSpend = coerceNumeric(data.cashbackMinSpend)
+  const cashbackCategories = coerceStringArray(data.cashbackCategories)
+  const cashbackRules = normalizeLegacyCashbackRules(data.cashbackRules)
 
   if (
-    typeof userId !== 'string' ||
-    typeof name !== 'string' ||
-    typeof lastFour !== 'string' ||
-    typeof limit !== 'number' ||
-    typeof statementDay !== 'number' ||
-    (dueDay === undefined && typeof dueDayOffset !== 'number') ||
-    (dueDay !== undefined && typeof dueDay !== 'number') ||
-    (color !== undefined && typeof color !== 'string') ||
-    (apr !== undefined && typeof apr !== 'number') ||
-    (interestCalculationMethod !== undefined && typeof interestCalculationMethod !== 'string') ||
-    (gracePeriodDays !== undefined && typeof gracePeriodDays !== 'number') ||
-    (minimumPaymentOverride !== undefined && typeof minimumPaymentOverride !== 'number')
+    !userId ||
+    !name ||
+    !lastFour ||
+    limit === undefined ||
+    statementDay === undefined ||
+    (dueDay === undefined && dueDayOffset === undefined) ||
+    (typeof color !== 'undefined' && !color)
   ) {
     return null
   }
@@ -69,18 +145,64 @@ function mapDoc(
     lastFour,
     limit,
     statementDay,
-    ...(typeof dueDay === 'number' ? { dueDay } : {}),
-    ...(typeof dueDayOffset === 'number' ? { dueDayOffset } : {}),
-    ...(typeof color === 'string' ? { color } : {}),
-    ...(typeof apr === 'number' ? { apr } : {}),
-    ...(typeof interestCalculationMethod === 'string' && (interestCalculationMethod === 'daily' || interestCalculationMethod === 'monthly')
+    ...(dueDay !== undefined ? { dueDay } : {}),
+    ...(dueDayOffset !== undefined ? { dueDayOffset } : {}),
+    ...(color ? { color } : {}),
+    ...(apr !== undefined ? { apr } : {}),
+    ...(interestCalculationMethod && (interestCalculationMethod === 'daily' || interestCalculationMethod === 'monthly')
       ? { interestCalculationMethod }
       : {}),
-    ...(typeof gracePeriodDays === 'number' ? { gracePeriodDays } : {}),
-    ...(typeof minimumPaymentOverride === 'number' ? { minimumPaymentOverride } : {}),
+    ...(gracePeriodDays !== undefined ? { gracePeriodDays } : {}),
+    ...(minimumPaymentOverride !== undefined ? { minimumPaymentOverride } : {}),
+    ...(rewardName ? { rewardName } : {}),
+    ...(cashbackRate !== undefined ? { cashbackRate } : {}),
+    ...(cashbackCap !== undefined ? { cashbackCap } : {}),
+    ...(cashbackStartingBalance !== undefined ? { cashbackStartingBalance } : {}),
+    ...(cashbackMinSpend !== undefined ? { cashbackMinSpend } : {}),
+    ...(cashbackCategories ? { cashbackCategories } : {}),
+    ...(cashbackRules ? { cashbackRules } : {}),
     active: typeof active === 'boolean' ? active : true,
     createdAt: toIso(data.createdAt, timestampCtor),
   }
+}
+
+function normalizeCashbackRules(rules: CreditCard['cashbackRules'] | undefined): Array<Record<string, unknown>> | undefined {
+  if (!rules || rules.length === 0) {
+    return undefined
+  }
+
+  const normalized = rules
+    .map((rule) => {
+      if (!rule || typeof rule !== 'object') {
+        return null
+      }
+
+      const rate = Number(rule.rate)
+      const categories = (rule.categories ?? [])
+        .map((category) => typeof category === 'string' ? category.trim() : '')
+        .filter(Boolean)
+
+      if (!Number.isFinite(rate) || categories.length === 0) {
+        return null
+      }
+
+      const cleaned: Record<string, unknown> = {
+        rate,
+        categories,
+      }
+
+      if (typeof rule.id === 'string' && rule.id.trim()) {
+        cleaned.id = rule.id.trim()
+      }
+      if (typeof rule.label === 'string' && rule.label.trim()) {
+        cleaned.label = rule.label.trim()
+      }
+
+      return cleaned
+    })
+    .filter((rule): rule is Record<string, unknown> => rule !== null)
+
+  return normalized.length > 0 ? normalized : undefined
 }
 
 function validateInput(input: CreditCardInput): void {
@@ -180,6 +302,32 @@ export async function createCreditCard(
   if (input.minimumPaymentOverride !== undefined) {
     payload.minimumPaymentOverride = input.minimumPaymentOverride
   }
+  if (input.rewardName !== undefined) {
+    payload.rewardName = input.rewardName.trim() || 'Cashback'
+  }
+  if (input.cashbackRate !== undefined) {
+    payload.cashbackRate = input.cashbackRate
+  }
+  if (input.cashbackCap !== undefined) {
+    payload.cashbackCap = input.cashbackCap
+  }
+  if (input.cashbackStartingBalance !== undefined) {
+    payload.cashbackStartingBalance = input.cashbackStartingBalance
+  }
+  if (input.cashbackMinSpend !== undefined) {
+    payload.cashbackMinSpend = input.cashbackMinSpend
+  }
+  if (input.cashbackCategories !== undefined) {
+    payload.cashbackCategories = input.cashbackCategories
+      .map((category) => category.trim())
+      .filter(Boolean)
+  }
+  if (input.cashbackRules !== undefined) {
+    const normalizedRules = normalizeCashbackRules(input.cashbackRules)
+    if (normalizedRules) {
+      payload.cashbackRules = normalizedRules
+    }
+  }
 
   const ref = await fs.addDoc(fs.collection(db, COLLECTION), payload)
 
@@ -227,6 +375,48 @@ export async function updateCreditCard(
     payload.minimumPaymentOverride = input.minimumPaymentOverride
   } else {
     payload.minimumPaymentOverride = null
+  }
+  if (input.rewardName !== undefined) {
+    payload.rewardName = input.rewardName.trim() || 'Cashback'
+  } else {
+    payload.rewardName = null
+  }
+  if (input.cashbackRate !== undefined) {
+    payload.cashbackRate = input.cashbackRate
+  } else {
+    payload.cashbackRate = null
+  }
+  if (input.cashbackCap !== undefined) {
+    payload.cashbackCap = input.cashbackCap
+  } else {
+    payload.cashbackCap = null
+  }
+  if (input.cashbackStartingBalance !== undefined) {
+    payload.cashbackStartingBalance = input.cashbackStartingBalance
+  } else {
+    payload.cashbackStartingBalance = null
+  }
+  if (input.cashbackMinSpend !== undefined) {
+    payload.cashbackMinSpend = input.cashbackMinSpend
+  } else {
+    payload.cashbackMinSpend = null
+  }
+  if (input.cashbackCategories !== undefined) {
+    payload.cashbackCategories = input.cashbackCategories
+      .map((category) => category.trim())
+      .filter(Boolean)
+  } else {
+    payload.cashbackCategories = null
+  }
+  if (input.cashbackRules !== undefined) {
+    const normalizedRules = normalizeCashbackRules(input.cashbackRules)
+    if (normalizedRules) {
+      payload.cashbackRules = normalizedRules
+    } else {
+      payload.cashbackRules = []
+    }
+  } else {
+    payload.cashbackRules = null
   }
 
   await fs.updateDoc(fs.doc(db, COLLECTION, id), payload)
@@ -307,6 +497,56 @@ export function getStatementTransactions(
 }
 
 /**
+ * Compute the live balance from every linked charge and payment through the
+ * selected month, regardless of statement period.
+ */
+export function computeOutstandingBalance(
+  card: CreditCard,
+  allTransactions: Transaction[],
+  year: number,
+  month: number,
+): number {
+  const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999).getTime()
+  let balance = 0
+
+  for (const tx of allTransactions) {
+    if (tx.creditCardId !== card.id) continue
+    const occurredAt = new Date(tx.occurredAt).getTime()
+    if (!Number.isFinite(occurredAt) || occurredAt > endOfMonth) continue
+
+    if (
+      tx.creditCardPayment === true ||
+      tx.type === 'income' ||
+      (tx.type === 'savings' && tx.savingsDirection === 'withdraw')
+    ) {
+      balance -= tx.amount
+    } else if (tx.type === 'expense' || tx.type === 'bill') {
+      balance += tx.amount
+    }
+  }
+
+  return Math.max(0, balance)
+}
+
+/** Return every transaction linked to a card through the selected month. */
+function getTransactionHistory(
+  card: CreditCard,
+  allTransactions: Transaction[],
+  year: number,
+  month: number,
+): Transaction[] {
+  const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999).getTime()
+
+  return allTransactions
+    .filter((tx) => {
+      if (tx.creditCardId !== card.id) return false
+      const occurredAt = new Date(tx.occurredAt).getTime()
+      return Number.isFinite(occurredAt) && occurredAt <= endOfMonth
+    })
+    .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
+}
+
+/**
  * Compute a card's statement for a given month.
  */
 export function computeStatement(
@@ -317,6 +557,7 @@ export function computeStatement(
 ): CreditCardStatement {
   const { statementDate, dueDate } = computeStatementPeriod(card, year, month)
   const periodTransactions = getStatementTransactions(card, allTransactions, year, month)
+  const transactionHistory = getTransactionHistory(card, allTransactions, year, month)
 
   let newCharges = 0
   let paymentsCredits = 0
@@ -334,13 +575,19 @@ export function computeStatement(
   const previousBalance = computePreviousBalance(card, allTransactions, year, month)
   const interest = computeInterest(card, previousBalance, newCharges, paymentsCredits, statementDate, dueDate)
   const statementBalance = Math.max(0, previousBalance + newCharges - paymentsCredits + interest)
+  const outstandingBalance = computeOutstandingBalance(card, allTransactions, year, month)
   const minimumPayment = card.minimumPaymentOverride !== undefined
     ? Math.min(statementBalance, card.minimumPaymentOverride)
     : card.apr && card.apr > 0
       ? computeMinimumPaymentWithInterest(statementBalance, card.apr)
       : Math.min(statementBalance, Math.max(statementBalance * 0.03, 100))
-  const availableCredit = Math.max(0, card.limit - statementBalance)
+  const availableCredit = Math.max(0, card.limit - outstandingBalance)
   const isPaid = statementBalance <= 0
+  const cashbackEligibleSpend = getCashbackEligibleSpend(card, periodTransactions)
+  const cashbackPeriodEarned = computeCashbackEarned(card, periodTransactions)
+  const cashbackStartingBalance = typeof card.cashbackStartingBalance === 'number' ? card.cashbackStartingBalance : 0
+  const cashbackCap = typeof card.cashbackCap === 'number' ? card.cashbackCap : Number.POSITIVE_INFINITY
+  const cashbackEarned = Math.min(cashbackStartingBalance + cashbackPeriodEarned, cashbackCap)
 
   return {
     card,
@@ -351,11 +598,142 @@ export function computeStatement(
     paymentsCredits,
     interestCharged: interest,
     statementBalance,
+    outstandingBalance,
     minimumPayment,
     availableCredit,
     isPaid,
+    cashbackEligibleSpend,
+    cashbackEarned,
     transactions: periodTransactions,
+    transactionHistory,
   }
+}
+
+export function resolveCashbackRateForCategory(card: Pick<CreditCard, 'cashbackRate' | 'cashbackCategories' | 'cashbackRules'>, category: string): number {
+  const normalizedCategory = category.trim().toLowerCase()
+  const rules = Array.isArray(card.cashbackRules) ? card.cashbackRules : []
+
+  if (rules.length > 0) {
+    const ruleMatch = rules
+      .filter((rule) => Array.isArray(rule.categories) && rule.categories.length > 0)
+      .find((rule) => {
+        const categories = rule.categories.map((item) => item.trim().toLowerCase())
+        return categories.includes('*') || categories.includes(normalizedCategory)
+      })
+
+    if (ruleMatch) {
+      return Number(ruleMatch.rate) || 0
+    }
+
+    return 0
+  }
+
+  const legacyCategories = (card.cashbackCategories ?? []).map((item) => item.trim().toLowerCase())
+  if (legacyCategories.length > 0 && (legacyCategories.includes('*') || legacyCategories.includes(normalizedCategory))) {
+    return Number(card.cashbackRate ?? 0)
+  }
+
+  return Number(card.cashbackRate ?? 0)
+}
+
+function getCashbackEligibleSpend(card: CreditCard, transactions: Transaction[]): number {
+  return transactions
+    .filter((tx) => {
+      if (tx.creditCardId !== card.id) return false
+      if (tx.creditCardPayment === true) return false
+      if (tx.type !== 'expense' && tx.type !== 'bill') return false
+      return resolveCashbackRateForCategory(card, tx.category) > 0
+    })
+    .reduce((sum, tx) => sum + tx.amount, 0)
+}
+
+function getCashbackMinimumSpend(card: Pick<CreditCard, 'name' | 'rewardName' | 'cashbackMinSpend'>): number {
+  if (typeof card.cashbackMinSpend === 'number') {
+    return card.cashbackMinSpend
+  }
+
+  const identifiers = [card.name, card.rewardName]
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => value.toLowerCase())
+
+  if (identifiers.some((value) => value.includes('amore'))) {
+    return 1000
+  }
+
+  return 0
+}
+
+function isAnnualFeeTransaction(tx: Pick<Transaction, 'category' | 'description' | 'isAnnualFee'>): boolean {
+  if (tx.isAnnualFee === true) return true
+  const normalizedCategory = `${tx.category ?? ''}`.trim().toLowerCase()
+  const feeCategoryNames = new Set(['fee', 'fees'])
+  if (feeCategoryNames.has(normalizedCategory)) return true
+  const haystack = `${tx.category ?? ''} ${tx.description ?? ''}`.toLowerCase()
+  return haystack.includes('annual fee') || haystack.includes('annual-fee') || haystack.includes('annual fees') || haystack.includes('cc annual fee')
+}
+
+export function computeCashbackForTransaction(
+  card: Pick<CreditCard, 'id' | 'name' | 'rewardName' | 'cashbackRate' | 'cashbackCategories' | 'cashbackRules' | 'cashbackCap' | 'cashbackMinSpend'>,
+  tx: Partial<Transaction> & {
+    type: Transaction['type']
+    amount: number
+    category: string
+    description?: string
+    creditCardId?: string
+    creditCardPayment?: boolean
+    isAnnualFee?: boolean
+  },
+): number {
+  if (tx.creditCardId !== card.id) return 0
+  if (tx.creditCardPayment === true) return 0
+  if (tx.type !== 'expense' && tx.type !== 'bill') return 0
+  if (isAnnualFeeTransaction({ category: tx.category, description: tx.description ?? '', isAnnualFee: tx.isAnnualFee })) return 0
+
+  const minimumSpend = getCashbackMinimumSpend(card)
+  if (tx.amount < minimumSpend) return 0
+
+  const rate = resolveCashbackRateForCategory(card, tx.category)
+  if (rate <= 0) return 0
+
+  return tx.amount * (rate / 100)
+}
+
+export function getCurrentCashbackForTransaction(
+  card: CreditCard | undefined,
+  tx: Partial<Transaction> & {
+    type: Transaction['type']
+    amount: number
+    category: string
+    creditCardId?: string
+    creditCardPayment?: boolean
+  },
+): number {
+  if (!card) return 0
+  return computeCashbackForTransaction(card, tx)
+}
+
+function computeCashbackEarned(card: CreditCard, transactions: Transaction[]): number {
+  const cap = typeof card.cashbackCap === 'number' ? card.cashbackCap : Number.POSITIVE_INFINITY
+
+  let total = 0
+  for (const tx of transactions) {
+    total += computeCashbackForTransaction(card, tx)
+  }
+
+  return Math.min(total, cap)
+}
+
+/**
+ * For the next billing cycle, a fully paid statement resets to the fresh
+ * outstanding balance. If the current cycle still has a statement balance,
+ * the next cycle is only the portion that was added after the statement closed.
+ */
+export function getNextBillingCycleBalance(statement: CreditCardStatement): number {
+  if (statement.statementBalance <= 0) {
+    return Math.max(0, statement.outstandingBalance)
+  }
+
+  return Math.max(0, statement.outstandingBalance - statement.statementBalance)
 }
 
 /**
@@ -418,7 +796,7 @@ export function computeTotalOutstanding(
     .filter((card) => card.active)
     .reduce(
       (total, card) =>
-        total + computeStatement(card, allTransactions, year, month).statementBalance,
+        total + computeStatement(card, allTransactions, year, month).outstandingBalance,
       0,
     )
 }
@@ -449,13 +827,13 @@ export function getUtilizationForMonth(
 ): UtilizationSnapshot {
   const statement = computeStatement(card, allTransactions, year, month)
   const utilizationPercent = card.limit > 0
-    ? Math.min(100, (statement.statementBalance / card.limit) * 100)
+    ? Math.min(100, (statement.outstandingBalance / card.limit) * 100)
     : 0
   return {
     date: new Date(year, month, 1).toISOString(),
     year,
     month,
-    statementBalance: statement.statementBalance,
+    outstandingBalance: statement.outstandingBalance,
     limit: card.limit,
     utilizationPercent,
     cardId: card.id,
@@ -505,7 +883,7 @@ export function computeAggregateUtilization(
 ): { totalBalance: number; totalLimit: number; utilizationPercent: number } {
   const activeCards = cards.filter((card) => card.active)
   const totalBalance = activeCards.reduce(
-    (sum, card) => sum + computeStatement(card, allTransactions, year, month).statementBalance,
+    (sum, card) => sum + computeStatement(card, allTransactions, year, month).outstandingBalance,
     0,
   )
   const totalLimit = activeCards.reduce((sum, card) => sum + card.limit, 0)

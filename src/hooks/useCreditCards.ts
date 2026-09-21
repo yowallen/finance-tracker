@@ -78,7 +78,7 @@ export function useCreditCards(
       .filter((card) => card.active && card.apr && card.apr > 0)
       .map((card) => {
         const statement = computeStatement(card, allTransactions, year, month)
-        return projectInterest(card, statement.statementBalance, 24)
+        return projectInterest(card, statement.outstandingBalance, 24)
       }),
     [visibleCards, allTransactions, year, month],
   )

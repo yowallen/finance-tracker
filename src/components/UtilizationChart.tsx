@@ -173,7 +173,7 @@ export function UtilizationChart({ history }: UtilizationChartProps) {
               <path d={path} className="utilization-line" />
               {points.map((point, index) => (
                 <circle key={history.snapshots[index].date} cx={point.x} cy={point.y} r="3.5" className="utilization-point">
-                  <title>{`${formatMonth(history.snapshots[index].date)}: ${values[index].toFixed(1)}% (${formatMoney(history.snapshots[index].statementBalance)})`}</title>
+                  <title>{`${formatMonth(history.snapshots[index].date)}: ${values[index].toFixed(1)}% (${formatMoney(history.snapshots[index].outstandingBalance)})`}</title>
                 </circle>
               ))}
               {history.snapshots.map((snapshot, index) => (

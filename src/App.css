@@ -1379,9 +1379,38 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
   overflow-wrap: anywhere;
 }
 
+.tx-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .tx-when {
   font-size: 0.82rem;
   color: var(--muted);
+}
+
+.tx-cashback {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.18rem 0.46rem;
+  border: 1px solid color-mix(in srgb, var(--income) 32%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--income) 12%, transparent);
+  color: var(--income);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.tx-cashback::before {
+  content: '↗';
+  font-size: 0.68rem;
+  line-height: 1;
 }
 
 .tx-side {
@@ -2530,11 +2559,22 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
     width: 100%;
   }
 
+  .reminders-header > .btn-primary {
+    justify-content: center;
+  }
+
+  .reminders-add-button {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+  }
+
   .reminders-header .btn-primary,
   .reminders-header .btn-ghost,
   .savings-header-actions .btn-primary,
   .savings-header-actions .btn-ghost {
     flex: 1 1 0;
+    justify-content: center;
     min-width: 0;
     /* Keep the 44px touch target on small screens instead of shrinking it. */
     min-height: 2.75rem;
@@ -3653,6 +3693,178 @@ html[data-theme='dark'] .undo-toast-undo:hover {
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.cc-transaction-history {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: 0.15rem;
+}
+
+.cc-history-toggle {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cc-history-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: var(--radius-xs);
+}
+
+.cc-history-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.cc-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.cc-history-header h5 {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.cc-history-count {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-history-chevron {
+  width: 0.95rem;
+  height: 0.95rem;
+  color: var(--muted);
+  transition: transform 180ms ease;
+  flex-shrink: 0;
+}
+
+.cc-history-toggle[aria-expanded='true'] .cc-history-chevron {
+  transform: rotate(180deg);
+}
+
+.cc-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 15rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.cc-history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.55rem 0.65rem;
+  border-radius: var(--radius-xs);
+  background: var(--md-sys-color-surface-container-highest);
+}
+
+.cc-history-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0.15rem;
+}
+
+.cc-history-main strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cc-history-main time {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-history-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.38rem;
+  flex-wrap: wrap;
+}
+
+.cc-history-cashback {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.14rem 0.38rem;
+  border: 1px solid color-mix(in srgb, var(--income) 32%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--income) 12%, transparent);
+  color: var(--income);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.cc-history-cashback::before {
+  content: '↗';
+  font-size: 0.62rem;
+  line-height: 1;
+}
+
+.cc-history-amount {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.12rem;
+}
+
+.cc-history-amount span {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.cc-history-amount strong {
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-history-amount .charge {
+  color: var(--expense);
+}
+
+.cc-history-amount .payment {
+  color: var(--income);
+}
+
+.cc-history-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.74rem;
 }
 
 .cc-card-footer {
@@ -4813,6 +5025,45 @@ html[data-theme='dark'] .undo-toast-undo:hover {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.payment-modal .form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.payment-modal .btn-ghost,
+.payment-modal .btn-primary {
+  min-height: 3rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.8rem 1.1rem;
+  border-radius: 999px;
+  font-size: 0.96rem;
+  line-height: 1.2;
+}
+
+.payment-modal .btn-ghost {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  font-weight: 600;
+}
+
+.payment-modal .btn-ghost:hover {
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.payment-modal .btn-primary {
+  min-width: 11rem;
+  flex: 1 1 auto;
 }
 
 /* Header with bill context */

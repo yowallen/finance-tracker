@@ -17,6 +17,7 @@ import {
   type TransactionType,
 } from '../types/transaction'
 import type { CreditCard } from '../types/creditCard'
+import { computeCashbackForTransaction } from '../services/creditCards'
 import { dateInputToIso, toDateInputValue } from '../lib/format'
 
 interface TransactionFormProps {
@@ -124,19 +125,36 @@ export function TransactionForm({
 
     setBusy(true)
     try {
+      const selectedCard = activeCards.find((card) => card.id === creditCardId)
+      const resolvedCategory =
+        type === 'savings'
+          ? savingsDirection === 'deposit'
+            ? CATEGORIES.savings[0]
+            : CATEGORIES.savings[1]
+          : category
+      const annualFeeFlag = resolvedCategory.toLowerCase() === 'fee' || /annual fee/i.test(description.trim())
+      const cashBackEarned = selectedCard && (type === 'expense' || type === 'bill')
+        ? computeCashbackForTransaction(selectedCard, {
+            type,
+            amount: parsed,
+            category: resolvedCategory,
+            description: description.trim(),
+            creditCardId: selectedCard.id,
+            creditCardPayment: false,
+            isAnnualFee: annualFeeFlag,
+          })
+        : 0
+
       await onSubmit({
         type,
         amount: parsed,
-        category:
-          type === 'savings'
-            ? savingsDirection === 'deposit'
-              ? CATEGORIES.savings[0]
-              : CATEGORIES.savings[1]
-            : category,
+        category: resolvedCategory,
         description: description.trim(),
         occurredAt: dateInputToIso(occurredAt),
         ...(type === 'savings' ? { savingsDirection } : {}),
         ...(creditCardId && (type === 'expense' || type === 'bill') ? { creditCardId } : {}),
+        cashbackEarned: cashBackEarned,
+        isAnnualFee: annualFeeFlag,
       })
       if (!editing) {
         setAmount('')

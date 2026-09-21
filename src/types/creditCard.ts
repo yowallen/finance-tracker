@@ -1,5 +1,39 @@
 import type { Transaction } from './transaction'
 
+export interface CashbackRule {
+  id?: string
+  label?: string
+  rate: number
+  categories: string[]
+}
+
+export function parseCashbackRules(input: string): CashbackRule[] {
+  if (!input.trim()) return []
+
+  const rules: CashbackRule[] = []
+
+  for (const part of input.split(/[,;\n]/)) {
+    const trimmed = part.trim()
+    if (!trimmed) continue
+
+    const match = trimmed.match(/^(.+?)(?:\s*[:=]\s*|\s+)(\d+(?:\.\d+)?)\s*%?$/i)
+    if (!match) continue
+
+    const category = match[1].trim()
+    const rate = Number.parseFloat(match[2])
+    if (!category || Number.isNaN(rate) || rate < 0 || rate > 100) continue
+
+    rules.push({
+      id: category.toLowerCase().replace(/\s+/g, '-'),
+      label: category,
+      rate,
+      categories: [category],
+    })
+  }
+
+  return rules
+}
+
 export interface CreditCard {
   id: string
   userId: string
@@ -22,6 +56,20 @@ export interface CreditCard {
   gracePeriodDays?: number
   /** Issuer-provided minimum payment override */
   minimumPaymentOverride?: number
+  /** Reward name, such as "Amore Cashback". */
+  rewardName?: string
+  /** Default cashback rate as a percentage, e.g. 1 for 1%. */
+  cashbackRate?: number
+  /** Maximum cashback earned in one statement/period. */
+  cashbackCap?: number
+  /** Cashback already available at the start of the current statement period. */
+  cashbackStartingBalance?: number
+  /** Minimum transaction amount in pesos needed before cashback is earned. */
+  cashbackMinSpend?: number
+  /** Legacy categories eligible for cashback; if omitted, all card spend qualifies. */
+  cashbackCategories?: string[]
+  /** Tiered perk rules, e.g. [{ rate: 1, categories: ['groceries'] }, { rate: 0.3, categories: ['*'] }]. */
+  cashbackRules?: CashbackRule[]
 }
 
 export interface CreditCardInput {
@@ -37,6 +85,13 @@ export interface CreditCardInput {
   interestCalculationMethod?: 'daily' | 'monthly'
   gracePeriodDays?: number
   minimumPaymentOverride?: number
+  rewardName?: string
+  cashbackRate?: number
+  cashbackCap?: number
+  cashbackStartingBalance?: number
+  cashbackMinSpend?: number
+  cashbackCategories?: string[]
+  cashbackRules?: CashbackRule[]
 }
 
 export interface StatementPeriod {
@@ -55,10 +110,14 @@ export interface CreditCardStatement {
   paymentsCredits: number
   interestCharged: number
   statementBalance: number
+  outstandingBalance: number
   minimumPayment: number
   availableCredit: number
   isPaid: boolean
+  cashbackEligibleSpend: number
+  cashbackEarned: number
   transactions: Transaction[]
+  transactionHistory: Transaction[]
 }
 
 export const CARD_COLORS = [
@@ -105,6 +164,38 @@ export function validateCreditCardInput(input: CreditCardInput): void {
   if (input.minimumPaymentOverride !== undefined && (!Number.isFinite(input.minimumPaymentOverride) || input.minimumPaymentOverride < 0)) {
     throw new Error('Minimum payment override must be zero or greater.')
   }
+  if (input.rewardName !== undefined && typeof input.rewardName !== 'string') {
+    throw new Error('Reward name must be text if provided.')
+  }
+  if (input.cashbackRate !== undefined && (!Number.isFinite(input.cashbackRate) || input.cashbackRate < 0 || input.cashbackRate > 100)) {
+    throw new Error('Cashback rate must be between 0 and 100.')
+  }
+  if (input.cashbackCap !== undefined && (!Number.isFinite(input.cashbackCap) || input.cashbackCap < 0)) {
+    throw new Error('Cashback cap must be zero or greater.')
+  }
+  if (input.cashbackStartingBalance !== undefined && (!Number.isFinite(input.cashbackStartingBalance) || input.cashbackStartingBalance < 0)) {
+    throw new Error('Starting cashback balance must be zero or greater.')
+  }
+  if (input.cashbackMinSpend !== undefined && (!Number.isFinite(input.cashbackMinSpend) || input.cashbackMinSpend < 0)) {
+    throw new Error('Cashback minimum spend must be zero or greater.')
+  }
+  if (input.cashbackCategories !== undefined && (
+    !Array.isArray(input.cashbackCategories) ||
+    input.cashbackCategories.some((category) => typeof category !== 'string' || !category.trim())
+  )) {
+    throw new Error('Cashback categories must be a list of text values.')
+  }
+  if (input.cashbackRules !== undefined && (
+    !Array.isArray(input.cashbackRules) ||
+    input.cashbackRules.some((rule) => {
+      if (typeof rule?.rate !== 'number' || !Number.isFinite(rule.rate) || rule.rate < 0 || rule.rate > 100) {
+        return true
+      }
+      return !Array.isArray(rule.categories) || rule.categories.some((category) => typeof category !== 'string' || !category.trim())
+    })
+  )) {
+    throw new Error('Cashback rules must contain valid percentages and category lists.')
+  }
 }
 
 /**
@@ -139,7 +230,7 @@ export interface UtilizationSnapshot {
   date: string
   year: number
   month: number
-  statementBalance: number
+  outstandingBalance: number
   limit: number
   utilizationPercent: number
   cardId: string

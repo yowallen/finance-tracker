@@ -33,6 +33,7 @@ interface FieldErrors {
   apr?: string
   gracePeriodDays?: string
   minimumPaymentOverride?: string
+  cashbackRate?: string
 }
 
 function createInitialState(editing: CreditCard | null): CreditCardInput {
@@ -55,6 +56,12 @@ function createInitialState(editing: CreditCard | null): CreditCardInput {
       interestCalculationMethod: editing.interestCalculationMethod,
       gracePeriodDays: editing.gracePeriodDays,
       minimumPaymentOverride: editing.minimumPaymentOverride,
+      rewardName: editing.rewardName ?? 'Cashback',
+      cashbackRate: editing.cashbackRate,
+      cashbackCap: editing.cashbackCap,
+      cashbackMinSpend: editing.cashbackMinSpend ?? 1000,
+      cashbackCategories: editing.cashbackCategories ?? ['Food', 'Shopping', 'Transport', 'Entertainment', 'Health'],
+      cashbackRules: editing.cashbackRules ?? [{ rate: 1, categories: ['Groceries'] }, { rate: 0.3, categories: ['*'] }],
     }
   }
 
@@ -69,6 +76,12 @@ function createInitialState(editing: CreditCard | null): CreditCardInput {
     apr: undefined,
     interestCalculationMethod: 'daily',
     gracePeriodDays: 21,
+    rewardName: 'Amore Cashback',
+    cashbackRate: 1,
+    cashbackCap: 3000,
+    cashbackMinSpend: 1000,
+    cashbackCategories: ['Food', 'Shopping', 'Transport', 'Entertainment', 'Health'],
+    cashbackRules: [{ rate: 1, categories: ['Groceries'] }, { rate: 0.3, categories: ['*'] }],
   }
 }
 
@@ -77,6 +90,37 @@ function ordinal(day: number): string {
   if (day === 2 || day === 22) return `${day}nd`
   if (day === 3 || day === 23) return `${day}rd`
   return `${day}th`
+}
+
+function summarizeCashbackRules(raw: string): string[] {
+  if (!raw.trim()) {
+    return []
+  }
+
+  return raw
+    .split(/[,;\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const match = item.match(/^(.+?)(?:\s*[:=]\s*|\s+)(\d+(?:\.\d+)?)\s*%?$/i)
+      if (!match) {
+        return null
+      }
+
+      const category = match[1].trim()
+      const rate = Number.parseFloat(match[2])
+      if (!category || Number.isNaN(rate) || rate < 0 || rate > 100) {
+        return null
+      }
+
+      const label = category === '*' || category.toLowerCase() === 'all' || category.toLowerCase() === 'all other eligible spend'
+        ? 'All other eligible spend'
+        : category
+
+      const formattedRate = Number.isInteger(rate) ? `${rate}` : rate.toFixed(1).replace(/\.0$/, '')
+      return `${label}: ${formattedRate}%`
+    })
+    .filter((item): item is string => item !== null)
 }
 
 export function CreditCardForm({
@@ -96,6 +140,24 @@ export function CreditCardForm({
   const [interestCalculationMethod, setInterestCalculationMethod] = useState(initial.interestCalculationMethod ?? 'daily')
   const [gracePeriodDays, setGracePeriodDays] = useState(initial.gracePeriodDays !== undefined ? String(initial.gracePeriodDays) : '21')
   const [minimumPaymentOverride, setMinimumPaymentOverride] = useState(initial.minimumPaymentOverride !== undefined ? String(initial.minimumPaymentOverride) : '')
+  const [rewardName, setRewardName] = useState(initial.rewardName ?? 'Cashback')
+  const [cashbackRate, setCashbackRate] = useState(initial.cashbackRate !== undefined ? String(initial.cashbackRate) : '')
+  const [cashbackCap, setCashbackCap] = useState(initial.cashbackCap !== undefined ? String(initial.cashbackCap) : '')
+  const [cashbackStartingBalance, setCashbackStartingBalance] = useState(initial.cashbackStartingBalance !== undefined ? String(initial.cashbackStartingBalance) : '')
+  const [cashbackMinSpend, setCashbackMinSpend] = useState(initial.cashbackMinSpend !== undefined ? String(initial.cashbackMinSpend) : '1000')
+  const [cashbackCategories, setCashbackCategories] = useState(
+    (initial.cashbackCategories ?? ['Food', 'Shopping', 'Transport', 'Entertainment', 'Health']).join(', '),
+  )
+  const [cashbackRulesText, setCashbackRulesText] = useState(
+    (initial.cashbackRules ?? [{ rate: 1, categories: ['Groceries'] }, { rate: 0.3, categories: ['*'] }])
+      .map((rule) => {
+        const categories = rule.categories ?? []
+        const categoryText = categories.length > 0 ? categories.join(', ') : '*'
+        return `${categoryText}=${rule.rate}%`
+      })
+      .join('; '),
+  )
+  const cashbackRuleSummary = summarizeCashbackRules(cashbackRulesText)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [errors, setErrors] = useState<FieldErrors>({})
@@ -137,9 +199,40 @@ export function CreditCardForm({
     const parsedLimit = Number.parseFloat(limit)
     const parsedStatementDay = Number.parseInt(statementDay, 10)
     const parsedDueDay = Number.parseInt(dueDay, 10)
-    const parsedApr = apr ? Number.parseFloat(apr) : undefined
-    const parsedGracePeriodDays = gracePeriodDays ? Number.parseInt(gracePeriodDays, 10) : undefined
-    const parsedMinimumPaymentOverride = minimumPaymentOverride ? Number.parseFloat(minimumPaymentOverride) : undefined
+    const parsedApr = apr.trim() !== '' ? Number.parseFloat(apr) : undefined
+    const parsedGracePeriodDays = gracePeriodDays.trim() !== '' ? Number.parseInt(gracePeriodDays, 10) : undefined
+    const parsedMinimumPaymentOverride = minimumPaymentOverride.trim() !== '' ? Number.parseFloat(minimumPaymentOverride) : undefined
+    const parsedCashbackRate = cashbackRate.trim() !== '' ? Number.parseFloat(cashbackRate) : undefined
+    const parsedCashbackCap = cashbackCap.trim() !== '' ? Number.parseFloat(cashbackCap) : undefined
+    const parsedCashbackStartingBalance = cashbackStartingBalance.trim() !== '' ? Number.parseFloat(cashbackStartingBalance) : undefined
+    const parsedCashbackMinSpend = cashbackMinSpend.trim() !== '' ? Number.parseFloat(cashbackMinSpend) : 1000
+    const parsedCashbackRules = cashbackRulesText
+      .split(/[,;\n]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map((item) => {
+        const match = item.match(/^(.+?)(?:\s*[:=]\s*|\s+)(\d+(?:\.\d+)?)\s*%?$/i)
+        if (!match) {
+          throw new Error('Cashback rules must look like "Groceries=1%; *=0.3%".')
+        }
+
+        const category = match[1].trim()
+        const rate = Number.parseFloat(match[2])
+        if (!category || Number.isNaN(rate) || rate < 0 || rate > 100) {
+          throw new Error('Cashback rules must have valid category names and percentages.')
+        }
+
+        return {
+          rate,
+          categories: [category],
+        }
+      })
+    const hasExplicitCashbackRate = cashbackRate.trim() !== ''
+    const fallbackCashbackRate = hasExplicitCashbackRate
+      ? parsedCashbackRate
+      : (parsedCashbackRules.length > 0
+        ? (parsedCashbackRules.find((rule) => rule.categories.includes('*'))?.rate ?? parsedCashbackRules[0].rate)
+        : parsedCashbackRate)
     const nextErrors: FieldErrors = {}
 
     if (!name.trim()) {
@@ -167,6 +260,18 @@ export function CreditCardForm({
     if (parsedMinimumPaymentOverride !== undefined && (!Number.isFinite(parsedMinimumPaymentOverride) || parsedMinimumPaymentOverride < 0)) {
       nextErrors.minimumPaymentOverride = 'Enter zero or a positive amount.'
     }
+    if (parsedCashbackRate !== undefined && (!Number.isFinite(parsedCashbackRate) || parsedCashbackRate < 0 || parsedCashbackRate > 100)) {
+      nextErrors.cashbackRate = 'Cashback rate must be between 0 and 100.'
+    }
+    if (parsedCashbackCap !== undefined && (!Number.isFinite(parsedCashbackCap) || parsedCashbackCap < 0)) {
+      nextErrors.cashbackRate = 'Cashback cap must be zero or greater.'
+    }
+    if (parsedCashbackStartingBalance !== undefined && (!Number.isFinite(parsedCashbackStartingBalance) || parsedCashbackStartingBalance < 0)) {
+      nextErrors.cashbackRate = 'Starting cashback balance must be zero or greater.'
+    }
+    if (!Number.isFinite(parsedCashbackMinSpend) || parsedCashbackMinSpend < 0) {
+      nextErrors.cashbackRate = 'Cashback minimum spend must be zero or greater.'
+    }
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors)
@@ -188,6 +293,16 @@ export function CreditCardForm({
         interestCalculationMethod,
         gracePeriodDays: parsedGracePeriodDays,
         minimumPaymentOverride: parsedMinimumPaymentOverride,
+        rewardName: rewardName.trim() || 'Cashback',
+        cashbackRate: fallbackCashbackRate,
+        cashbackCap: parsedCashbackCap,
+        cashbackStartingBalance: parsedCashbackStartingBalance,
+        cashbackMinSpend: parsedCashbackMinSpend,
+        cashbackCategories: cashbackCategories
+          .split(',')
+          .map((category) => category.trim())
+          .filter(Boolean),
+        cashbackRules: parsedCashbackRules,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save credit card.')
@@ -326,7 +441,7 @@ export function CreditCardForm({
             )}
           </label>
           <label>
-            APR (%)
+            APR (%) (optional)
             <input
               ref={aprRef}
               type="number"
@@ -341,7 +456,7 @@ export function CreditCardForm({
               aria-describedby={errors.apr ? 'cc-form-error-apr' : 'cc-form-hint-apr'}
             />
             <span id="cc-form-hint-apr" className="field-hint">
-              Annual percentage rate (optional)
+              Annual percentage rate
             </span>
             {errors.apr && (
               <span id="cc-form-error-apr" className="field-error" role="alert">
@@ -390,7 +505,7 @@ export function CreditCardForm({
         </div>
 
         <label>
-          Minimum payment override (₱)
+          Minimum payment override (₱) (optional)
           <input
             ref={minimumPaymentOverrideRef}
             type="number"
@@ -404,11 +519,111 @@ export function CreditCardForm({
             aria-describedby={errors.minimumPaymentOverride ? 'cc-form-error-minimum-payment' : 'cc-form-hint-minimum-payment'}
           />
           <span id="cc-form-hint-minimum-payment" className="field-hint">
-            Optional issuer amount; leave blank to estimate
+            Override the issuer minimum for this card
           </span>
           {errors.minimumPaymentOverride && (
             <span id="cc-form-error-minimum-payment" className="field-error" role="alert">
               {errors.minimumPaymentOverride}
+            </span>
+          )}
+        </label>
+
+        <div className="form-row">
+          <label>
+            Reward name
+            <input
+              type="text"
+              value={rewardName}
+              onChange={(e) => setRewardName(e.target.value)}
+              placeholder="Amore Cashback"
+            />
+          </label>
+          <label>
+            Cashback rate (%)
+            <input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              max="100"
+              step="0.01"
+              value={cashbackRate}
+              onChange={(e) => setCashbackRate(e.target.value)}
+              placeholder="1.0"
+              aria-invalid={errors.cashbackRate ? true : undefined}
+            />
+            {errors.cashbackRate && (
+              <span className="field-error" role="alert">{errors.cashbackRate}</span>
+            )}
+          </label>
+        </div>
+
+        <div className="form-row">
+          <label>
+            Cashback cap (₱) (optional)
+            <input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              value={cashbackCap}
+              onChange={(e) => setCashbackCap(e.target.value)}
+              placeholder="3000"
+            />
+          </label>
+          <label>
+            Starting cashback balance (₱)
+            <input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              value={cashbackStartingBalance}
+              onChange={(e) => setCashbackStartingBalance(e.target.value)}
+              placeholder="1255"
+            />
+          </label>
+        </div>
+
+        <div className="form-row">
+          <label>
+            Min spend for cashback (₱)
+            <input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              value={cashbackMinSpend}
+              onChange={(e) => setCashbackMinSpend(e.target.value)}
+              placeholder="1000"
+            />
+          </label>
+        </div>
+
+        <label>
+          Eligible categories
+          <input
+            type="text"
+            value={cashbackCategories}
+            onChange={(e) => setCashbackCategories(e.target.value)}
+            placeholder="Food, Shopping, Transport"
+          />
+        </label>
+
+        <label>
+          Cashback rules
+          <input
+            type="text"
+            value={cashbackRulesText}
+            onChange={(e) => setCashbackRulesText(e.target.value)}
+            placeholder="Groceries=1%; *=0.3%"
+          />
+          {cashbackRuleSummary.length > 0 && (
+            <span className="field-hint" style={{ display: 'block', marginTop: '0.5rem' }}>
+              {cashbackRuleSummary.map((rule) => (
+                <span key={rule} style={{ display: 'block' }}>
+                  {rule}
+                </span>
+              ))}
             </span>
           )}
         </label>

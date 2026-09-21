@@ -229,20 +229,45 @@ export function BillReminders({
     returnFocusRef.current = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null
+
+    const isLoanBill = reminder.bill.category === 'Loan'
+    const shouldUseCard = !isLoanBill && (
+      reminder.payWithCreditCard === true
+      || reminder.isCreditCardPayment === true
+      || Boolean(reminder.creditCardId)
+    )
+    const defaultCardId = reminder.isCreditCardPayment && reminder.creditCardId
+      ? reminder.creditCardId
+      : creditCards.find((card) => card.active)?.id ?? creditCards[0]?.id ?? ''
+
     setPaymentReminder(reminder)
-    setPaymentMethod('cash')
-    setPaymentCardId(creditCards[0]?.id ?? '')
+    setPaymentMethod(isLoanBill ? 'cash' : shouldUseCard ? 'card' : 'cash')
+    setPaymentCardId(shouldUseCard ? defaultCardId : '')
   }
 
   async function confirmPayment() {
     if (!paymentReminder) return
     setPayingId(paymentReminder.bill.id)
     try {
+      if (paymentMethod === 'cash' && paymentReminder.payWithCreditCard) {
+        const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`
+        const currentMonths = paymentReminder.bill.creditCardMonths ?? []
+        if (currentMonths.includes(monthKey)) {
+          const updatedMonths = currentMonths.filter((m) => m !== monthKey)
+          await onUpdate(paymentReminder.bill.id, {
+            ...formFromBill(paymentReminder.bill),
+            creditCardMonths: updatedMonths,
+          })
+        }
+      }
+
       await onMarkPaid(
         paymentReminder,
         paymentMethod === 'card' ? paymentCardId : undefined,
       )
       setPaymentReminder(null)
+      setPaymentMethod('cash')
+      setPaymentCardId('')
       requestAnimationFrame(() => returnFocusRef.current?.focus())
     } finally {
       setPayingId(null)
@@ -312,7 +337,7 @@ export function BillReminders({
             onClick={openCreate}
           >
             <Plus aria-hidden="true" />
-            Add bill
+            Add bills
           </button>
         )}
       </div>
@@ -514,14 +539,18 @@ export function BillReminders({
                       type="button"
                       className={`icon-btn icon-btn--cc ${reminder.payWithCreditCard ? 'active' : ''}`}
                       onClick={() => void handleToggleCreditCardPayment(reminder)}
-                      disabled={reminder.status === 'paid' || payingId === reminder.bill.id}
-                      aria-label={reminder.payWithCreditCard
-                        ? 'Remove credit card payment flag'
-                        : 'Mark as paid with credit card (excluded from daily balance)'}
-                      aria-pressed={reminder.payWithCreditCard}
-                      title={reminder.payWithCreditCard
-                        ? 'This bill is flagged as paid with credit card. Click to remove flag.'
-                        : 'Flag this bill to be paid with credit card (excluded from daily balance)'}
+                      disabled={reminder.bill.category === 'Loan' || reminder.status === 'paid' || payingId === reminder.bill.id}
+                      aria-label={reminder.bill.category === 'Loan'
+                        ? 'Loans cannot be paid with credit card'
+                        : reminder.payWithCreditCard
+                          ? 'Remove credit card payment flag'
+                          : 'Mark as paid with credit card (excluded from daily balance)'}
+                      aria-pressed={reminder.bill.category === 'Loan' ? false : reminder.payWithCreditCard}
+                      title={reminder.bill.category === 'Loan'
+                        ? 'Loans cannot be paid with a credit card.'
+                        : reminder.payWithCreditCard
+                          ? 'This bill is flagged as paid with credit card. Click to remove flag.'
+                          : 'Flag this bill to be paid with credit card (excluded from daily balance)'}
                     >
                       <CreditCardIcon aria-hidden="true" />
                     </button>
@@ -590,7 +619,10 @@ export function BillReminders({
               <button
                 type="button"
                 className={`payment-method-card ${paymentMethod === 'cash' ? 'selected' : ''}`}
-                onClick={() => setPaymentMethod('cash')}
+                onClick={() => {
+                  setPaymentMethod('cash')
+                  setPaymentCardId('')
+                }}
               >
                 <span className="payment-method-card-icon cash"><WalletCards className="payment-method-svg" aria-hidden="true" /></span>
                 <span className="payment-method-card-content">
@@ -602,8 +634,14 @@ export function BillReminders({
               <button
                 type="button"
                 className={`payment-method-card ${paymentMethod === 'card' ? 'selected' : ''}`}
-                onClick={() => setPaymentMethod('card')}
-                disabled={creditCards.length === 0}
+                onClick={() => {
+                  if (paymentReminder?.bill.category !== 'Loan') {
+                    setPaymentMethod('card')
+                  }
+                }}
+                disabled={paymentReminder?.bill.category === 'Loan' || creditCards.length === 0}
+                aria-disabled={paymentReminder?.bill.category === 'Loan'}
+                title={paymentReminder?.bill.category === 'Loan' ? 'Loans cannot be paid with a credit card.' : undefined}
               >
                 <span className="payment-method-card-icon card"><CreditCardIcon className="payment-method-svg" aria-hidden="true" /></span>
                 <span className="payment-method-card-content">

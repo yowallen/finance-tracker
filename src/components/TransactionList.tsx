@@ -15,6 +15,7 @@ import {
 import type { Transaction } from '../types/transaction'
 import type { CreditCard } from '../types/creditCard'
 import { isSavingsWithdraw } from '../types/transaction'
+import { getCurrentCashbackForTransaction } from '../services/creditCards'
 import { formatDate, formatMoney } from '../lib/format'
 import { LoadingState } from './LoadingState'
 
@@ -353,6 +354,19 @@ export function TransactionList({
         <ul ref={listRef} className="tx-list" role="list">
           {sortedTransactions.map((tx) => {
             const isInflow = tx.type === 'income' || isSavingsWithdraw(tx)
+            const card = tx.creditCardId ? cardById?.get(tx.creditCardId) : undefined
+            const cashbackValue = card && tx.creditCardId && tx.creditCardPayment !== true
+              ? getCurrentCashbackForTransaction(card, {
+                  type: tx.type,
+                  amount: tx.amount,
+                  category: tx.category,
+                  description: tx.description,
+                  creditCardId: tx.creditCardId,
+                  creditCardPayment: false,
+                  isAnnualFee: tx.isAnnualFee,
+                })
+              : 0
+
             return (
               <li key={tx.id} data-tx-id={tx.id} className={`tx-item ${tx.type}`} role="listitem">
                 <div className="tx-main">
@@ -360,7 +374,6 @@ export function TransactionList({
                     <span className={`tx-type-badge ${tx.type}`}>{tx.type}</span>
                     <span className="tx-category">{tx.category}</span>
                     {tx.creditCardId && (() => {
-                      const card = cardById?.get(tx.creditCardId)
                       const cardLabel = card ? `•••• ${card.lastFour}` : 'Deleted Card'
                       const badgeText = tx.creditCardPayment === true
                         ? `Payment to ${cardLabel}`
@@ -379,9 +392,14 @@ export function TransactionList({
                   ) : (
                     <p className="tx-desc muted">{tx.category}</p>
                   )}
-                  <time className="tx-when" dateTime={tx.occurredAt}>
-                    {formatDate(tx.occurredAt)}
-                  </time>
+                  <div className="tx-meta-row">
+                    <time className="tx-when" dateTime={tx.occurredAt}>
+                      {formatDate(tx.occurredAt)}
+                    </time>
+                    {cashbackValue > 0 && tx.creditCardId && tx.creditCardPayment !== true && (
+                      <span className="tx-cashback">Cashback {formatMoney(cashbackValue)}</span>
+                    )}
+                  </div>
                 </div>
                 <div className="tx-side">
                   <strong className={`tx-amount ${isInflow ? 'income' : tx.type}`}>

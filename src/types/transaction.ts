@@ -17,8 +17,12 @@ export interface Transaction {
   recurringBillId?: string
   /** Links a transaction to a credit card. */
   creditCardId?: string
+  /** Cashback earned on this card charge for the applicable reward rate. */
+  cashbackEarned?: number
   /** True when this transaction is a payment toward a credit card balance. */
   creditCardPayment?: boolean
+  /** True for a credit-card annual fee or card fee, which never earns cashback. */
+  isAnnualFee?: boolean
   /** Required when type is savings. */
   savingsDirection?: SavingsDirection
 }
@@ -31,7 +35,9 @@ export interface TransactionInput {
   occurredAt: string
   recurringBillId?: string
   creditCardId?: string
+  cashbackEarned?: number
   creditCardPayment?: boolean
+  isAnnualFee?: boolean
   savingsDirection?: SavingsDirection
 }
 
@@ -72,8 +78,8 @@ export interface MonthlySavingsStats {
 
 export const CATEGORIES: Record<TransactionType, string[]> = {
   income: ['Salary', 'Freelance', 'Investment', 'Gift', 'Other'],
-  expense: ['Food', 'Transport', 'Shopping', 'Entertainment', 'Health', 'Other'],
-  bill: ['Rent', 'Utilities', 'Internet', 'Phone', 'Subscription', 'Insurance', 'Loan', 'Other'],
+  expense: ['Food', 'Groceries', 'Shopping', 'Entertainment', 'Health', 'Other'],
+  bill: ['Rent', 'Utilities', 'Phone', 'Subscription', 'Insurance', 'Loan', 'Fee', 'Other'],
   savings: ['Savings deposit', 'Savings withdrawal'],
 }
 

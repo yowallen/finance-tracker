@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BookMarked, LogOut } from 'lucide-react'
 import type { User } from 'firebase/auth'
 import { AnalyticsSection } from './AnalyticsSection'
@@ -31,6 +31,7 @@ import {
   buildMonthlySpendingHistory,
   computeMonthlySavingsStats,
   computeMonthlySpendingStats,
+  reconcileTransactionCashbackValues,
 } from '../services/transactions'
 import type { BillReminder, RecurringBill, RecurringBillInput } from '../types/recurringBill'
 import type { CreditCard, CreditCardInput } from '../types/creditCard'
@@ -87,6 +88,10 @@ function txToInput(tx: Transaction): TransactionInput {
     description: tx.description,
     occurredAt: tx.occurredAt,
     ...(tx.recurringBillId ? { recurringBillId: tx.recurringBillId } : {}),
+    ...(tx.creditCardId ? { creditCardId: tx.creditCardId } : {}),
+    ...(typeof tx.cashbackEarned === 'number' ? { cashbackEarned: tx.cashbackEarned } : {}),
+    ...(tx.creditCardPayment ? { creditCardPayment: true } : {}),
+    ...(typeof tx.isAnnualFee === 'boolean' ? { isAnnualFee: tx.isAnnualFee } : {}),
     ...(tx.savingsDirection ? { savingsDirection: tx.savingsDirection } : {}),
   }
 }
@@ -179,6 +184,17 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
   } = useRecurringBills(userId, year, month, transactions, cards, statements, allTransactions)
 
   const dataLoading = txLoading || billLoading || goalsLoading
+
+  useEffect(() => {
+    if (!userId || dataLoading || cards.length === 0 || transactions.length === 0) {
+      return
+    }
+
+    void reconcileTransactionCashbackValues(userId, cards, transactions)
+      .catch(() => {
+        // Ignore reconciliation failures; the UI still reflects the live card rules.
+      })
+  }, [userId, cards, transactions, dataLoading])
 
   const attentionReminders = useMemo(
     () =>

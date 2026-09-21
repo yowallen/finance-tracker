@@ -15,12 +15,14 @@ import {
   WalletCards,
   BarChart2,
   TrendingUp,
+  ChevronDown,
 } from 'lucide-react'
 import { CreditCardForm } from './CreditCardForm'
 import { LoadingState } from './LoadingState'
 import { InterestProjection as InterestProjectionComponent } from './InterestProjection'
 import { UtilizationChart } from './UtilizationChart'
 import { formatDate, formatMoney } from '../lib/format'
+import { getCurrentCashbackForTransaction, getNextBillingCycleBalance } from '../services/creditCards'
 import type {
   CreditCard,
   CreditCardInput,
@@ -54,7 +56,7 @@ function daysUntil(dueDate: Date): number {
 
 function utilizationPercent(statement: CreditCardStatement): number {
   if (statement.card.limit <= 0) return 0
-  return Math.min(100, (statement.statementBalance / statement.card.limit) * 100)
+  return Math.min(100, (statement.outstandingBalance / statement.card.limit) * 100)
 }
 
 function statementStatus(
@@ -64,8 +66,11 @@ function statementStatus(
   if (!statement.card.active) {
     return { label: 'Inactive', tone: 'neutral' }
   }
-  if (statement.statementBalance <= 0) {
+  if (statement.statementBalance <= 0 && statement.outstandingBalance <= 0) {
     return { label: 'No balance', tone: 'ok' }
+  }
+  if (statement.statementBalance <= 0) {
+    return { label: 'New charges', tone: 'neutral' }
   }
   if (!isCurrentMonth) {
     return { label: 'Statement closed', tone: 'neutral' }
@@ -102,6 +107,7 @@ export function CreditCards({
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [projectionCardId, setProjectionCardId] = useState<string | null>(null)
+  const [historyExpandedByCardId, setHistoryExpandedByCardId] = useState<Record<string, boolean>>({})
 
   const projectionByCardId = useMemo(
     () => new Map(interestProjections.map((p) => [p.cardId, p])),
@@ -164,6 +170,17 @@ export function CreditCards({
 
   function closeProjection() {
     setProjectionCardId(null)
+  }
+
+  function toggleHistory(cardId: string) {
+    setHistoryExpandedByCardId((current) => ({
+      ...current,
+      [cardId]: !(current[cardId] ?? true),
+    }))
+  }
+
+  function isHistoryExpanded(cardId: string) {
+    return historyExpandedByCardId[cardId] ?? true
   }
 
   async function handleSubmit(input: CreditCardInput) {
@@ -279,7 +296,7 @@ export function CreditCards({
           <div className="cc-empty-state">
             <CreditCardIcon className="cc-empty-icon" aria-hidden="true" />
             <h3>No credit cards yet</h3>
-            <p>Add a card to track limits, statement balances, and upcoming due dates.</p>
+            <p>Add a card to track limits, outstanding balances, and upcoming due dates.</p>
             {!showForm && (
               <button
                 ref={addTriggerRef}
@@ -302,6 +319,7 @@ export function CreditCards({
                 const utilization = utilizationPercent(statement)
                 const cardColor = card.color ?? '#3B82F6'
                 const utilizationHistory = utilizationByCardId.get(card.id)
+                const nextStatementProjection = getNextBillingCycleBalance(statement)
 
                 return (
                   <article
@@ -349,9 +367,9 @@ export function CreditCards({
                     <div className="cc-card-body">
                       <div className="cc-card-primary">
                         <div>
-                          <span className="cc-card-label">Statement balance</span>
+                          <span className="cc-card-label">Outstanding balance</span>
                           <strong className="cc-card-balance">
-                            {formatMoney(statement.statementBalance)}
+                            {formatMoney(statement.outstandingBalance)}
                           </strong>
                         </div>
                       </div>
@@ -360,16 +378,18 @@ export function CreditCards({
                         <div className="cc-card-stat">
                           <span className="cc-card-stat-label">
                             <Landmark aria-hidden="true" />
-                            Limit
+                            Current statement
                           </span>
-                          <strong className="cc-card-stat-value">{formatMoney(card.limit)}</strong>
+                          <strong className="cc-card-stat-value">{formatMoney(statement.statementBalance)}</strong>
                         </div>
                         <div className="cc-card-stat">
                           <span className="cc-card-stat-label">
                             <WalletCards aria-hidden="true" />
-                            Balance
+                            Next billing cycle
                           </span>
-                          <strong className="cc-card-stat-value">{formatMoney(statement.statementBalance)}</strong>
+                          <strong className="cc-card-stat-value">
+                            {formatMoney(nextStatementProjection)}
+                          </strong>
                         </div>
                         <div className="cc-card-stat">
                           <span className="cc-card-stat-label">
@@ -398,6 +418,15 @@ export function CreditCards({
                             )}
                           </>
                         )}
+                        {((card.cashbackRules?.length ?? 0) > 0 || (card.cashbackRate ?? 0) > 0) && (
+                          <div className="cc-card-stat">
+                            <span className="cc-card-stat-label">
+                              <WalletCards aria-hidden="true" />
+                              {card.rewardName ?? 'Cashback'}
+                            </span>
+                            <strong className="cc-card-stat-value success">{formatMoney(statement.cashbackEarned)}</strong>
+                          </div>
+                        )}
                       </div>
 
                       <div className="cc-utilization">
@@ -412,7 +441,7 @@ export function CreditCards({
                           aria-valuenow={utilization}
                           aria-valuemin={0}
                           aria-valuemax={100}
-                          aria-valuetext={`${utilization.toFixed(1)}% used, ${formatMoney(statement.statementBalance)} of ${formatMoney(card.limit)} limit`}
+                          aria-valuetext={`${utilization.toFixed(1)}% used, ${formatMoney(statement.outstandingBalance)} of ${formatMoney(card.limit)} limit`}
                         >
                           <div
                             className={`cc-utilization-fill ${status.tone}`}
@@ -420,7 +449,7 @@ export function CreditCards({
                           />
                         </div>
                         <p className="cc-utilization-meta">
-                          {formatMoney(statement.statementBalance)} of {formatMoney(card.limit)} limit
+                          {formatMoney(statement.outstandingBalance)} of {formatMoney(card.limit)} limit
                         </p>
                       </div>
 
@@ -441,6 +470,82 @@ export function CreditCards({
                           </span>
                           <strong>{formatDate(statement.dueDate.toISOString())}</strong>
                         </div>
+                        <div className="cc-date-row">
+                          <span>
+                            <CalendarDays aria-hidden="true" />
+                            Cycle
+                          </span>
+                          <strong>
+                            {formatDate(new Date(statement.statementDate.getFullYear(), statement.statementDate.getMonth(), Math.max(1, card.statementDay + 1)).toISOString())}
+                            {' – '}
+                            {formatDate(statement.statementDate.toISOString())}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div className="cc-transaction-history" aria-labelledby={`cc-history-${card.id}`}>
+                        <button
+                          type="button"
+                          className="cc-history-toggle"
+                          aria-expanded={isHistoryExpanded(card.id)}
+                          aria-controls={`cc-history-list-${card.id}`}
+                          onClick={() => toggleHistory(card.id)}
+                        >
+                          <div className="cc-history-toggle-row">
+                            <div className="cc-history-header">
+                              <h5 id={`cc-history-${card.id}`}>
+                                Statement transactions
+                                <span className="cc-history-count">{statement.transactions.length}</span>
+                              </h5>
+                            </div>
+                            <ChevronDown className="cc-history-chevron" aria-hidden="true" />
+                          </div>
+                        </button>
+                        {isHistoryExpanded(card.id) && (
+                          statement.transactions.length === 0 ? (
+                            <p className="cc-history-empty">No transactions are in this statement period yet.</p>
+                          ) : (
+                            <ul id={`cc-history-list-${card.id}`} className="cc-history-list">
+                              {statement.transactions.map((transaction) => {
+                                const isPayment = transaction.creditCardPayment === true
+                                const cashbackValue = !isPayment && transaction.creditCardId === card.id
+                                  ? getCurrentCashbackForTransaction(card, {
+                                      type: transaction.type,
+                                      amount: transaction.amount,
+                                      category: transaction.category,
+                                      description: transaction.description,
+                                      creditCardId: transaction.creditCardId,
+                                      creditCardPayment: false,
+                                      isAnnualFee: transaction.isAnnualFee,
+                                    })
+                                  : 0
+                                return (
+                                  <li key={transaction.id} className="cc-history-item">
+                                    <div className="cc-history-main">
+                                      <strong>{transaction.description.trim() || transaction.category}</strong>
+                                      <div className="cc-history-meta">
+                                        <time dateTime={transaction.occurredAt}>
+                                          {formatDate(transaction.occurredAt)}
+                                        </time>
+                                        {!isPayment && cashbackValue > 0 && (
+                                          <span className="cc-history-cashback">Cashback +{formatMoney(cashbackValue)}</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="cc-history-amount">
+                                      <span className={isPayment ? 'payment' : 'charge'}>
+                                        {isPayment ? 'Payment' : 'Charge'}
+                                      </span>
+                                      <strong className={isPayment ? 'payment' : 'charge'}>
+                                        {isPayment ? '+' : '-'}{formatMoney(transaction.amount)}
+                                      </strong>
+                                    </div>
+                                  </li>
+                                )
+                              })}
+                            </ul>
+                          )
+                        )}
                       </div>
                     </div>
 

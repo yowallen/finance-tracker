@@ -1,5 +1,6 @@
 import { getFirestoreClient } from '../lib/firebase'
 import type { Timestamp, Unsubscribe } from 'firebase/firestore'
+import type { CreditCard } from '../types/creditCard'
 import type {
   MonthlySavingsStats,
   MonthlySpendingStats,
@@ -9,6 +10,7 @@ import type {
   TransactionInput,
 } from '../types/transaction'
 import { isSavingsDeposit, isSavingsWithdraw } from '../types/transaction'
+import { computeCashbackForTransaction } from './creditCards'
 
 const COLLECTION = 'transactions'
 
@@ -35,7 +37,9 @@ function mapDoc(
   const occurredAt = data.occurredAt
   const savingsDirection = data.savingsDirection
   const creditCardId = data.creditCardId
+  const cashbackEarned = typeof data.cashbackEarned === 'number' ? data.cashbackEarned : undefined
   const creditCardPayment = data.creditCardPayment
+  const isAnnualFee = typeof data.isAnnualFee === 'boolean' ? data.isAnnualFee : undefined
 
   if (
     typeof userId !== 'string' ||
@@ -72,7 +76,9 @@ function mapDoc(
       ? { recurringBillId: data.recurringBillId }
       : {}),
     ...(typeof creditCardId === 'string' ? { creditCardId } : {}),
+    ...(cashbackEarned !== undefined ? { cashbackEarned } : {}),
     ...(typeof creditCardPayment === 'boolean' ? { creditCardPayment } : {}),
+    ...(isAnnualFee !== undefined ? { isAnnualFee } : {}),
     ...(type === 'savings'
       ? { savingsDirection: savingsDirection as SavingsDirection }
       : {}),
@@ -180,8 +186,16 @@ export async function createTransaction(
   if (input.creditCardId) {
     payload.creditCardId = input.creditCardId
   }
+  if (typeof input.cashbackEarned === 'number') {
+    payload.cashbackEarned = input.cashbackEarned
+  } else {
+    payload.cashbackEarned = 0
+  }
   if (input.creditCardPayment) {
     payload.creditCardPayment = true
+  }
+  if (typeof input.isAnnualFee === 'boolean') {
+    payload.isAnnualFee = input.isAnnualFee
   }
   if (input.type === 'savings' && input.savingsDirection) {
     payload.savingsDirection = input.savingsDirection
@@ -220,10 +234,20 @@ export async function updateTransaction(
   } else {
     payload.creditCardId = null
   }
+  if (typeof input.cashbackEarned === 'number') {
+    payload.cashbackEarned = input.cashbackEarned
+  } else {
+    payload.cashbackEarned = 0
+  }
   if (input.creditCardPayment) {
     payload.creditCardPayment = true
   } else {
     payload.creditCardPayment = null
+  }
+  if (typeof input.isAnnualFee === 'boolean') {
+    payload.isAnnualFee = input.isAnnualFee
+  } else {
+    payload.isAnnualFee = null
   }
 
   await fs.updateDoc(fs.doc(db, COLLECTION, id), payload)
@@ -243,6 +267,46 @@ export function filterByMonth(
     const d = new Date(tx.occurredAt)
     return d.getFullYear() === year && d.getMonth() === month
   })
+}
+
+export async function reconcileTransactionCashbackValues(
+  userId: string,
+  cards: CreditCard[],
+  transactions: Transaction[],
+): Promise<number> {
+  const { fs, db } = await getFirestoreClient()
+  const cardById = new Map(cards.map((card) => [card.id, card]))
+  const pending = transactions.filter((tx) => {
+    if (tx.userId !== userId) return false
+    if (!tx.creditCardId || tx.creditCardPayment === true) return false
+    if (tx.type !== 'expense' && tx.type !== 'bill') return false
+    const card = cardById.get(tx.creditCardId)
+    return !!card
+  }).map((tx) => {
+    const card = cardById.get(tx.creditCardId!)
+    if (!card) return null
+    const nextValue = computeCashbackForTransaction(card, {
+      type: tx.type,
+      amount: tx.amount,
+      category: tx.category,
+      description: tx.description,
+      creditCardId: tx.creditCardId,
+      creditCardPayment: false,
+      isAnnualFee: tx.isAnnualFee,
+    })
+    const currentValue = typeof tx.cashbackEarned === 'number' ? tx.cashbackEarned : 0
+
+    if (Math.abs(currentValue - nextValue) < 0.01) {
+      return null
+    }
+
+    return fs.updateDoc(fs.doc(db, COLLECTION, tx.id), {
+      cashbackEarned: nextValue,
+    })
+  }).filter((item): item is Promise<void> => !!item)
+
+  await Promise.all(pending)
+  return pending.length
 }
 
 export function computeMonthlySummary(

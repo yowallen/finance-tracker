@@ -322,13 +322,18 @@ export function FinanceCalendar({
                         type="button"
                         className={`icon-btn icon-btn--cc ${bill.payWithCreditCard ? 'active' : ''}`}
                         onClick={() => void handleToggleCreditCardPayment(bill)}
-                        aria-label={bill.payWithCreditCard
-                          ? 'Remove credit card payment flag'
-                          : 'Mark as paid with credit card (excluded from daily balance)'}
-                        aria-pressed={bill.payWithCreditCard}
-                        title={bill.payWithCreditCard
-                          ? 'This bill is flagged as paid with credit card. Click to remove flag.'
-                          : 'Flag this bill to be paid with credit card (excluded from daily balance)'}
+                        disabled={bill.bill.category === 'Loan'}
+                        aria-label={bill.bill.category === 'Loan'
+                          ? 'Loans cannot be paid with credit card'
+                          : bill.payWithCreditCard
+                            ? 'Remove credit card payment flag'
+                            : 'Mark as paid with credit card (excluded from daily balance)'}
+                        aria-pressed={bill.bill.category === 'Loan' ? false : bill.payWithCreditCard}
+                        title={bill.bill.category === 'Loan'
+                          ? 'Loans cannot be paid with a credit card.'
+                          : bill.payWithCreditCard
+                            ? 'This bill is flagged as paid with credit card. Click to remove flag.'
+                            : 'Flag this bill to be paid with credit card (excluded from daily balance)'}
                       >
                         <CreditCard aria-hidden="true" />
                       </button>
