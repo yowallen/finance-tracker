@@ -36,6 +36,60 @@ interface FieldErrors {
   cashbackRate?: string
 }
 
+type RewardPreset = {
+  id: string
+  label: string
+  rewardName: string
+  cashbackRate: number
+  cashbackCap?: number
+  cashbackMinSpend: number
+  cashbackCategories: string[]
+  cashbackRulesText: string
+}
+
+const REWARD_PRESETS: RewardPreset[] = [
+  {
+    id: 'custom',
+    label: 'Custom',
+    rewardName: 'Custom reward',
+    cashbackRate: 0,
+    cashbackCap: undefined,
+    cashbackMinSpend: 1000,
+    cashbackCategories: ['Food', 'Shopping', 'Transport', 'Entertainment', 'Health'],
+    cashbackRulesText: '*=0.3%',
+  },
+  {
+    id: 'bpi-amore-classic',
+    label: 'BPI Amore Cashback Classic',
+    rewardName: 'BPI Amore Cashback',
+    cashbackRate: 4,
+    cashbackCap: 15000,
+    cashbackMinSpend: 1000,
+    cashbackCategories: ['Shopping', 'Groceries'],
+    cashbackRulesText: 'Utilities=1%; Health=1%; *=0.3%',
+  },
+  {
+    id: 'bpi-amore-plus',
+    label: 'BPI Amore Cashback Plus',
+    rewardName: 'BPI Amore Cashback',
+    cashbackRate: 1.5,
+    cashbackCap: 5000,
+    cashbackMinSpend: 1000,
+    cashbackCategories: ['Food', 'Shopping', 'Transport', 'Entertainment', 'Health', 'Groceries'],
+    cashbackRulesText: 'Groceries=1.5%; Dining=1%; Shopping=0.5%; *=0.3%',
+  },
+  {
+    id: 'generic-cashback',
+    label: 'General cashback card',
+    rewardName: 'Cashback',
+    cashbackRate: 1,
+    cashbackCap: 2500,
+    cashbackMinSpend: 1000,
+    cashbackCategories: ['Food', 'Shopping', 'Transport', 'Entertainment', 'Health'],
+    cashbackRulesText: '*=1%',
+  },
+]
+
 function createInitialState(editing: CreditCard | null): CreditCardInput {
   if (editing) {
     return {
@@ -143,7 +197,6 @@ export function CreditCardForm({
   const [rewardName, setRewardName] = useState(initial.rewardName ?? 'Cashback')
   const [cashbackRate, setCashbackRate] = useState(initial.cashbackRate !== undefined ? String(initial.cashbackRate) : '')
   const [cashbackCap, setCashbackCap] = useState(initial.cashbackCap !== undefined ? String(initial.cashbackCap) : '')
-  const [cashbackStartingBalance, setCashbackStartingBalance] = useState(initial.cashbackStartingBalance !== undefined ? String(initial.cashbackStartingBalance) : '')
   const [cashbackMinSpend, setCashbackMinSpend] = useState(initial.cashbackMinSpend !== undefined ? String(initial.cashbackMinSpend) : '1000')
   const [cashbackCategories, setCashbackCategories] = useState(
     (initial.cashbackCategories ?? ['Food', 'Shopping', 'Transport', 'Entertainment', 'Health']).join(', '),
@@ -157,6 +210,17 @@ export function CreditCardForm({
       })
       .join('; '),
   )
+  const [selectedPreset, setSelectedPreset] = useState<string>(() => {
+    const match = REWARD_PRESETS.find((preset) => {
+      if (preset.id === 'custom') return false
+      return preset.rewardName === (initial.rewardName ?? 'Cashback')
+        && Math.abs((preset.cashbackRate ?? 0) - Number(initial.cashbackRate ?? 0)) < 0.001
+        && (preset.cashbackCap ?? 0) === (initial.cashbackCap ?? 0)
+        && (preset.cashbackMinSpend ?? 0) === (initial.cashbackMinSpend ?? 0)
+    })
+    return match?.id ?? 'custom'
+  })
+  const isPresetLocked = selectedPreset !== 'custom'
   const cashbackRuleSummary = summarizeCashbackRules(cashbackRulesText)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -172,6 +236,22 @@ export function CreditCardForm({
   useEffect(() => {
     requestAnimationFrame(() => nameRef.current?.focus())
   }, [])
+
+  function applyRewardPreset(presetId: string) {
+    const preset = REWARD_PRESETS.find((item) => item.id === presetId)
+    if (!preset) {
+      setSelectedPreset('custom')
+      return
+    }
+
+    setSelectedPreset(preset.id)
+    setRewardName(preset.rewardName)
+    setCashbackRate(String(preset.cashbackRate))
+    setCashbackCap(preset.cashbackCap !== undefined ? String(preset.cashbackCap) : '')
+    setCashbackMinSpend(String(preset.cashbackMinSpend))
+    setCashbackCategories(preset.cashbackCategories.join(', '))
+    setCashbackRulesText(preset.cashbackRulesText)
+  }
 
   function focusFirstError(nextErrors: FieldErrors) {
     if (nextErrors.name) {
@@ -204,7 +284,6 @@ export function CreditCardForm({
     const parsedMinimumPaymentOverride = minimumPaymentOverride.trim() !== '' ? Number.parseFloat(minimumPaymentOverride) : undefined
     const parsedCashbackRate = cashbackRate.trim() !== '' ? Number.parseFloat(cashbackRate) : undefined
     const parsedCashbackCap = cashbackCap.trim() !== '' ? Number.parseFloat(cashbackCap) : undefined
-    const parsedCashbackStartingBalance = cashbackStartingBalance.trim() !== '' ? Number.parseFloat(cashbackStartingBalance) : undefined
     const parsedCashbackMinSpend = cashbackMinSpend.trim() !== '' ? Number.parseFloat(cashbackMinSpend) : 1000
     const parsedCashbackRules = cashbackRulesText
       .split(/[,;\n]/)
@@ -266,9 +345,6 @@ export function CreditCardForm({
     if (parsedCashbackCap !== undefined && (!Number.isFinite(parsedCashbackCap) || parsedCashbackCap < 0)) {
       nextErrors.cashbackRate = 'Cashback cap must be zero or greater.'
     }
-    if (parsedCashbackStartingBalance !== undefined && (!Number.isFinite(parsedCashbackStartingBalance) || parsedCashbackStartingBalance < 0)) {
-      nextErrors.cashbackRate = 'Starting cashback balance must be zero or greater.'
-    }
     if (!Number.isFinite(parsedCashbackMinSpend) || parsedCashbackMinSpend < 0) {
       nextErrors.cashbackRate = 'Cashback minimum spend must be zero or greater.'
     }
@@ -296,7 +372,6 @@ export function CreditCardForm({
         rewardName: rewardName.trim() || 'Cashback',
         cashbackRate: fallbackCashbackRate,
         cashbackCap: parsedCashbackCap,
-        cashbackStartingBalance: parsedCashbackStartingBalance,
         cashbackMinSpend: parsedCashbackMinSpend,
         cashbackCategories: cashbackCategories
           .split(',')
@@ -530,14 +605,43 @@ export function CreditCardForm({
 
         <div className="form-row">
           <label>
+            Reward preset
+            <select
+              value={selectedPreset}
+              onChange={(e) => {
+                const nextPresetId = e.target.value
+                if (nextPresetId === 'custom') {
+                  setSelectedPreset('custom')
+                  return
+                }
+                applyRewardPreset(nextPresetId)
+              }}
+            >
+              {REWARD_PRESETS.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
             Reward name
             <input
               type="text"
               value={rewardName}
-              onChange={(e) => setRewardName(e.target.value)}
+              disabled={isPresetLocked}
+              onChange={(e) => {
+                setRewardName(e.target.value)
+                if (selectedPreset !== 'custom') {
+                  setSelectedPreset('custom')
+                }
+              }}
               placeholder="Amore Cashback"
             />
           </label>
+        </div>
+
+        <div className="form-row">
           <label>
             Cashback rate (%)
             <input
@@ -547,7 +651,13 @@ export function CreditCardForm({
               max="100"
               step="0.01"
               value={cashbackRate}
-              onChange={(e) => setCashbackRate(e.target.value)}
+              disabled={isPresetLocked}
+              onChange={(e) => {
+                setCashbackRate(e.target.value)
+                if (selectedPreset !== 'custom') {
+                  setSelectedPreset('custom')
+                }
+              }}
               placeholder="1.0"
               aria-invalid={errors.cashbackRate ? true : undefined}
             />
@@ -555,9 +665,6 @@ export function CreditCardForm({
               <span className="field-error" role="alert">{errors.cashbackRate}</span>
             )}
           </label>
-        </div>
-
-        <div className="form-row">
           <label>
             Cashback cap (₱) (optional)
             <input
@@ -566,20 +673,14 @@ export function CreditCardForm({
               min="0"
               step="0.01"
               value={cashbackCap}
-              onChange={(e) => setCashbackCap(e.target.value)}
+              disabled={isPresetLocked}
+              onChange={(e) => {
+                setCashbackCap(e.target.value)
+                if (selectedPreset !== 'custom') {
+                  setSelectedPreset('custom')
+                }
+              }}
               placeholder="3000"
-            />
-          </label>
-          <label>
-            Starting cashback balance (₱)
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={cashbackStartingBalance}
-              onChange={(e) => setCashbackStartingBalance(e.target.value)}
-              placeholder="1255"
             />
           </label>
         </div>
@@ -593,28 +694,45 @@ export function CreditCardForm({
               min="0"
               step="0.01"
               value={cashbackMinSpend}
-              onChange={(e) => setCashbackMinSpend(e.target.value)}
+              disabled={isPresetLocked}
+              onChange={(e) => {
+                setCashbackMinSpend(e.target.value)
+                if (selectedPreset !== 'custom') {
+                  setSelectedPreset('custom')
+                }
+              }}
               placeholder="1000"
             />
           </label>
+          <label>
+            Eligible categories
+            <input
+              type="text"
+              value={cashbackCategories}
+              disabled={isPresetLocked}
+              onChange={(e) => {
+                setCashbackCategories(e.target.value)
+                if (selectedPreset !== 'custom') {
+                  setSelectedPreset('custom')
+                }
+              }}
+              placeholder="Food, Shopping, Transport"
+            />
+          </label>
         </div>
-
-        <label>
-          Eligible categories
-          <input
-            type="text"
-            value={cashbackCategories}
-            onChange={(e) => setCashbackCategories(e.target.value)}
-            placeholder="Food, Shopping, Transport"
-          />
-        </label>
 
         <label>
           Cashback rules
           <input
             type="text"
             value={cashbackRulesText}
-            onChange={(e) => setCashbackRulesText(e.target.value)}
+            disabled={isPresetLocked}
+            onChange={(e) => {
+              setCashbackRulesText(e.target.value)
+              if (selectedPreset !== 'custom') {
+                setSelectedPreset('custom')
+              }
+            }}
             placeholder="Groceries=1%; *=0.3%"
           />
           {cashbackRuleSummary.length > 0 && (

@@ -122,6 +122,7 @@ function mapDoc(
   const cashbackRate = coerceNumeric(data.cashbackRate)
   const cashbackCap = coerceNumeric(data.cashbackCap)
   const cashbackStartingBalance = coerceNumeric(data.cashbackStartingBalance)
+  const cashbackRedeemed = coerceNumeric(data.cashbackRedeemed)
   const cashbackMinSpend = coerceNumeric(data.cashbackMinSpend)
   const cashbackCategories = coerceStringArray(data.cashbackCategories)
   const cashbackRules = normalizeLegacyCashbackRules(data.cashbackRules)
@@ -158,6 +159,7 @@ function mapDoc(
     ...(cashbackRate !== undefined ? { cashbackRate } : {}),
     ...(cashbackCap !== undefined ? { cashbackCap } : {}),
     ...(cashbackStartingBalance !== undefined ? { cashbackStartingBalance } : {}),
+    ...(cashbackRedeemed !== undefined ? { cashbackRedeemed } : {}),
     ...(cashbackMinSpend !== undefined ? { cashbackMinSpend } : {}),
     ...(cashbackCategories ? { cashbackCategories } : {}),
     ...(cashbackRules ? { cashbackRules } : {}),
@@ -314,6 +316,9 @@ export async function createCreditCard(
   if (input.cashbackStartingBalance !== undefined) {
     payload.cashbackStartingBalance = input.cashbackStartingBalance
   }
+  if (input.cashbackRedeemed !== undefined) {
+    payload.cashbackRedeemed = input.cashbackRedeemed
+  }
   if (input.cashbackMinSpend !== undefined) {
     payload.cashbackMinSpend = input.cashbackMinSpend
   }
@@ -395,6 +400,11 @@ export async function updateCreditCard(
     payload.cashbackStartingBalance = input.cashbackStartingBalance
   } else {
     payload.cashbackStartingBalance = null
+  }
+  if (input.cashbackRedeemed !== undefined) {
+    payload.cashbackRedeemed = input.cashbackRedeemed
+  } else {
+    payload.cashbackRedeemed = null
   }
   if (input.cashbackMinSpend !== undefined) {
     payload.cashbackMinSpend = input.cashbackMinSpend
@@ -588,6 +598,8 @@ export function computeStatement(
   const cashbackStartingBalance = typeof card.cashbackStartingBalance === 'number' ? card.cashbackStartingBalance : 0
   const cashbackCap = typeof card.cashbackCap === 'number' ? card.cashbackCap : Number.POSITIVE_INFINITY
   const cashbackEarned = Math.min(cashbackStartingBalance + cashbackPeriodEarned, cashbackCap)
+  const cashbackRedeemed = typeof card.cashbackRedeemed === 'number' ? Math.max(0, card.cashbackRedeemed) : 0
+  const availableCashback = Math.max(0, cashbackEarned - cashbackRedeemed)
 
   return {
     card,
@@ -604,6 +616,8 @@ export function computeStatement(
     isPaid,
     cashbackEligibleSpend,
     cashbackEarned,
+    cashbackRedeemed,
+    availableCashback,
     transactions: periodTransactions,
     transactionHistory,
   }
@@ -613,23 +627,53 @@ export function resolveCashbackRateForCategory(card: Pick<CreditCard, 'cashbackR
   const normalizedCategory = category.trim().toLowerCase()
   const rules = Array.isArray(card.cashbackRules) ? card.cashbackRules : []
 
-  if (rules.length > 0) {
-    const ruleMatch = rules
-      .filter((rule) => Array.isArray(rule.categories) && rule.categories.length > 0)
-      .find((rule) => {
-        const categories = rule.categories.map((item) => item.trim().toLowerCase())
-        return categories.includes('*') || categories.includes(normalizedCategory)
-      })
+  const normalizeKey = (value: string): string => value.trim().toLowerCase().replace(/[^a-z]+/g, ' ').trim()
+  const aliasMap: Record<string, string[]> = {
+    groceries: ['groceries', 'grocery', 'supermarket', 'supermarkets'],
+    utilities: ['utilities', 'utility', 'water', 'electricity', 'internet', 'phone', 'payment', 'bills'],
+    drugstores: ['drug store', 'drug stores', 'pharmacy', 'pharmacies'],
+  }
+  const categoryKey = (value: string): string => {
+    const normalized = value.trim().toLowerCase()
+    if (!normalized || normalized === '*' || normalized === 'all' || normalized.includes('all other')) {
+      return '*'
+    }
 
-    if (ruleMatch) {
-      return Number(ruleMatch.rate) || 0
+    const compact = normalizeKey(value)
+    if (!compact) return '*'
+
+    for (const [canonical, aliases] of Object.entries(aliasMap)) {
+      if (aliases.includes(compact)) {
+        return canonical
+      }
+    }
+
+    return compact
+  }
+
+  if (rules.length > 0) {
+    const targetKey = categoryKey(normalizedCategory)
+    const exactMatch = rules
+      .filter((rule) => Array.isArray(rule.categories) && rule.categories.length > 0)
+      .find((rule) => rule.categories.some((item) => categoryKey(item) === targetKey))
+
+    if (exactMatch) {
+      return Number(exactMatch.rate) || 0
+    }
+
+    const wildcardMatch = rules
+      .filter((rule) => Array.isArray(rule.categories) && rule.categories.length > 0)
+      .find((rule) => rule.categories.some((item) => categoryKey(item) === '*'))
+
+    if (wildcardMatch) {
+      return Number(wildcardMatch.rate) || 0
     }
 
     return 0
   }
 
   const legacyCategories = (card.cashbackCategories ?? []).map((item) => item.trim().toLowerCase())
-  if (legacyCategories.length > 0 && (legacyCategories.includes('*') || legacyCategories.includes(normalizedCategory))) {
+  if (legacyCategories.length > 0 && (legacyCategories.includes('*') || legacyCategories.some((value) => categoryKey(value) === categoryKey(normalizedCategory)))) {
     return Number(card.cashbackRate ?? 0)
   }
 
@@ -873,6 +917,20 @@ export function buildUtilizationHistory(
     currentUtilization: current,
     trend: change < -1 ? 'improving' : change > 1 ? 'worsening' : 'stable',
   }
+}
+
+export function computeAggregateCashback(
+  cards: CreditCard[],
+  allTransactions: Transaction[],
+  year: number,
+  month: number,
+): number {
+  return cards
+    .filter((card) => card.active && ((card.cashbackRules?.length ?? 0) > 0 || (card.cashbackRate ?? 0) > 0 || (card.rewardName ?? '').trim().length > 0))
+    .reduce(
+      (sum, card) => sum + Math.max(0, computeStatement(card, allTransactions, year, month).availableCashback),
+      0,
+    )
 }
 
 export function computeAggregateUtilization(

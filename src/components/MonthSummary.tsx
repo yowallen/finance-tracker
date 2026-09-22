@@ -35,6 +35,8 @@ interface MonthSummaryProps {
   totalOutstanding?: number
   totalAvailableCredit?: number
   nextDueStatement?: { card: CreditCard; statement: CreditCardStatement } | null
+  hasRewardCards?: boolean
+  aggregateCashback?: number
   aggregateUtilization?: { totalBalance: number; totalLimit: number; utilizationPercent: number }
   onNavigateToCards?: () => void
 }
@@ -63,6 +65,8 @@ export function MonthSummary({
   totalOutstanding,
   totalAvailableCredit,
   nextDueStatement,
+  hasRewardCards = false,
+  aggregateCashback,
   aggregateUtilization,
   onNavigateToCards,
 }: MonthSummaryProps) {
@@ -167,7 +171,13 @@ export function MonthSummary({
                 <strong className="cc-stat-value">{formatMoney(totalAvailableCredit)}</strong>
               </article>
             )}
-            {aggregateUtilization && (
+            {hasRewardCards && aggregateCashback !== undefined ? (
+              <article className="cc-stat utilization">
+                <span className="cc-stat-label">Available cashback</span>
+                <strong className="cc-stat-value">{formatMoney(aggregateCashback)}</strong>
+                <span className="cc-stat-meta">Across active reward cards</span>
+              </article>
+            ) : aggregateUtilization && (
               <article className="cc-stat utilization">
                 <span className="cc-stat-label">Utilization</span>
                 <strong className="cc-stat-value">{aggregateUtilization.utilizationPercent.toFixed(1)}%</strong>

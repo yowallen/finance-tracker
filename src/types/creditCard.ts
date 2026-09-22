@@ -64,6 +64,8 @@ export interface CreditCard {
   cashbackCap?: number
   /** Cashback already available at the start of the current statement period. */
   cashbackStartingBalance?: number
+  /** Cashback already redeemed and no longer available to spend. */
+  cashbackRedeemed?: number
   /** Minimum transaction amount in pesos needed before cashback is earned. */
   cashbackMinSpend?: number
   /** Legacy categories eligible for cashback; if omitted, all card spend qualifies. */
@@ -89,6 +91,7 @@ export interface CreditCardInput {
   cashbackRate?: number
   cashbackCap?: number
   cashbackStartingBalance?: number
+  cashbackRedeemed?: number
   cashbackMinSpend?: number
   cashbackCategories?: string[]
   cashbackRules?: CashbackRule[]
@@ -116,6 +119,8 @@ export interface CreditCardStatement {
   isPaid: boolean
   cashbackEligibleSpend: number
   cashbackEarned: number
+  cashbackRedeemed: number
+  availableCashback: number
   transactions: Transaction[]
   transactionHistory: Transaction[]
 }
@@ -175,6 +180,9 @@ export function validateCreditCardInput(input: CreditCardInput): void {
   }
   if (input.cashbackStartingBalance !== undefined && (!Number.isFinite(input.cashbackStartingBalance) || input.cashbackStartingBalance < 0)) {
     throw new Error('Starting cashback balance must be zero or greater.')
+  }
+  if (input.cashbackRedeemed !== undefined && (!Number.isFinite(input.cashbackRedeemed) || input.cashbackRedeemed < 0)) {
+    throw new Error('Redeemed cashback must be zero or greater.')
   }
   if (input.cashbackMinSpend !== undefined && (!Number.isFinite(input.cashbackMinSpend) || input.cashbackMinSpend < 0)) {
     throw new Error('Cashback minimum spend must be zero or greater.')

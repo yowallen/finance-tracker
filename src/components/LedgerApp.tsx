@@ -153,6 +153,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
     totalAvailableCredit,
     nextDueStatement,
     utilizationHistories,
+    aggregateCashback,
     aggregateUtilization,
     cardById,
     loading: ccLoading,
@@ -525,6 +526,9 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
               totalOutstanding={totalOutstanding}
               totalAvailableCredit={totalAvailableCredit}
               nextDueStatement={nextDueStatement}
+              hasRewardCards={activeCards.some((card) =>
+                ((card.cashbackRules?.length ?? 0) > 0 || (card.cashbackRate ?? 0) > 0 || (card.rewardName ?? '').trim().length > 0))}
+              aggregateCashback={aggregateCashback}
               aggregateUtilization={aggregateUtilization}
               onNavigateToCards={() => scrollToSection('credit-cards')}
             />

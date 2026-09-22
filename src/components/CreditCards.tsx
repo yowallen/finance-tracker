@@ -107,6 +107,8 @@ export function CreditCards({
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [projectionCardId, setProjectionCardId] = useState<string | null>(null)
+  const [redeemCardId, setRedeemCardId] = useState<string | null>(null)
+  const [redeemAmount, setRedeemAmount] = useState('')
   const [historyExpandedByCardId, setHistoryExpandedByCardId] = useState<Record<string, boolean>>({})
 
   const projectionByCardId = useMemo(
@@ -183,6 +185,36 @@ export function CreditCards({
     return historyExpandedByCardId[cardId] ?? true
   }
 
+  const statementByCardId = useMemo(
+    () => new Map(statements.map((statement) => [statement.card.id, statement])),
+    [statements],
+  )
+
+  const redeemCard = useMemo(
+    () => cards.find((card) => card.id === redeemCardId) ?? null,
+    [cards, redeemCardId],
+  )
+  const redeemStatement = redeemCard ? statementByCardId.get(redeemCard.id) ?? null : null
+  const redeemAvailable = redeemStatement ? Math.max(0, redeemStatement.availableCashback) : 0
+  const isRedeemOpen = Boolean(redeemCard && redeemAvailable > 0)
+
+  useEffect(() => {
+  const updateRedeemAmount = () => {
+    if (!redeemCard || redeemAvailable <= 0) {
+      setRedeemAmount('');
+      return;
+    }
+
+    setRedeemAmount(String(Math.round(redeemAvailable)));
+  };
+    updateRedeemAmount();
+  }, [redeemCard, redeemAvailable])
+
+  function closeRedeemDialog() {
+    setRedeemCardId(null)
+    setRedeemAmount('')
+  }
+
   async function handleSubmit(input: CreditCardInput) {
     const wasEditing = Boolean(editing)
     setSaving(true)
@@ -230,10 +262,74 @@ export function CreditCards({
     }
   }
 
-  const statementByCardId = useMemo(
-    () => new Map(statements.map((statement) => [statement.card.id, statement])),
-    [statements],
-  )
+  function cardToInput(card: CreditCard): CreditCardInput {
+    return {
+      name: card.name,
+      lastFour: card.lastFour,
+      limit: card.limit,
+      statementDay: card.statementDay,
+      dueDay: card.dueDay,
+      dueDayOffset: card.dueDayOffset,
+      color: card.color,
+      active: card.active,
+      apr: card.apr,
+      interestCalculationMethod: card.interestCalculationMethod,
+      gracePeriodDays: card.gracePeriodDays,
+      minimumPaymentOverride: card.minimumPaymentOverride,
+      rewardName: card.rewardName,
+      cashbackRate: card.cashbackRate,
+      cashbackCap: card.cashbackCap,
+      cashbackStartingBalance: card.cashbackStartingBalance,
+      cashbackRedeemed: card.cashbackRedeemed,
+      cashbackMinSpend: card.cashbackMinSpend,
+      cashbackCategories: card.cashbackCategories,
+      cashbackRules: card.cashbackRules,
+    }
+  }
+
+  async function handleRedeemCashback(card: CreditCard) {
+    const statement = statementByCardId.get(card.id)
+    if (!statement) {
+      announce('This card is not available for redemption right now.')
+      return
+    }
+
+    const available = Math.max(0, statement.availableCashback)
+    if (available <= 0) {
+      announce('No cashback is currently available to use on this card.')
+      return
+    }
+
+    const amount = Number.parseFloat(redeemAmount)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      announce('Enter a valid cashback amount greater than zero.')
+      return
+    }
+
+    const cappedAmount = Math.min(amount, available)
+    try {
+      await onUpdate(card.id, {
+        ...cardToInput(card),
+        cashbackRedeemed: (card.cashbackRedeemed ?? 0) + cappedAmount,
+      })
+      closeRedeemDialog()
+      announce(`Redeemed ${formatMoney(cappedAmount)} from ${card.name}.`)
+    } catch (err) {
+      announce(err instanceof Error ? err.message : 'Could not redeem cashback.')
+    }
+  }
+
+  function openRedeemDialog(card: CreditCard) {
+    const statement = statementByCardId.get(card.id)
+    if (!statement || statement.availableCashback <= 0) {
+      announce('No cashback is currently available to use on this card.')
+      return
+    }
+
+    setRedeemCardId(card.id)
+    setRedeemAmount(String(Math.round(statement.availableCashback)))
+  }
+
   const activeCount = cards.filter((card) => card.active).length
   const attentionCount = statements.filter((statement) => {
     const status = statementStatus(statement, isCurrentMonth)
@@ -317,6 +413,7 @@ export function CreditCards({
                 if (!statement) return null
                 const status = statementStatus(statement, isCurrentMonth)
                 const utilization = utilizationPercent(statement)
+                const hasRewards = ((card.cashbackRules?.length ?? 0) > 0 || (card.cashbackRate ?? 0) > 0)
                 const cardColor = card.color ?? '#3B82F6'
                 const utilizationHistory = utilizationByCardId.get(card.id)
                 const nextStatementProjection = getNextBillingCycleBalance(statement)
@@ -424,34 +521,46 @@ export function CreditCards({
                               <WalletCards aria-hidden="true" />
                               {card.rewardName ?? 'Cashback'}
                             </span>
-                            <strong className="cc-card-stat-value success">{formatMoney(statement.cashbackEarned)}</strong>
+                            <strong className="cc-card-stat-value success">{formatMoney(statement.availableCashback)}</strong>
                           </div>
                         )}
                       </div>
 
-                      <div className="cc-utilization">
-                        <div className="cc-utilization-top">
-                          <span>Credit used</span>
-                          <strong>{utilization.toFixed(1)}%</strong>
+                      {hasRewards ? (
+                        <div className="cc-utilization">
+                          <div className="cc-utilization-top">
+                            <span>{card.rewardName ?? 'Cashback'}</span>
+                            <strong>{formatMoney(statement.availableCashback)}</strong>
+                          </div>
+                          <p className="cc-utilization-meta">
+                            Available cashback for this statement
+                          </p>
                         </div>
-                        <div
-                          className="cc-utilization-bar"
-                          role="progressbar"
-                          aria-label={`Credit utilization for ${card.name}`}
-                          aria-valuenow={utilization}
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                          aria-valuetext={`${utilization.toFixed(1)}% used, ${formatMoney(statement.outstandingBalance)} of ${formatMoney(card.limit)} limit`}
-                        >
+                      ) : (
+                        <div className="cc-utilization">
+                          <div className="cc-utilization-top">
+                            <span>Credit used</span>
+                            <strong>{utilization.toFixed(1)}%</strong>
+                          </div>
                           <div
-                            className={`cc-utilization-fill ${status.tone}`}
-                            style={{ width: `${utilization}%` }}
-                          />
+                            className="cc-utilization-bar"
+                            role="progressbar"
+                            aria-label={`Credit utilization for ${card.name}`}
+                            aria-valuenow={utilization}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-valuetext={`${utilization.toFixed(1)}% used, ${formatMoney(statement.outstandingBalance)} of ${formatMoney(card.limit)} limit`}
+                          >
+                            <div
+                              className={`cc-utilization-fill ${status.tone}`}
+                              style={{ width: `${utilization}%` }}
+                            />
+                          </div>
+                          <p className="cc-utilization-meta">
+                            {formatMoney(statement.outstandingBalance)} of {formatMoney(card.limit)} limit
+                          </p>
                         </div>
-                        <p className="cc-utilization-meta">
-                          {formatMoney(statement.outstandingBalance)} of {formatMoney(card.limit)} limit
-                        </p>
-                      </div>
+                      )}
 
                       {utilizationHistory && <UtilizationChart history={utilizationHistory} />}
 
@@ -556,6 +665,19 @@ export function CreditCards({
                     </div>
 
                     <div className="cc-card-footer">
+                      {hasRewards && statement.availableCashback > 0 && (
+                        <button
+                          type="button"
+                          className="btn-ghost btn-sm cc-projection-btn"
+                          onClick={() => openRedeemDialog(card)}
+                          aria-label={`Use cashback on ${card.name}`}
+                        >
+                          <WalletCards className="cc-projection-icon" aria-hidden="true" />
+                          <p className="cc-projection-label">
+                            Use cashback
+                          </p>
+                        </button>
+                      )}
                       {card.apr && card.apr > 0 && projectionByCardId.has(card.id) && (
                         <button
                           type="button"
@@ -583,6 +705,87 @@ export function CreditCards({
           projection={projectionByCardId.get(projectionCardId)!}
           onClose={closeProjection}
         />
+      )}
+
+      {isRedeemOpen && redeemCard && redeemStatement && (
+        <div className="transaction-sheet-backdrop" onClick={closeRedeemDialog}>
+          <div
+            className="transaction-sheet cashback-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cashback-modal-heading"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="transaction-sheet__handle" aria-hidden="true" />
+            <div className="transaction-sheet__header">
+              <h2 id="cashback-modal-heading" className="transaction-sheet__title">
+                Redeem cashback
+              </h2>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={closeRedeemDialog}
+                aria-label="Close cashback redemption"
+              >
+                <Trash2 aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="payment-modal-content">
+              <div className="payment-modal-header">
+                <div className="payment-modal-bill">
+                  <span className="payment-modal-bill-category">Cashback</span>
+                  <h3 className="payment-modal-bill-name">{redeemCard.name}</h3>
+                </div>
+                <strong className="payment-modal-amount">
+                  {formatMoney(redeemAvailable)} available
+                </strong>
+              </div>
+
+              <div className="payment-card-select">
+                <p className="payment-card-select-label">Redeem amount</p>
+                <div className="cashback-redeem-box">
+                  <label className="cashback-redeem-label" htmlFor="cashback-redeem-amount">
+                    Amount (₱)
+                  </label>
+                  <div className="cashback-redeem-input-row">
+                    <input
+                      id="cashback-redeem-amount"
+                      type="number"
+                      min="1"
+                      max={redeemAvailable}
+                      step="1"
+                      value={redeemAmount}
+                      onChange={(event) => setRedeemAmount(event.target.value)}
+                      className="cashback-redeem-input"
+                    />
+                    <button
+                      type="button"
+                      className="btn-ghost btn-sm"
+                      onClick={() => setRedeemAmount(String(Math.round(redeemAvailable)))}
+                    >
+                      Use all
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="form-actions">
+                <button type="button" className="btn-ghost" onClick={closeRedeemDialog}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => void handleRedeemCashback(redeemCard)}
+                  disabled={redeemAmount.trim() === '' || Number.parseFloat(redeemAmount) <= 0}
+                >
+                  Redeem cashback
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </section>
   )

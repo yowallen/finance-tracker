@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { CreditCard } from '../types/creditCard'
-import { computeCashbackForTransaction, getCurrentCashbackForTransaction, resolveCashbackRateForCategory } from './creditCards'
+import {
+  computeAggregateCashback,
+  computeCashbackForTransaction,
+  computeStatement,
+  getCurrentCashbackForTransaction,
+  resolveCashbackRateForCategory,
+} from './creditCards'
 
 function mapLegacyCreditCardDocForTest(data: Record<string, unknown>) {
   const normalizeLegacyCashbackRules = (value: unknown) => {
@@ -107,6 +113,30 @@ describe('cashback perk rules', () => {
 
     expect(resolveCashbackRateForCategory(card, 'Groceries')).toBe(1)
     expect(resolveCashbackRateForCategory(card, 'Transport')).toBe(0.3)
+  })
+
+  it('uses the BPI Amore Cashback Classic rates with wildcard fallback and exact category priority', () => {
+    const card = {
+      id: 'card-1',
+      userId: 'user-1',
+      name: 'BPI Amore Cashback Classic',
+      lastFour: '1234',
+      limit: 200000,
+      statementDay: 15,
+      active: true,
+      createdAt: '2024-01-01T00:00:00Z',
+      cashbackRate: 0.3,
+      cashbackRules: [
+        { id: 'all-other', rate: 0.3, categories: ['*'] },
+        { id: 'groceries', rate: 4, categories: ['Groceries', 'Supermarket'] },
+        { id: 'utilities', rate: 1, categories: ['Utilities', 'Drug Store', 'Drug Stores'] },
+      ],
+      cashbackMinSpend: 1000,
+    } as CreditCard
+
+    expect(resolveCashbackRateForCategory(card, 'Groceries')).toBe(4)
+    expect(resolveCashbackRateForCategory(card, 'Utilities')).toBe(1)
+    expect(resolveCashbackRateForCategory(card, 'Shopping')).toBe(0.3)
   })
 
   it('accepts legacy card docs with stringified dates and cashback rule payloads', () => {
@@ -222,6 +252,74 @@ describe('cashback perk rules', () => {
 
     expect(computeCashbackForTransaction(card, tx)).toBe(0)
     expect(getCurrentCashbackForTransaction(card, tx)).toBe(0)
+  })
+
+  it('aggregates cashback for reward cards in the overview summary', () => {
+    const cards: CreditCard[] = [
+      {
+        id: 'card-1',
+        userId: 'user-1',
+        name: 'BPI Amore',
+        lastFour: '1234',
+        limit: 200000,
+        statementDay: 15,
+        active: true,
+        createdAt: '2024-01-01T00:00:00Z',
+        cashbackRate: 1,
+        cashbackRules: [{ id: 'default', rate: 1, categories: ['*'] }],
+      },
+      {
+        id: 'card-2',
+        userId: 'user-1',
+        name: 'Standard Visa',
+        lastFour: '5678',
+        limit: 150000,
+        statementDay: 15,
+        active: true,
+        createdAt: '2024-01-01T00:00:00Z',
+      },
+    ]
+
+    const transactions = [
+      {
+        id: 'tx-1',
+        userId: 'user-1',
+        type: 'expense' as const,
+        amount: 4500,
+        category: 'Groceries',
+        description: 'Groceries',
+        occurredAt: '2024-01-10T00:00:00Z',
+        createdAt: '2024-01-10T00:00:00Z',
+        creditCardId: 'card-1',
+        creditCardPayment: false,
+      },
+      {
+        id: 'tx-2',
+        userId: 'user-1',
+        type: 'expense' as const,
+        amount: 5000,
+        category: 'Shopping',
+        description: 'Shopping',
+        occurredAt: '2024-01-12T00:00:00Z',
+        createdAt: '2024-01-12T00:00:00Z',
+        creditCardId: 'card-1',
+        creditCardPayment: false,
+      },
+      {
+        id: 'tx-3',
+        userId: 'user-1',
+        type: 'expense' as const,
+        amount: 2000,
+        category: 'Dining',
+        description: 'Dinner',
+        occurredAt: '2024-01-14T00:00:00Z',
+        createdAt: '2024-01-14T00:00:00Z',
+        creditCardId: 'card-2',
+        creditCardPayment: false,
+      },
+    ]
+
+    expect(computeAggregateCashback(cards, transactions, 2024, 0)).toBe(95)
   })
 
   it('defaults legacy Amore cards to a 1000 minimum spend when the field is missing', () => {
@@ -350,5 +448,41 @@ describe('cashback perk rules', () => {
       creditCardId: 'card-starting-balance',
       creditCardPayment: false,
     })).toBe(10)
+  })
+
+  it('reduces available cashback by redeemed amount', () => {
+    const card = {
+      id: 'card-redeem',
+      userId: 'user-1',
+      name: 'BPI Amore',
+      lastFour: '1111',
+      limit: 200000,
+      statementDay: 15,
+      active: true,
+      createdAt: '2024-01-01T00:00:00Z',
+      cashbackRate: 1,
+      cashbackRules: [{ id: 'default', rate: 1, categories: ['*'] }],
+      cashbackMinSpend: 1000,
+      cashbackStartingBalance: 100,
+      cashbackRedeemed: 25,
+    } as CreditCard
+
+    const transactions = [{
+      id: 'tx-redeem-1',
+      userId: 'user-1',
+      type: 'expense' as const,
+      amount: 2000,
+      category: 'Groceries',
+      description: 'Groceries',
+      occurredAt: '2024-01-10T00:00:00Z',
+      createdAt: '2024-01-10T00:00:00Z',
+      creditCardId: 'card-redeem',
+      creditCardPayment: false,
+    }]
+
+    const statement = computeStatement(card, transactions, 2024, 0)
+    expect(statement.cashbackEarned).toBe(120)
+    expect(statement.cashbackRedeemed).toBe(25)
+    expect(statement.availableCashback).toBe(95)
   })
 })
