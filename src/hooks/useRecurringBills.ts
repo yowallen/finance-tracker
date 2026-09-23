@@ -10,10 +10,22 @@ import { computeStatement } from '../services/creditCards'
 import {
   generateCreditCardPaymentBills,
   creditCardBillToReminder,
+  type CreditCardPaymentBill,
 } from '../services/creditCardBills'
-import type { RecurringBill, RecurringBillInput } from '../types/recurringBill'
+import type { BillReminder, RecurringBill, RecurringBillInput } from '../types/recurringBill'
 import type { Transaction } from '../types/transaction'
 import type { CreditCard, CreditCardStatement } from '../types/creditCard'
+
+export interface UseRecurringBillsReturn {
+  bills: RecurringBill[]
+  reminders: BillReminder[]
+  ccPaymentBills: CreditCardPaymentBill[]
+  loading: boolean
+  error: string | null
+  add: (input: RecurringBillInput) => Promise<void>
+  update: (id: string, input: RecurringBillInput) => Promise<void>
+  remove: (id: string) => Promise<void>
+}
 
 export function useRecurringBills(
   userId: string | undefined,
@@ -23,7 +35,7 @@ export function useRecurringBills(
   cards: CreditCard[],
   statements: CreditCardStatement[],
   allTransactions: Transaction[],
-) {
+): UseRecurringBillsReturn {
   const [bills, setBills] = useState<RecurringBill[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

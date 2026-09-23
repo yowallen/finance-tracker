@@ -161,6 +161,26 @@ describe('cashback perk rules', () => {
     expect(resolveCashbackRateForCategory(legacyCard as CreditCard, 'Transport')).toBe(0.3)
   })
 
+  it('infers the correct Amore grocery rate for legacy cards that only saved the wildcard fallback', () => {
+    const legacyCard = {
+      id: 'card-legacy-amore',
+      userId: 'user-1',
+      name: 'BPI Amore Cashback Card',
+      lastFour: '4444',
+      limit: 200000,
+      statementDay: 15,
+      active: true,
+      createdAt: '2024-01-01T00:00:00Z',
+      cashbackRate: 0.3,
+      rewardName: 'BPI Amore Cashback',
+      cashbackRules: [{ id: 'default', rate: 0.3, categories: ['*'] }],
+      cashbackMinSpend: 1000,
+    } as CreditCard
+
+    expect(resolveCashbackRateForCategory(legacyCard, 'Groceries')).toBe(4)
+    expect(resolveCashbackRateForCategory(legacyCard, 'Shopping')).toBe(0.3)
+  })
+
   it('computes cashback for each individual credit-card transaction', () => {
     const card = {
       id: 'card-1',
@@ -217,6 +237,51 @@ describe('cashback perk rules', () => {
       creditCardId: 'card-1',
       creditCardPayment: false,
     })).toBe(0)
+  })
+
+  it('awards cashback only on full Php 1,000 blocks for Amore transactions', () => {
+    const card = {
+      id: 'card-amore-1000',
+      userId: 'user-1',
+      name: 'BPI Amore Cashback Card',
+      lastFour: '1234',
+      limit: 200000,
+      statementDay: 15,
+      active: true,
+      createdAt: '2024-01-01T00:00:00Z',
+      cashbackRate: 0.3,
+      cashbackRules: [
+        { id: 'grocery', rate: 4, categories: ['Groceries', 'Supermarket', 'Supermarkets'] },
+        { id: 'default', rate: 0.3, categories: ['*'] },
+      ],
+      cashbackMinSpend: 1000,
+    } as CreditCard
+
+    expect(computeCashbackForTransaction(card, {
+      id: 'tx-amore-1',
+      userId: 'user-1',
+      type: 'expense',
+      amount: 2295.06,
+      category: 'Groceries',
+      description: 'Supermarket purchase',
+      occurredAt: '2024-01-10T00:00:00Z',
+      createdAt: '2024-01-10T00:00:00Z',
+      creditCardId: 'card-amore-1000',
+      creditCardPayment: false,
+    })).toBe(80)
+
+    expect(computeCashbackForTransaction(card, {
+      id: 'tx-amore-2',
+      userId: 'user-1',
+      type: 'expense',
+      amount: 1500,
+      category: 'Groceries',
+      description: 'One receipt',
+      occurredAt: '2024-01-11T00:00:00Z',
+      createdAt: '2024-01-11T00:00:00Z',
+      creditCardId: 'card-amore-1000',
+      creditCardPayment: false,
+    })).toBe(40)
   })
 
   it('ignores stale saved cashback values when a transaction is below the minimum spend', () => {

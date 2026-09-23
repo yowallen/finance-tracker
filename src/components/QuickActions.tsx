@@ -1,16 +1,16 @@
-import { CalendarDays, CirclePlus, ListFilter, ReceiptText } from 'lucide-react'
+import { CirclePlus, CreditCard, ListFilter, ReceiptText } from 'lucide-react'
 
 interface QuickActionsProps {
   onAddTransaction: () => void
   onReviewBills: () => void
-  onOpenCalendar: () => void
+  onOpenCreditCards: () => void
   onOpenHistory: () => void
 }
 
 export function QuickActions({
   onAddTransaction,
   onReviewBills,
-  onOpenCalendar,
+  onOpenCreditCards,
   onOpenHistory,
 }: QuickActionsProps) {
   const actions = [
@@ -29,18 +29,18 @@ export function QuickActions({
       ariaLabel: 'Review bills',
     },
     {
-      label: 'Calendar',
-      icon: CalendarDays,
-      onClick: onOpenCalendar,
-      strong: false,
-      ariaLabel: 'Open calendar',
-    },
-    {
       label: 'History',
       icon: ListFilter,
       onClick: onOpenHistory,
       strong: false,
       ariaLabel: 'Open transaction history',
+    },
+    {
+      label: 'Credit cards',
+      icon: CreditCard,
+      onClick: onOpenCreditCards,
+      strong: false,
+      ariaLabel: 'Open credit cards',
     },
   ]
 

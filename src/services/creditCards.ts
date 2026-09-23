@@ -623,7 +623,7 @@ export function computeStatement(
   }
 }
 
-export function resolveCashbackRateForCategory(card: Pick<CreditCard, 'cashbackRate' | 'cashbackCategories' | 'cashbackRules'>, category: string): number {
+export function resolveCashbackRateForCategory(card: Pick<CreditCard, 'cashbackRate' | 'cashbackCategories' | 'cashbackRules' | 'name' | 'rewardName'>, category: string): number {
   const normalizedCategory = category.trim().toLowerCase()
   const rules = Array.isArray(card.cashbackRules) ? card.cashbackRules : []
 
@@ -651,6 +651,26 @@ export function resolveCashbackRateForCategory(card: Pick<CreditCard, 'cashbackR
     return compact
   }
 
+  const inferLegacyAmoreRate = (value: string): number | undefined => {
+    const identifiers = [card.name, card.rewardName]
+      .filter((item): item is string => typeof item === 'string')
+      .map((item) => item.toLowerCase())
+
+    if (!identifiers.some((item) => item.includes('amore') && item.includes('cashback'))) {
+      return undefined
+    }
+
+    const key = categoryKey(value)
+    if (key === 'groceries') {
+      const nameText = [card.name, card.rewardName].filter(Boolean).join(' ').toLowerCase()
+      if (nameText.includes('classic')) return 4
+      if (nameText.includes('plus')) return 1.5
+      return 4
+    }
+
+    return undefined
+  }
+
   if (rules.length > 0) {
     const targetKey = categoryKey(normalizedCategory)
     const exactMatch = rules
@@ -659,6 +679,11 @@ export function resolveCashbackRateForCategory(card: Pick<CreditCard, 'cashbackR
 
     if (exactMatch) {
       return Number(exactMatch.rate) || 0
+    }
+
+    const premiumAmoreRate = inferLegacyAmoreRate(normalizedCategory)
+    if (premiumAmoreRate !== undefined) {
+      return premiumAmoreRate
     }
 
     const wildcardMatch = rules
@@ -670,6 +695,11 @@ export function resolveCashbackRateForCategory(card: Pick<CreditCard, 'cashbackR
     }
 
     return 0
+  }
+
+  const inferred = inferLegacyAmoreRate(normalizedCategory)
+  if (inferred !== undefined) {
+    return inferred
   }
 
   const legacyCategories = (card.cashbackCategories ?? []).map((item) => item.trim().toLowerCase())
@@ -707,6 +737,14 @@ function getCashbackMinimumSpend(card: Pick<CreditCard, 'name' | 'rewardName' | 
   return 0
 }
 
+function usesFullThousandBlockCashback(card: Pick<CreditCard, 'name' | 'rewardName'>): boolean {
+  const identifiers = [card.name, card.rewardName]
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => value.toLowerCase())
+
+  return identifiers.some((value) => value.includes('amore') && value.includes('cashback'))
+}
+
 function isAnnualFeeTransaction(tx: Pick<Transaction, 'category' | 'description' | 'isAnnualFee'>): boolean {
   if (tx.isAnnualFee === true) return true
   const normalizedCategory = `${tx.category ?? ''}`.trim().toLowerCase()
@@ -738,6 +776,12 @@ export function computeCashbackForTransaction(
 
   const rate = resolveCashbackRateForCategory(card, tx.category)
   if (rate <= 0) return 0
+
+  if (usesFullThousandBlockCashback(card)) {
+    const eligibleBlocks = Math.floor(tx.amount / 1000)
+    if (eligibleBlocks <= 0) return 0
+    return eligibleBlocks * 1000 * (rate / 100)
+  }
 
   return tx.amount * (rate / 100)
 }

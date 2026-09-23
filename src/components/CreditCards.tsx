@@ -526,41 +526,29 @@ export function CreditCards({
                         )}
                       </div>
 
-                      {hasRewards ? (
-                        <div className="cc-utilization">
-                          <div className="cc-utilization-top">
-                            <span>{card.rewardName ?? 'Cashback'}</span>
-                            <strong>{formatMoney(statement.availableCashback)}</strong>
-                          </div>
-                          <p className="cc-utilization-meta">
-                            Available cashback for this statement
-                          </p>
+                      <div className="cc-utilization">
+                        <div className="cc-utilization-top">
+                          <span>Credit used</span>
+                          <strong>{utilization.toFixed(1)}%</strong>
                         </div>
-                      ) : (
-                        <div className="cc-utilization">
-                          <div className="cc-utilization-top">
-                            <span>Credit used</span>
-                            <strong>{utilization.toFixed(1)}%</strong>
-                          </div>
+                        <div
+                          className="cc-utilization-bar"
+                          role="progressbar"
+                          aria-label={`Credit utilization for ${card.name}`}
+                          aria-valuenow={utilization}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuetext={`${utilization.toFixed(1)}% used, ${formatMoney(statement.outstandingBalance)} of ${formatMoney(card.limit)} limit`}
+                        >
                           <div
-                            className="cc-utilization-bar"
-                            role="progressbar"
-                            aria-label={`Credit utilization for ${card.name}`}
-                            aria-valuenow={utilization}
-                            aria-valuemin={0}
-                            aria-valuemax={100}
-                            aria-valuetext={`${utilization.toFixed(1)}% used, ${formatMoney(statement.outstandingBalance)} of ${formatMoney(card.limit)} limit`}
-                          >
-                            <div
-                              className={`cc-utilization-fill ${status.tone}`}
-                              style={{ width: `${utilization}%` }}
-                            />
-                          </div>
-                          <p className="cc-utilization-meta">
-                            {formatMoney(statement.outstandingBalance)} of {formatMoney(card.limit)} limit
-                          </p>
+                            className={`cc-utilization-fill ${status.tone}`}
+                            style={{ width: `${utilization}%` }}
+                          />
                         </div>
-                      )}
+                        <p className="cc-utilization-meta">
+                          {formatMoney(statement.outstandingBalance)} of {formatMoney(card.limit)} limit
+                        </p>
+                      </div>
 
                       {utilizationHistory && <UtilizationChart history={utilizationHistory} />}
 

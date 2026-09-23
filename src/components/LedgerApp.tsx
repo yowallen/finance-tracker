@@ -34,11 +34,10 @@ import {
   reconcileTransactionCashbackValues,
 } from '../services/transactions'
 import type { BillReminder, RecurringBill, RecurringBillInput } from '../types/recurringBill'
-import type { CreditCard, CreditCardInput } from '../types/creditCard'
+import type { CreditCard, CreditCardInput, PaymentAllocationPlan } from '../types/creditCard'
 import type { SavingsGoal, SavingsGoalInput } from '../types/savingsGoal'
 import type { ThemeMode } from '../lib/theme'
 import type { Transaction, TransactionInput } from '../types/transaction'
-import type { PaymentAllocationPlan } from '../types/creditCard'
 import { formatMoney } from '../lib/format'
 import { scrollToSection } from '../lib/scrollToSection'
 
@@ -104,15 +103,19 @@ function formatAttentionDue(date: Date): string {
 }
 
 function reminderStatusLabel(reminder: BillReminder): string {
+  const absDays = Math.abs(reminder.daysUntilDue)
+  const dayWord = absDays === 1 ? 'day' : 'days'
+
   switch (reminder.status) {
     case 'paid':
       return 'Paid'
     case 'overdue':
-      return `Overdue by ${Math.abs(reminder.daysUntilDue)} day${Math.abs(reminder.daysUntilDue) === 1 ? '' : 's'}`
-    case 'due-soon':
-      return reminder.daysUntilDue === 0
-        ? 'Due today'
-        : `Due in ${reminder.daysUntilDue} day${reminder.daysUntilDue === 1 ? '' : 's'}`
+      return `Overdue by ${absDays} ${dayWord}`
+    case 'due-soon': {
+      if (reminder.daysUntilDue === 0) return 'Due today'
+      const dueWord = reminder.daysUntilDue === 1 ? 'day' : 'days'
+      return `Due in ${reminder.daysUntilDue} ${dueWord}`
+    }
     case 'unpaid':
       return 'Not paid'
     default:
@@ -120,7 +123,24 @@ function reminderStatusLabel(reminder: BillReminder): string {
   }
 }
 
-function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
+function cardToInput(card: CreditCard): CreditCardInput {
+  return {
+    name: card.name,
+    lastFour: card.lastFour,
+    limit: card.limit,
+    statementDay: card.statementDay,
+    dueDay: card.dueDay,
+    dueDayOffset: card.dueDayOffset,
+    color: card.color,
+    active: card.active,
+    apr: card.apr,
+    interestCalculationMethod: card.interestCalculationMethod,
+    gracePeriodDays: card.gracePeriodDays,
+    minimumPaymentOverride: card.minimumPaymentOverride,
+  }
+}
+
+function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppProps>) {
   const now = useMemo(() => new Date(), [])
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth())
@@ -381,12 +401,12 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
     let transaction: TransactionInput
 
     if (isCreditCardPayment && creditCardId) {
-      // Credit card payment: pay off the credit card balance
+      const payee = reminder.bill.notes || `•••• ${creditCardId.slice(-4)}`
       transaction = {
         type: 'bill',
         amount: reminder.bill.amount,
         category: 'Credit card payment',
-        description: `Payment to ${reminder.bill.notes || `•••• ${creditCardId.slice(-4)}`}`,
+        description: `Payment to ${payee}`,
         occurredAt: occurred.toISOString(),
         creditCardId,
         creditCardPayment: true,
@@ -437,23 +457,6 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
       })
     } finally {
       setSaving(false)
-    }
-  }
-
-  function cardToInput(card: CreditCard): CreditCardInput {
-    return {
-      name: card.name,
-      lastFour: card.lastFour,
-      limit: card.limit,
-      statementDay: card.statementDay,
-      dueDay: card.dueDay,
-      dueDayOffset: card.dueDayOffset,
-      color: card.color,
-      active: card.active,
-      apr: card.apr,
-      interestCalculationMethod: card.interestCalculationMethod,
-      gracePeriodDays: card.gracePeriodDays,
-      minimumPaymentOverride: card.minimumPaymentOverride,
     }
   }
 
@@ -569,16 +572,19 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
             <QuickActions
               onAddTransaction={() => openTransactionSheet()}
               onReviewBills={() => scrollToSection('reminders')}
-              onOpenCalendar={() => scrollToSection('calendar')}
               onOpenHistory={() => scrollToSection('history')}
+              onOpenCreditCards={() => scrollToSection('credit-cards')}
             />
 
-            <TransactionList
+            <FinanceCalendar 
+              year={year}
+              month={month}
+              reminders={reminders}
+              bills={bills}
+              ccPaymentBills={ccPaymentBills}
+              allTransactions={allTransactions}
               transactions={transactions}
-              loading={txLoading}
-              onEdit={(tx) => openTransactionSheet(tx)}
-              onDelete={handleDelete}
-              cardById={cardById}
+              onUpdate={updateBill}
             />
 
             <BillReminders
@@ -596,25 +602,12 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
               onMarkPaid={handleMarkPaid}
             />
 
-            <FinanceCalendar
-              year={year}
-              month={month}
-              reminders={reminders}
-              bills={bills}
-              ccPaymentBills={ccPaymentBills}
-              allTransactions={allTransactions}
+            <TransactionList
               transactions={transactions}
-              onUpdate={updateBill}
-            />
-
-            <SavingsGoals
-              journey={savingsJourney}
-              loading={goalsLoading}
-              error={goalsError}
-              onAdd={addGoal}
-              onUpdate={updateGoal}
-              onContribute={contributeGoal}
-              onDelete={handleRemoveGoal}
+              loading={txLoading}
+              onEdit={(tx) => openTransactionSheet(tx)}
+              onDelete={handleDelete}
+              cardById={cardById}
             />
 
             <CreditCards
@@ -628,6 +621,16 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: LedgerAppProps) {
               onAdd={addCard}
               onUpdate={updateCard}
               onDelete={handleRemoveCard}
+            />
+
+            <SavingsGoals
+              journey={savingsJourney}
+              loading={goalsLoading}
+              error={goalsError}
+              onAdd={addGoal}
+              onUpdate={updateGoal}
+              onContribute={contributeGoal}
+              onDelete={handleRemoveGoal}
             />
 
             <AnalyticsSection
