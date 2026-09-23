@@ -121,6 +121,7 @@ function mapDoc(
   const rewardName = typeof data.rewardName === 'string' ? data.rewardName : undefined
   const cashbackRate = coerceNumeric(data.cashbackRate)
   const cashbackCap = coerceNumeric(data.cashbackCap)
+  const cashbackUsesFullThousandBlocks = data.cashbackUsesFullThousandBlocks === true
   const cashbackStartingBalance = coerceNumeric(data.cashbackStartingBalance)
   const cashbackRedeemed = coerceNumeric(data.cashbackRedeemed)
   const cashbackMinSpend = coerceNumeric(data.cashbackMinSpend)
@@ -158,6 +159,7 @@ function mapDoc(
     ...(rewardName ? { rewardName } : {}),
     ...(cashbackRate !== undefined ? { cashbackRate } : {}),
     ...(cashbackCap !== undefined ? { cashbackCap } : {}),
+    ...(cashbackUsesFullThousandBlocks ? { cashbackUsesFullThousandBlocks: true } : {}),
     ...(cashbackStartingBalance !== undefined ? { cashbackStartingBalance } : {}),
     ...(cashbackRedeemed !== undefined ? { cashbackRedeemed } : {}),
     ...(cashbackMinSpend !== undefined ? { cashbackMinSpend } : {}),
@@ -269,6 +271,7 @@ export function subscribeCreditCards(
 export async function createCreditCard(
   userId: string,
   input: CreditCardInput,
+  id?: string,
 ): Promise<string> {
   const { fs, db } = await getFirestoreClient()
 
@@ -313,6 +316,9 @@ export async function createCreditCard(
   if (input.cashbackCap !== undefined) {
     payload.cashbackCap = input.cashbackCap
   }
+  if (input.cashbackUsesFullThousandBlocks !== undefined) {
+    payload.cashbackUsesFullThousandBlocks = input.cashbackUsesFullThousandBlocks
+  }
   if (input.cashbackStartingBalance !== undefined) {
     payload.cashbackStartingBalance = input.cashbackStartingBalance
   }
@@ -334,7 +340,13 @@ export async function createCreditCard(
     }
   }
 
-  const ref = await fs.addDoc(fs.collection(db, COLLECTION), payload)
+  const ref = id
+    ? fs.doc(db, COLLECTION, id)
+    : await fs.addDoc(fs.collection(db, COLLECTION), payload)
+
+  if (id) {
+    await fs.setDoc(ref, payload)
+  }
 
   return ref.id
 }
@@ -396,6 +408,11 @@ export async function updateCreditCard(
   } else {
     payload.cashbackCap = null
   }
+  if (input.cashbackUsesFullThousandBlocks !== undefined) {
+    payload.cashbackUsesFullThousandBlocks = input.cashbackUsesFullThousandBlocks
+  } else {
+    payload.cashbackUsesFullThousandBlocks = false
+  }
   if (input.cashbackStartingBalance !== undefined) {
     payload.cashbackStartingBalance = input.cashbackStartingBalance
   } else {
@@ -403,8 +420,6 @@ export async function updateCreditCard(
   }
   if (input.cashbackRedeemed !== undefined) {
     payload.cashbackRedeemed = input.cashbackRedeemed
-  } else {
-    payload.cashbackRedeemed = null
   }
   if (input.cashbackMinSpend !== undefined) {
     payload.cashbackMinSpend = input.cashbackMinSpend
@@ -623,7 +638,7 @@ export function computeStatement(
   }
 }
 
-export function resolveCashbackRateForCategory(card: Pick<CreditCard, 'cashbackRate' | 'cashbackCategories' | 'cashbackRules' | 'name' | 'rewardName'>, category: string): number {
+export function resolveCashbackRateForCategory(card: Pick<CreditCard, 'cashbackRules'>, category: string): number {
   const normalizedCategory = category.trim().toLowerCase()
   const rules = Array.isArray(card.cashbackRules) ? card.cashbackRules : []
 
@@ -651,63 +666,24 @@ export function resolveCashbackRateForCategory(card: Pick<CreditCard, 'cashbackR
     return compact
   }
 
-  const inferLegacyAmoreRate = (value: string): number | undefined => {
-    const identifiers = [card.name, card.rewardName]
-      .filter((item): item is string => typeof item === 'string')
-      .map((item) => item.toLowerCase())
+  const targetKey = categoryKey(normalizedCategory)
+  const exactMatch = rules
+    .filter((rule) => Array.isArray(rule.categories) && rule.categories.length > 0)
+    .find((rule) => rule.categories.some((item) => categoryKey(item) === targetKey))
 
-    if (!identifiers.some((item) => item.includes('amore') && item.includes('cashback'))) {
-      return undefined
-    }
-
-    const key = categoryKey(value)
-    if (key === 'groceries') {
-      const nameText = [card.name, card.rewardName].filter(Boolean).join(' ').toLowerCase()
-      if (nameText.includes('classic')) return 4
-      if (nameText.includes('plus')) return 1.5
-      return 4
-    }
-
-    return undefined
+  if (exactMatch) {
+    return Number(exactMatch.rate) || 0
   }
 
-  if (rules.length > 0) {
-    const targetKey = categoryKey(normalizedCategory)
-    const exactMatch = rules
-      .filter((rule) => Array.isArray(rule.categories) && rule.categories.length > 0)
-      .find((rule) => rule.categories.some((item) => categoryKey(item) === targetKey))
+  const wildcardMatch = rules
+    .filter((rule) => Array.isArray(rule.categories) && rule.categories.length > 0)
+    .find((rule) => rule.categories.some((item) => categoryKey(item) === '*'))
 
-    if (exactMatch) {
-      return Number(exactMatch.rate) || 0
-    }
-
-    const premiumAmoreRate = inferLegacyAmoreRate(normalizedCategory)
-    if (premiumAmoreRate !== undefined) {
-      return premiumAmoreRate
-    }
-
-    const wildcardMatch = rules
-      .filter((rule) => Array.isArray(rule.categories) && rule.categories.length > 0)
-      .find((rule) => rule.categories.some((item) => categoryKey(item) === '*'))
-
-    if (wildcardMatch) {
-      return Number(wildcardMatch.rate) || 0
-    }
-
-    return 0
+  if (wildcardMatch) {
+    return Number(wildcardMatch.rate) || 0
   }
 
-  const inferred = inferLegacyAmoreRate(normalizedCategory)
-  if (inferred !== undefined) {
-    return inferred
-  }
-
-  const legacyCategories = (card.cashbackCategories ?? []).map((item) => item.trim().toLowerCase())
-  if (legacyCategories.length > 0 && (legacyCategories.includes('*') || legacyCategories.some((value) => categoryKey(value) === categoryKey(normalizedCategory)))) {
-    return Number(card.cashbackRate ?? 0)
-  }
-
-  return Number(card.cashbackRate ?? 0)
+  return 0
 }
 
 function getCashbackEligibleSpend(card: CreditCard, transactions: Transaction[]): number {
@@ -721,28 +697,11 @@ function getCashbackEligibleSpend(card: CreditCard, transactions: Transaction[])
     .reduce((sum, tx) => sum + tx.amount, 0)
 }
 
-function getCashbackMinimumSpend(card: Pick<CreditCard, 'name' | 'rewardName' | 'cashbackMinSpend'>): number {
+function getCashbackMinimumSpend(card: Pick<CreditCard, 'cashbackMinSpend'>): number {
   if (typeof card.cashbackMinSpend === 'number') {
     return card.cashbackMinSpend
   }
-
-  const identifiers = [card.name, card.rewardName]
-    .filter((value): value is string => typeof value === 'string')
-    .map((value) => value.toLowerCase())
-
-  if (identifiers.some((value) => value.includes('amore'))) {
-    return 1000
-  }
-
   return 0
-}
-
-function usesFullThousandBlockCashback(card: Pick<CreditCard, 'name' | 'rewardName'>): boolean {
-  const identifiers = [card.name, card.rewardName]
-    .filter((value): value is string => typeof value === 'string')
-    .map((value) => value.toLowerCase())
-
-  return identifiers.some((value) => value.includes('amore') && value.includes('cashback'))
 }
 
 function isAnnualFeeTransaction(tx: Pick<Transaction, 'category' | 'description' | 'isAnnualFee'>): boolean {
@@ -755,7 +714,7 @@ function isAnnualFeeTransaction(tx: Pick<Transaction, 'category' | 'description'
 }
 
 export function computeCashbackForTransaction(
-  card: Pick<CreditCard, 'id' | 'name' | 'rewardName' | 'cashbackRate' | 'cashbackCategories' | 'cashbackRules' | 'cashbackCap' | 'cashbackMinSpend'>,
+  card: Pick<CreditCard, 'id' | 'cashbackRules' | 'cashbackCap' | 'cashbackMinSpend' | 'cashbackUsesFullThousandBlocks'>,
   tx: Partial<Transaction> & {
     type: Transaction['type']
     amount: number
@@ -777,13 +736,10 @@ export function computeCashbackForTransaction(
   const rate = resolveCashbackRateForCategory(card, tx.category)
   if (rate <= 0) return 0
 
-  if (usesFullThousandBlockCashback(card)) {
-    const eligibleBlocks = Math.floor(tx.amount / 1000)
-    if (eligibleBlocks <= 0) return 0
-    return eligibleBlocks * 1000 * (rate / 100)
-  }
-
-  return tx.amount * (rate / 100)
+  const eligibleAmount = card.cashbackUsesFullThousandBlocks
+    ? Math.floor(tx.amount / 1000) * 1000
+    : tx.amount
+  return eligibleAmount * (rate / 100)
 }
 
 export function getCurrentCashbackForTransaction(
@@ -970,7 +926,7 @@ export function computeAggregateCashback(
   month: number,
 ): number {
   return cards
-    .filter((card) => card.active && ((card.cashbackRules?.length ?? 0) > 0 || (card.cashbackRate ?? 0) > 0 || (card.rewardName ?? '').trim().length > 0))
+    .filter((card) => card.active && (card.cashbackRules?.length ?? 0) > 0)
     .reduce(
       (sum, card) => sum + Math.max(0, computeStatement(card, allTransactions, year, month).availableCashback),
       0,

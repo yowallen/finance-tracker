@@ -276,13 +276,10 @@ export function CreditCards({
       interestCalculationMethod: card.interestCalculationMethod,
       gracePeriodDays: card.gracePeriodDays,
       minimumPaymentOverride: card.minimumPaymentOverride,
-      rewardName: card.rewardName,
-      cashbackRate: card.cashbackRate,
       cashbackCap: card.cashbackCap,
       cashbackStartingBalance: card.cashbackStartingBalance,
       cashbackRedeemed: card.cashbackRedeemed,
       cashbackMinSpend: card.cashbackMinSpend,
-      cashbackCategories: card.cashbackCategories,
       cashbackRules: card.cashbackRules,
     }
   }
@@ -413,7 +410,7 @@ export function CreditCards({
                 if (!statement) return null
                 const status = statementStatus(statement, isCurrentMonth)
                 const utilization = utilizationPercent(statement)
-                const hasRewards = ((card.cashbackRules?.length ?? 0) > 0 || (card.cashbackRate ?? 0) > 0)
+                const hasRewards = (card.cashbackRules?.length ?? 0) > 0
                 const cardColor = card.color ?? '#3B82F6'
                 const utilizationHistory = utilizationByCardId.get(card.id)
                 const nextStatementProjection = getNextBillingCycleBalance(statement)
@@ -515,11 +512,11 @@ export function CreditCards({
                             )}
                           </>
                         )}
-                        {((card.cashbackRules?.length ?? 0) > 0 || (card.cashbackRate ?? 0) > 0) && (
+                        {(card.cashbackRules?.length ?? 0) > 0 && (
                           <div className="cc-card-stat">
                             <span className="cc-card-stat-label">
                               <WalletCards aria-hidden="true" />
-                              {card.rewardName ?? 'Cashback'}
+                              {card.name}
                             </span>
                             <strong className="cc-card-stat-value success">{formatMoney(statement.availableCashback)}</strong>
                           </div>

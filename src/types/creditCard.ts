@@ -62,6 +62,8 @@ export interface CreditCard {
   cashbackRate?: number
   /** Maximum cashback earned in one statement/period. */
   cashbackCap?: number
+  /** When true, cashback is calculated only from complete 1,000-peso spend blocks. */
+  cashbackUsesFullThousandBlocks?: boolean
   /** Cashback already available at the start of the current statement period. */
   cashbackStartingBalance?: number
   /** Cashback already redeemed and no longer available to spend. */
@@ -90,6 +92,7 @@ export interface CreditCardInput {
   rewardName?: string
   cashbackRate?: number
   cashbackCap?: number
+  cashbackUsesFullThousandBlocks?: boolean
   cashbackStartingBalance?: number
   cashbackRedeemed?: number
   cashbackMinSpend?: number
@@ -157,8 +160,8 @@ export function validateCreditCardInput(input: CreditCardInput): void {
   if (input.dueDay !== undefined && (!Number.isInteger(input.dueDay) || input.dueDay < 1 || input.dueDay > 31)) {
     throw new Error('Due day must be between 1 and 31.')
   }
-  if (input.dueDayOffset !== undefined && (!Number.isInteger(input.dueDayOffset) || input.dueDayOffset < 1 || input.dueDayOffset > 31)) {
-    throw new Error('Due day offset must be between 1 and 31.')
+  if (input.dueDayOffset !== undefined && (!Number.isInteger(input.dueDayOffset) || input.dueDayOffset < 1 || input.dueDayOffset > 60)) {
+    throw new Error('Due day offset must be between 1 and 60.')
   }
   if (input.apr !== undefined && (!Number.isFinite(input.apr) || input.apr < 0 || input.apr > 100)) {
     throw new Error('APR must be a number between 0 and 100.')

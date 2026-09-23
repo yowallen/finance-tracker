@@ -2372,6 +2372,21 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
   margin-right: 0;
 }
 
+.calendar-dots .legend-dot {
+  align-items: center;
+  display: inline-flex;
+  height: 0.7rem;
+  justify-content: center;
+  min-width: 0.7rem;
+  padding: 0;
+  color: var(--md-sys-color-surface);
+  font-size: 0.55rem;
+  font-weight: 500;
+  line-height: 1;
+  text-align: center;
+  vertical-align: middle;
+}
+
 .calendar-detail {
   border: none;
   border-radius: var(--radius-sm);

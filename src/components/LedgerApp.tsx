@@ -453,7 +453,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
     try {
       await removeCard(card.id)
       stageUndo(`Removed “${card.name}”`, 'card', async () => {
-        await addCard(cardToInput(card))
+        await addCard(cardToInput(card), card.id)
       })
     } finally {
       setSaving(false)
@@ -530,7 +530,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
               totalAvailableCredit={totalAvailableCredit}
               nextDueStatement={nextDueStatement}
               hasRewardCards={activeCards.some((card) =>
-                ((card.cashbackRules?.length ?? 0) > 0 || (card.cashbackRate ?? 0) > 0 || (card.rewardName ?? '').trim().length > 0))}
+                ((card.cashbackRules?.length ?? 0) > 0))}
               aggregateCashback={aggregateCashback}
               aggregateUtilization={aggregateUtilization}
               onNavigateToCards={() => scrollToSection('credit-cards')}

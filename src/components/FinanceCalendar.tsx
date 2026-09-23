@@ -249,6 +249,11 @@ export function FinanceCalendar({
             )
             const billCount = events?.bills.length ?? 0
             const txCount = visibleEvents?.length ?? 0
+            const billTransactionCount = visibleEvents?.filter((t) => t.type === 'bill').length ?? 0
+            const incomeCount = visibleEvents?.filter((t) => t.type === 'income' || isSavingsWithdraw(t)).length ?? 0
+            const expenseCount = visibleEvents?.filter(
+              (t) => t.type !== 'income' && t.type !== 'bill' && !isSavingsWithdraw(t),
+            ).length ?? 0
             const isToday = isCurrentMonth && day === today.getDate()
             const isSelected = day === activeDay
             const hasOverdue = events?.bills.some((b) => b.status === 'overdue') ?? false
@@ -272,17 +277,20 @@ export function FinanceCalendar({
               >
                 <span className="calendar-day-num">{day}</span>
                 <span className="calendar-dots" aria-hidden="true">
-                  {billCount > 0 && <span className="legend-dot bill" />}
-                  {(visibleEvents?.some((t) => t.type === 'income' || isSavingsWithdraw(t)) ?? false) && (
-                    <span className="legend-dot income" />
+                  {billCount + billTransactionCount > 0 && (
+                    <span className="legend-dot bill">
+                      {billCount + billTransactionCount > 1 ? billCount + billTransactionCount : null}
+                    </span>
                   )}
-                  {(visibleEvents?.some(
-                    (t) => t.type !== 'income' && t.type !== 'bill' && !isSavingsWithdraw(t),
-                  ) ?? false) && (
-                    <span className="legend-dot expense" />
+                  {incomeCount > 0 && (
+                    <span className="legend-dot income">
+                      {incomeCount > 1 ? incomeCount : null}
+                    </span>
                   )}
-                  {(visibleEvents?.some((t) => t.type === 'bill') ?? false) && (
-                    <span className="legend-dot bill" />
+                  {expenseCount > 0 && (
+                    <span className="legend-dot expense">
+                      {expenseCount > 1 ? expenseCount : null}
+                    </span>
                   )}
                 </span>
               </button>

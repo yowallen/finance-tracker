@@ -508,8 +508,10 @@ export function BillReminders({
                 </div>
                 <p className="tx-desc">{reminder.bill.name}</p>
                 <p className="reminder-due">
-                  Due {formatDueDate(reminder.actualDueDate ?? reminder.dueDate)} · Payment {reminder.paymentNumber} of{' '}
-                  {reminder.totalPayments} · ends {formatYearMonth(reminder.endsOn)}
+                  {reminder.isCreditCardPayment
+                    ? `Pay by ${formatDueDate(reminder.recommendedPaymentDate ?? reminder.dueDate)} · Due ${formatDueDate(reminder.actualDueDate ?? reminder.dueDate)}`
+                    : `Due ${formatDueDate(reminder.actualDueDate ?? reminder.dueDate)}`}{' '}
+                  · Payment {reminder.paymentNumber} of {reminder.totalPayments} · ends {formatYearMonth(reminder.endsOn)}
                   {reminder.bill.notes ? ` · ${reminder.bill.notes}` : ''}
                 </p>
               </div>

@@ -104,9 +104,9 @@ export function useCreditCards(
     [visibleCards],
   )
 
-  async function add(input: CreditCardInput): Promise<void> {
+  async function add(input: CreditCardInput, id?: string): Promise<void> {
     if (!userId) throw new Error('Missing user id.')
-    await createCreditCard(userId, input)
+    await createCreditCard(userId, input, id)
   }
 
   async function update(id: string, input: CreditCardInput): Promise<void> {

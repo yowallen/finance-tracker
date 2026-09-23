@@ -29,7 +29,7 @@ interface FieldErrors {
   name?: string
   lastFour?: string
   limit?: string
-  dueDay?: string
+  dueDayOffset?: string
   apr?: string
   gracePeriodDays?: string
   minimumPaymentOverride?: string
@@ -39,11 +39,9 @@ interface FieldErrors {
 type RewardPreset = {
   id: string
   label: string
-  rewardName: string
-  cashbackRate: number
   cashbackCap?: number
   cashbackMinSpend: number
-  cashbackCategories: string[]
+  cashbackUsesFullThousandBlocks?: boolean
   cashbackRulesText: string
 }
 
@@ -51,72 +49,59 @@ const REWARD_PRESETS: RewardPreset[] = [
   {
     id: 'custom',
     label: 'Custom',
-    rewardName: 'Custom reward',
-    cashbackRate: 0,
     cashbackCap: undefined,
     cashbackMinSpend: 1000,
-    cashbackCategories: ['Food', 'Shopping', 'Transport', 'Entertainment', 'Health'],
     cashbackRulesText: '*=0.3%',
   },
   {
     id: 'bpi-amore-classic',
     label: 'BPI Amore Cashback Classic',
-    rewardName: 'BPI Amore Cashback',
-    cashbackRate: 4,
     cashbackCap: 15000,
     cashbackMinSpend: 1000,
-    cashbackCategories: ['Shopping', 'Groceries'],
-    cashbackRulesText: 'Groceries=4%; Utilities=1%; Health=1%; *=0.3%',
+    cashbackUsesFullThousandBlocks: true,
+    cashbackRulesText: 'Groceries=4%; Shopping=4%; Utilities=1%; Health=1%; *=0.3%',
   },
   {
     id: 'bpi-amore-plus',
     label: 'BPI Amore Cashback Plus',
-    rewardName: 'BPI Amore Cashback',
-    cashbackRate: 1.5,
     cashbackCap: 5000,
     cashbackMinSpend: 1000,
-    cashbackCategories: ['Food', 'Shopping', 'Transport', 'Entertainment', 'Health', 'Groceries'],
     cashbackRulesText: 'Groceries=1.5%; Dining=1%; Shopping=0.5%; *=0.3%',
   },
   {
     id: 'generic-cashback',
     label: 'General cashback card',
-    rewardName: 'Cashback',
-    cashbackRate: 1,
     cashbackCap: 2500,
     cashbackMinSpend: 1000,
-    cashbackCategories: ['Food', 'Shopping', 'Transport', 'Entertainment', 'Health'],
     cashbackRulesText: '*=1%',
   },
 ]
 
 function createInitialState(editing: CreditCard | null): CreditCardInput {
   if (editing) {
+    const dueDayOffset = editing.dueDayOffset ?? (() => {
+      if (editing.dueDay === undefined) return 21
+      const statementDate = new Date(2026, 0, editing.statementDay)
+      const dueDate = new Date(2026, editing.dueDay <= editing.statementDay ? 1 : 0, editing.dueDay)
+      return Math.round((dueDate.getTime() - statementDate.getTime()) / (1000 * 60 * 60 * 24))
+    })()
+
     return {
       name: editing.name,
       lastFour: editing.lastFour,
       limit: editing.limit,
       statementDay: editing.statementDay,
-      dueDay: editing.dueDay !== undefined
-        ? editing.dueDay
-        : (() => {
-            const date = new Date(2026, 0, editing.statementDay)
-            date.setDate(date.getDate() + (editing.dueDayOffset ?? 21))
-            return date.getDate()
-          })(),
+      dueDayOffset,
       color: editing.color ?? CARD_COLORS[0],
       active: editing.active,
       apr: editing.apr,
       interestCalculationMethod: editing.interestCalculationMethod,
       gracePeriodDays: editing.gracePeriodDays,
       minimumPaymentOverride: editing.minimumPaymentOverride,
-      rewardName: editing.rewardName ?? 'Cashback',
-      cashbackRate: editing.cashbackRate,
       cashbackCap: editing.cashbackCap,
+      cashbackUsesFullThousandBlocks: editing.cashbackUsesFullThousandBlocks,
       cashbackStartingBalance: editing.cashbackStartingBalance ?? 0,
-      cashbackRedeemed: editing.cashbackRedeemed ?? 0,
       cashbackMinSpend: editing.cashbackMinSpend ?? 1000,
-      cashbackCategories: editing.cashbackCategories ?? ['Food', 'Shopping', 'Transport', 'Entertainment', 'Health'],
       cashbackRules: editing.cashbackRules ?? [{ rate: 1, categories: ['Groceries'] }, { rate: 0.3, categories: ['*'] }],
     }
   }
@@ -126,17 +111,15 @@ function createInitialState(editing: CreditCard | null): CreditCardInput {
     lastFour: '',
     limit: 50000,
     statementDay: 15,
-    dueDay: 5,
+    dueDayOffset: 21,
     color: CARD_COLORS[0],
     active: true,
     apr: undefined,
     interestCalculationMethod: 'daily',
     gracePeriodDays: 21,
-    rewardName: 'Amore Cashback',
-    cashbackRate: 1,
     cashbackCap: 3000,
     cashbackMinSpend: 1000,
-    cashbackCategories: ['Food', 'Shopping', 'Transport', 'Entertainment', 'Health'],
+    cashbackUsesFullThousandBlocks: false,
     cashbackRules: [{ rate: 1, categories: ['Groceries'] }, { rate: 0.3, categories: ['*'] }],
   }
 }
@@ -189,21 +172,18 @@ export function CreditCardForm({
   const [lastFour, setLastFour] = useState(initial.lastFour)
   const [limit, setLimit] = useState(String(initial.limit))
   const [statementDay, setStatementDay] = useState(String(initial.statementDay))
-  const [dueDay, setDueDay] = useState(String(initial.dueDay))
+  const [dueDayOffset, setDueDayOffset] = useState(String(initial.dueDayOffset))
   const [color, setColor] = useState(initial.color ?? CARD_COLORS[0])
   const [active, setActive] = useState(initial.active ?? true)
   const [apr, setApr] = useState(initial.apr !== undefined ? String(initial.apr) : '')
   const [interestCalculationMethod, setInterestCalculationMethod] = useState(initial.interestCalculationMethod ?? 'daily')
   const [gracePeriodDays, setGracePeriodDays] = useState(initial.gracePeriodDays !== undefined ? String(initial.gracePeriodDays) : '21')
   const [minimumPaymentOverride, setMinimumPaymentOverride] = useState(initial.minimumPaymentOverride !== undefined ? String(initial.minimumPaymentOverride) : '')
-  const [rewardName, setRewardName] = useState(initial.rewardName ?? 'Cashback')
-  const [cashbackRate, setCashbackRate] = useState(initial.cashbackRate !== undefined ? String(initial.cashbackRate) : '')
   const [cashbackCap, setCashbackCap] = useState(initial.cashbackCap !== undefined ? String(initial.cashbackCap) : '')
   const [cashbackStartingBalance, setCashbackStartingBalance] = useState(initial.cashbackStartingBalance !== undefined ? String(initial.cashbackStartingBalance) : '0')
-  const [cashbackRedeemed, setCashbackRedeemed] = useState(initial.cashbackRedeemed !== undefined ? String(initial.cashbackRedeemed) : '0')
   const [cashbackMinSpend, setCashbackMinSpend] = useState(initial.cashbackMinSpend !== undefined ? String(initial.cashbackMinSpend) : '1000')
-  const [cashbackCategories, setCashbackCategories] = useState(
-    (initial.cashbackCategories ?? ['Food', 'Shopping', 'Transport', 'Entertainment', 'Health']).join(', '),
+  const [cashbackUsesFullThousandBlocks, setCashbackUsesFullThousandBlocks] = useState(
+    initial.cashbackUsesFullThousandBlocks ?? false,
   )
   const [cashbackRulesText, setCashbackRulesText] = useState(
     (initial.cashbackRules ?? [{ rate: 1, categories: ['Groceries'] }, { rate: 0.3, categories: ['*'] }])
@@ -217,10 +197,9 @@ export function CreditCardForm({
   const [selectedPreset, setSelectedPreset] = useState<string>(() => {
     const match = REWARD_PRESETS.find((preset) => {
       if (preset.id === 'custom') return false
-      return preset.rewardName === (initial.rewardName ?? 'Cashback')
-        && Math.abs((preset.cashbackRate ?? 0) - Number(initial.cashbackRate ?? 0)) < 0.001
-        && (preset.cashbackCap ?? 0) === (initial.cashbackCap ?? 0)
+      return (preset.cashbackCap ?? 0) === (initial.cashbackCap ?? 0)
         && (preset.cashbackMinSpend ?? 0) === (initial.cashbackMinSpend ?? 0)
+        && Boolean(preset.cashbackUsesFullThousandBlocks) === Boolean(initial.cashbackUsesFullThousandBlocks)
     })
     return match?.id ?? 'custom'
   })
@@ -248,11 +227,9 @@ export function CreditCardForm({
     }
 
     setSelectedPreset(preset.id)
-    setRewardName(preset.rewardName)
-    setCashbackRate(String(preset.cashbackRate))
     setCashbackCap(preset.cashbackCap !== undefined ? String(preset.cashbackCap) : '')
     setCashbackMinSpend(String(preset.cashbackMinSpend))
-    setCashbackCategories(preset.cashbackCategories.join(', '))
+    setCashbackUsesFullThousandBlocks(Boolean(preset.cashbackUsesFullThousandBlocks))
     setCashbackRulesText(preset.cashbackRulesText)
   }
 
@@ -263,7 +240,7 @@ export function CreditCardForm({
       lastFourRef.current?.focus()
     } else if (nextErrors.limit) {
       limitRef.current?.focus()
-    } else if (nextErrors.dueDay) {
+    } else if (nextErrors.dueDayOffset) {
       dueDayRef.current?.focus()
     } else if (nextErrors.apr) {
       aprRef.current?.focus()
@@ -281,14 +258,12 @@ export function CreditCardForm({
 
     const parsedLimit = Number.parseFloat(limit)
     const parsedStatementDay = Number.parseInt(statementDay, 10)
-    const parsedDueDay = Number.parseInt(dueDay, 10)
+    const parsedDueDayOffset = Number.parseInt(dueDayOffset, 10)
     const parsedApr = apr.trim() !== '' ? Number.parseFloat(apr) : undefined
     const parsedGracePeriodDays = gracePeriodDays.trim() !== '' ? Number.parseInt(gracePeriodDays, 10) : undefined
     const parsedMinimumPaymentOverride = minimumPaymentOverride.trim() !== '' ? Number.parseFloat(minimumPaymentOverride) : undefined
-    const parsedCashbackRate = cashbackRate.trim() !== '' ? Number.parseFloat(cashbackRate) : undefined
     const parsedCashbackCap = cashbackCap.trim() !== '' ? Number.parseFloat(cashbackCap) : undefined
     const parsedCashbackStartingBalance = cashbackStartingBalance.trim() !== '' ? Number.parseFloat(cashbackStartingBalance) : 0
-    const parsedCashbackRedeemed = cashbackRedeemed.trim() !== '' ? Number.parseFloat(cashbackRedeemed) : 0
     const parsedCashbackMinSpend = cashbackMinSpend.trim() !== '' ? Number.parseFloat(cashbackMinSpend) : 1000
     const parsedCashbackRules = cashbackRulesText
       .split(/[,;\n]/)
@@ -311,12 +286,6 @@ export function CreditCardForm({
           categories: [category],
         }
       })
-    const hasExplicitCashbackRate = cashbackRate.trim() !== ''
-    const fallbackCashbackRate = hasExplicitCashbackRate
-      ? parsedCashbackRate
-      : (parsedCashbackRules.length > 0
-        ? (parsedCashbackRules.find((rule) => rule.categories.includes('*'))?.rate ?? parsedCashbackRules[0].rate)
-        : parsedCashbackRate)
     const nextErrors: FieldErrors = {}
 
     if (!name.trim()) {
@@ -329,11 +298,11 @@ export function CreditCardForm({
       nextErrors.limit = 'Enter a credit limit greater than zero.'
     }
     if (
-      !Number.isInteger(parsedDueDay) ||
-      parsedDueDay < 1 ||
-      parsedDueDay > 31
+      !Number.isInteger(parsedDueDayOffset) ||
+      parsedDueDayOffset < 1 ||
+      parsedDueDayOffset > 60
     ) {
-      nextErrors.dueDay = 'Enter a whole number from 1 to 31.'
+      nextErrors.dueDayOffset = 'Enter a whole number from 1 to 60.'
     }
     if (parsedApr !== undefined && (!Number.isFinite(parsedApr) || parsedApr < 0 || parsedApr > 100)) {
       nextErrors.apr = 'APR must be between 0 and 100.'
@@ -344,17 +313,11 @@ export function CreditCardForm({
     if (parsedMinimumPaymentOverride !== undefined && (!Number.isFinite(parsedMinimumPaymentOverride) || parsedMinimumPaymentOverride < 0)) {
       nextErrors.minimumPaymentOverride = 'Enter zero or a positive amount.'
     }
-    if (parsedCashbackRate !== undefined && (!Number.isFinite(parsedCashbackRate) || parsedCashbackRate < 0 || parsedCashbackRate > 100)) {
-      nextErrors.cashbackRate = 'Cashback rate must be between 0 and 100.'
-    }
     if (parsedCashbackCap !== undefined && (!Number.isFinite(parsedCashbackCap) || parsedCashbackCap < 0)) {
       nextErrors.cashbackRate = 'Cashback cap must be zero or greater.'
     }
     if (!Number.isFinite(parsedCashbackStartingBalance) || parsedCashbackStartingBalance < 0) {
       nextErrors.cashbackRate = 'Starting cashback balance must be zero or greater.'
-    }
-    if (!Number.isFinite(parsedCashbackRedeemed) || parsedCashbackRedeemed < 0) {
-      nextErrors.cashbackRate = 'Redeemed cashback must be zero or greater.'
     }
     if (!Number.isFinite(parsedCashbackMinSpend) || parsedCashbackMinSpend < 0) {
       nextErrors.cashbackRate = 'Cashback minimum spend must be zero or greater.'
@@ -373,23 +336,17 @@ export function CreditCardForm({
         lastFour,
         limit: parsedLimit,
         statementDay: parsedStatementDay,
-        dueDay: parsedDueDay,
+        dueDayOffset: parsedDueDayOffset,
         color,
         active,
         apr: parsedApr,
         interestCalculationMethod,
         gracePeriodDays: parsedGracePeriodDays,
         minimumPaymentOverride: parsedMinimumPaymentOverride,
-        rewardName: rewardName.trim() || 'Cashback',
-        cashbackRate: fallbackCashbackRate,
         cashbackCap: parsedCashbackCap,
+        cashbackUsesFullThousandBlocks,
         cashbackStartingBalance: parsedCashbackStartingBalance,
-        cashbackRedeemed: parsedCashbackRedeemed,
         cashbackMinSpend: parsedCashbackMinSpend,
-        cashbackCategories: cashbackCategories
-          .split(',')
-          .map((category) => category.trim())
-          .filter(Boolean),
         cashbackRules: parsedCashbackRules,
       })
     } catch (err) {
@@ -500,31 +457,31 @@ export function CreditCardForm({
 
         <div className="form-row">
           <label>
-            Due day of month
+            Days after statement
             <input
               ref={dueDayRef}
               type="number"
               inputMode="numeric"
               min="1"
-              max="31"
+              max="60"
               step="1"
               required
-              value={dueDay}
-              onChange={(e) => setDueDay(e.target.value)}
-              placeholder="5"
-              aria-invalid={errors.dueDay ? true : undefined}
+              value={dueDayOffset}
+              onChange={(e) => setDueDayOffset(e.target.value)}
+              placeholder="21"
+              aria-invalid={errors.dueDayOffset ? true : undefined}
               aria-describedby={
-                errors.dueDay
-                  ? 'cc-form-error-due-day'
-                  : 'cc-form-hint-due-day'
+                errors.dueDayOffset
+                  ? 'cc-form-error-due-day-offset'
+                  : 'cc-form-hint-due-day-offset'
               }
             />
-            <span id="cc-form-hint-due-day" className="field-hint">
-              Moved to the next banking day when needed
+            <span id="cc-form-hint-due-day-offset" className="field-hint">
+              After the statement closes; moved to the next banking day when needed
             </span>
-            {errors.dueDay && (
-              <span id="cc-form-error-due-day" className="field-error" role="alert">
-                {errors.dueDay}
+            {errors.dueDayOffset && (
+              <span id="cc-form-error-due-day-offset" className="field-error" role="alert">
+                {errors.dueDayOffset}
               </span>
             )}
           </label>
@@ -636,45 +593,9 @@ export function CreditCardForm({
                 </option>
               ))}
             </select>
-          </label>
-          <label>
-            Reward name
-            <input
-              type="text"
-              value={rewardName}
-              onChange={(e) => {
-                setRewardName(e.target.value)
-                if (selectedPreset !== 'custom') {
-                  setSelectedPreset('custom')
-                }
-              }}
-              placeholder="Amore Cashback"
-            />
-          </label>
-        </div>
-
-        <div className="form-row">
-          <label>
-            Cashback rate (%)
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              max="100"
-              step="0.01"
-              value={cashbackRate}
-              onChange={(e) => {
-                setCashbackRate(e.target.value)
-                if (selectedPreset !== 'custom') {
-                  setSelectedPreset('custom')
-                }
-              }}
-              placeholder="1.0"
-              aria-invalid={errors.cashbackRate ? true : undefined}
-            />
-            {errors.cashbackRate && (
-              <span className="field-error" role="alert">{errors.cashbackRate}</span>
-            )}
+            <span className="field-hint">
+              The card name identifies the rewards program.
+            </span>
           </label>
           <label>
             Cashback cap (₱) (optional)
@@ -714,26 +635,6 @@ export function CreditCardForm({
             />
           </label>
           <label>
-            Redeemed cashback (₱)
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={cashbackRedeemed}
-              onChange={(e) => {
-                setCashbackRedeemed(e.target.value)
-                if (selectedPreset !== 'custom') {
-                  setSelectedPreset('custom')
-                }
-              }}
-              placeholder="0"
-            />
-          </label>
-        </div>
-
-        <div className="form-row">
-          <label>
             Min spend for cashback (₱)
             <input
               type="number"
@@ -748,20 +649,6 @@ export function CreditCardForm({
                 }
               }}
               placeholder="1000"
-            />
-          </label>
-          <label>
-            Eligible categories
-            <input
-              type="text"
-              value={cashbackCategories}
-              onChange={(e) => {
-                setCashbackCategories(e.target.value)
-                if (selectedPreset !== 'custom') {
-                  setSelectedPreset('custom')
-                }
-              }}
-              placeholder="Food, Shopping, Transport"
             />
           </label>
         </div>

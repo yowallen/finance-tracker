@@ -161,7 +161,7 @@ describe('cashback perk rules', () => {
     expect(resolveCashbackRateForCategory(legacyCard as CreditCard, 'Transport')).toBe(0.3)
   })
 
-  it('infers the correct Amore grocery rate for legacy cards that only saved the wildcard fallback', () => {
+  it('uses the explicit wildcard rule when no category-specific rule exists', () => {
     const legacyCard = {
       id: 'card-legacy-amore',
       userId: 'user-1',
@@ -177,7 +177,7 @@ describe('cashback perk rules', () => {
       cashbackMinSpend: 1000,
     } as CreditCard
 
-    expect(resolveCashbackRateForCategory(legacyCard, 'Groceries')).toBe(4)
+    expect(resolveCashbackRateForCategory(legacyCard, 'Groceries')).toBe(0.3)
     expect(resolveCashbackRateForCategory(legacyCard, 'Shopping')).toBe(0.3)
   })
 
@@ -239,7 +239,7 @@ describe('cashback perk rules', () => {
     })).toBe(0)
   })
 
-  it('awards cashback only on full Php 1,000 blocks for Amore transactions', () => {
+  it('awards cashback from complete 1,000-peso blocks for the Classic preset', () => {
     const card = {
       id: 'card-amore-1000',
       userId: 'user-1',
@@ -255,13 +255,14 @@ describe('cashback perk rules', () => {
         { id: 'default', rate: 0.3, categories: ['*'] },
       ],
       cashbackMinSpend: 1000,
+      cashbackUsesFullThousandBlocks: true,
     } as CreditCard
 
     expect(computeCashbackForTransaction(card, {
       id: 'tx-amore-1',
       userId: 'user-1',
       type: 'expense',
-      amount: 2295.06,
+      amount: 2225,
       category: 'Groceries',
       description: 'Supermarket purchase',
       occurredAt: '2024-01-10T00:00:00Z',
@@ -387,7 +388,7 @@ describe('cashback perk rules', () => {
     expect(computeAggregateCashback(cards, transactions, 2024, 0)).toBe(95)
   })
 
-  it('defaults legacy Amore cards to a 1000 minimum spend when the field is missing', () => {
+  it('does not infer a minimum spend when the field is missing', () => {
     const legacyCard = {
       id: 'card-legacy',
       userId: 'user-1',
@@ -412,7 +413,7 @@ describe('cashback perk rules', () => {
       createdAt: '2024-01-13T00:00:00Z',
       creditCardId: 'card-legacy',
       creditCardPayment: false,
-    })).toBe(0)
+    })).toBe(9.99)
 
     expect(computeCashbackForTransaction(legacyCard, {
       id: 'tx-legacy-2',
