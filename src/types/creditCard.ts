@@ -226,7 +226,9 @@ export interface InterestProjection {
   currentBalance: number
   monthlyInterestRate: number
   dailyInterestRate: number
+  minimumPaymentOverride?: number
   projectedBalances: ProjectedBalance[]
+  projectedBalancesMinPay: ProjectedBalance[]
   totalInterestIfMinPay: number
   monthsToPayoffMinPay: number
   totalInterestIfFixedPay: number

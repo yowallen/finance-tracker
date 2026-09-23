@@ -1108,7 +1108,11 @@ export function projectInterest(
       currentBalance: 0,
       monthlyInterestRate: 0,
       dailyInterestRate: 0,
+      ...(card.minimumPaymentOverride !== undefined
+        ? { minimumPaymentOverride: card.minimumPaymentOverride }
+        : {}),
       projectedBalances: [],
+      projectedBalancesMinPay: [],
       totalInterestIfMinPay: 0,
       monthsToPayoffMinPay: 0,
       totalInterestIfFixedPay: 0,
@@ -1128,7 +1132,9 @@ export function projectInterest(
 
   for (let month = 0; month < monthsToProject && balanceMinPay > 0; month++) {
     const interest = balanceMinPay * monthlyRate
-    const minimumPayment = Math.min(balanceMinPay, Math.max(balanceMinPay * 0.03, 100))
+    const minimumPayment = card.minimumPaymentOverride !== undefined
+      ? Math.min(balanceMinPay, card.minimumPaymentOverride)
+      : computeMinimumPaymentWithInterest(balanceMinPay, apr)
     const payment = minimumPayment
     const principal = payment - interest
     const newBalance = Math.max(0, balanceMinPay - principal)
@@ -1150,7 +1156,11 @@ export function projectInterest(
   }
 
   // Scenario 2: Fixed payment
-  const fixedPayAmount = fixedPayment ?? Math.max(currentBalance * 0.05, 500)
+  const firstMinimumPayment = card.minimumPaymentOverride !== undefined
+    ? Math.min(currentBalance, card.minimumPaymentOverride)
+    : computeMinimumPaymentWithInterest(currentBalance, apr)
+  const defaultFixedPayment = Math.max(currentBalance * 0.05, 500)
+  const fixedPayAmount = Math.max(fixedPayment ?? defaultFixedPayment, firstMinimumPayment)
   let balanceFixedPay = currentBalance
   let totalInterestFixedPay = 0
   let monthsFixedPay = 0
@@ -1188,7 +1198,11 @@ export function projectInterest(
     currentBalance,
     monthlyInterestRate: monthlyRate,
     dailyInterestRate: daily,
+    ...(card.minimumPaymentOverride !== undefined
+      ? { minimumPaymentOverride: card.minimumPaymentOverride }
+      : {}),
     projectedBalances,
+    projectedBalancesMinPay: projectedMinPay,
     totalInterestIfMinPay: totalInterestMinPay,
     monthsToPayoffMinPay: monthsMinPay,
     totalInterestIfFixedPay: totalInterestFixedPay,

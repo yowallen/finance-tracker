@@ -24,6 +24,13 @@ function monthLabel(month: number, year: number): string {
   return date.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
 }
 
+function projectionMonthLabel(monthOffset: number): string {
+  const date = new Date()
+  date.setDate(1)
+  date.setMonth(date.getMonth() + monthOffset)
+  return monthLabel(date.getMonth(), date.getFullYear())
+}
+
 function formatAxisMoney(amount: number): string {
   return new Intl.NumberFormat('en-PH', {
     style: 'currency',
@@ -101,6 +108,7 @@ function useFocusTrap(isActive: boolean) {
 export function InterestProjection({ projection, onClose }: InterestProjectionProps) {
   const [viewMode, setViewMode] = useState<'fixed' | 'min'>('fixed')
   const [customFixedPayment, setCustomFixedPayment] = useState(projection.fixedPaymentAmount)
+  const minimumPayment = projection.projectedBalancesMinPay[0]?.payment ?? 0
   const [showTable, setShowTable] = useState(false)
   const [reducedMotion, setReducedMotion] = useState(() =>
     typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -142,6 +150,7 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
             active: true,
             createdAt: '',
             dueDay: 1,
+            minimumPaymentOverride: projection.minimumPaymentOverride,
           },
           projection.currentBalance,
           24,
@@ -149,17 +158,20 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
         )
       : projection
     if (viewMode === 'min') {
+      const projectedBalances = projection.projectedBalancesMinPay.filter(
+        p => p.month < projection.monthsToPayoffMinPay,
+      )
       return {
         totalInterest: projection.totalInterestIfMinPay,
         monthsToPayoff: projection.monthsToPayoffMinPay,
-        monthlyPayment: 'Minimum (3% or ₱100)',
-        projectedBalances: projection.projectedBalances.filter(p => p.month < projection.monthsToPayoffMinPay),
+        monthlyPayment: formatMoney(projectedBalances[0]?.payment ?? 0),
+        projectedBalances,
       }
     }
     return {
       totalInterest: recalculated.totalInterestIfFixedPay,
       monthsToPayoff: recalculated.monthsToPayoffFixedPay,
-      monthlyPayment: formatMoney(customFixedPayment),
+      monthlyPayment: formatMoney(recalculated.fixedPaymentAmount),
       projectedBalances: recalculated.projectedBalances.filter(p => p.month < recalculated.monthsToPayoffFixedPay),
     }
   }, [viewMode, projection, customFixedPayment])
@@ -220,7 +232,7 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
       .map((point) => ({
         month: point.data.month,
         year: point.data.year,
-        label: monthLabel(point.data.month % 12, point.data.year),
+        label: projectionMonthLabel(point.data.month),
         x: point.x,
       }))
   }, [chartPoints])
@@ -331,10 +343,10 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
                   id="ip-fixed-amount"
                   type="number"
                   inputMode="decimal"
-                  min="100"
+                  min={minimumPayment}
                   step="100"
                   value={customFixedPayment}
-                  onChange={(e) => setCustomFixedPayment(Math.max(100, Number.parseFloat(e.target.value) || 0))}
+                  onChange={(e) => setCustomFixedPayment(Math.max(minimumPayment, Number.parseFloat(e.target.value) || 0))}
                   className="ip-fixed-input-field"
                   aria-label="Fixed monthly payment amount in pesos"
                 />
@@ -418,7 +430,7 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
                     // Export to CSV
                     const headers = ['Month', 'Starting Balance', 'Interest', 'Payment', 'Principal', 'Ending Balance']
                     const rows = currentProjection.projectedBalances.map(p => [
-                      monthLabel(p.month % 12, p.year),
+                      projectionMonthLabel(p.month),
                       formatMoney(p.startingBalance),
                       formatMoney(p.interestCharged),
                       formatMoney(p.payment),
@@ -531,7 +543,7 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
                       strokeWidth="2"
                       tabIndex={0}
                       role="img"
-                      aria-label={`${monthLabel(point.data.month % 12, point.data.year)}: Balance ${formatMoney(point.data.endingBalance)}, Interest ${formatMoney(point.data.interestCharged)}, Payment ${formatMoney(point.data.payment)}`}
+                      aria-label={`${projectionMonthLabel(point.data.month)}: Balance ${formatMoney(point.data.endingBalance)}, Interest ${formatMoney(point.data.interestCharged)}, Payment ${formatMoney(point.data.payment)}`}
                     />
                   ))}
                 </svg>
@@ -558,7 +570,7 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
                   <tbody>
                     {currentProjection.projectedBalances.map((p) => (
                       <tr key={p.month}>
-                        <td>{monthLabel(p.month % 12, p.year)}</td>
+                        <td>{projectionMonthLabel(p.month)}</td>
                         <td>{formatMoney(p.startingBalance)}</td>
                         <td className="danger">{formatMoney(p.interestCharged)}</td>
                         <td>{formatMoney(p.payment)}</td>
@@ -603,7 +615,7 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
                 <tbody>
                   {currentProjection.projectedBalances.map((p) => (
                     <tr key={p.month}>
-                      <td>{monthLabel(p.month % 12, p.year)}</td>
+                      <td>{projectionMonthLabel(p.month)}</td>
                       <td>{formatMoney(p.startingBalance)}</td>
                       <td className="danger">{formatMoney(p.interestCharged)}</td>
                       <td>{formatMoney(p.payment)}</td>
