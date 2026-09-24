@@ -5,6 +5,7 @@ import type {
   CreditCard,
   CreditCardInput,
   CreditCardStatement,
+  PointsRule,
   StatementPeriod,
   InterestProjection,
   ProjectedBalance,
@@ -16,6 +17,15 @@ import type { Transaction } from '../types/transaction'
 import { nextPhilippineBankingDay } from './recurringBills'
 
 const COLLECTION = 'creditCards'
+const BPI_MINIMUM_PAYMENT = 850
+
+export function getMinimumPaymentOverride(card: Pick<CreditCard, 'name' | 'minimumPaymentOverride'>): number | undefined {
+  if (card.minimumPaymentOverride !== undefined) {
+    return card.minimumPaymentOverride
+  }
+
+  return card.name.trim().toLowerCase().includes('bpi') ? BPI_MINIMUM_PAYMENT : undefined
+}
 
 function toIso(value: unknown, timestampCtor: typeof Timestamp): string {
   if (value instanceof timestampCtor) {
@@ -100,6 +110,28 @@ function normalizeLegacyCashbackRules(value: unknown): CreditCard['cashbackRules
   return normalized.length > 0 ? normalized : undefined
 }
 
+function normalizePointsRules(value: unknown): PointsRule[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const rules: PointsRule[] = []
+  for (const rule of value) {
+    if (!rule || typeof rule !== 'object') continue
+    const pointsPerSpend = coerceNumeric((rule as Record<string, unknown>).pointsPerSpend)
+    const pointsSpendIncrement = coerceNumeric((rule as Record<string, unknown>).pointsSpendIncrement)
+    const categories = coerceStringArray((rule as Record<string, unknown>).categories)
+    if (
+      pointsPerSpend === undefined ||
+      pointsSpendIncrement === undefined ||
+      pointsSpendIncrement <= 0 ||
+      !categories ||
+      categories.length === 0
+    ) {
+      continue
+    }
+    rules.push({ pointsPerSpend, pointsSpendIncrement, categories })
+  }
+  return rules.length > 0 ? rules : undefined
+}
+
 function mapDoc(
   id: string,
   data: Record<string, unknown>,
@@ -118,9 +150,17 @@ function mapDoc(
   const interestCalculationMethod = typeof data.interestCalculationMethod === 'string' ? data.interestCalculationMethod : undefined
   const gracePeriodDays = coerceNumeric(data.gracePeriodDays)
   const minimumPaymentOverride = coerceNumeric(data.minimumPaymentOverride)
+  const madnessLimit = coerceNumeric(data.madnessLimit)
+  const madnessUsed = coerceNumeric(data.madnessUsed)
   const rewardName = typeof data.rewardName === 'string' ? data.rewardName : undefined
+  const rewardType = data.rewardType === 'points' || data.rewardType === 'cashback' ? data.rewardType : undefined
+  const pointsPerSpend = coerceNumeric(data.pointsPerSpend)
+  const pointsSpendIncrement = coerceNumeric(data.pointsSpendIncrement)
+  const pointsRules = normalizePointsRules(data.pointsRules)
+  const rewardDescription = typeof data.rewardDescription === 'string' ? data.rewardDescription : undefined
   const cashbackRate = coerceNumeric(data.cashbackRate)
   const cashbackCap = coerceNumeric(data.cashbackCap)
+  const cashbackYearlyCap = coerceNumeric(data.cashbackYearlyCap)
   const cashbackUsesFullThousandBlocks = data.cashbackUsesFullThousandBlocks === true
   const cashbackStartingBalance = coerceNumeric(data.cashbackStartingBalance)
   const cashbackRedeemed = coerceNumeric(data.cashbackRedeemed)
@@ -156,9 +196,17 @@ function mapDoc(
       : {}),
     ...(gracePeriodDays !== undefined ? { gracePeriodDays } : {}),
     ...(minimumPaymentOverride !== undefined ? { minimumPaymentOverride } : {}),
+    ...(madnessLimit !== undefined ? { madnessLimit } : {}),
+    ...(madnessUsed !== undefined ? { madnessUsed } : {}),
     ...(rewardName ? { rewardName } : {}),
+    ...(rewardType ? { rewardType } : {}),
+    ...(pointsPerSpend !== undefined ? { pointsPerSpend } : {}),
+    ...(pointsSpendIncrement !== undefined ? { pointsSpendIncrement } : {}),
+    ...(pointsRules ? { pointsRules } : {}),
+    ...(rewardDescription ? { rewardDescription } : {}),
     ...(cashbackRate !== undefined ? { cashbackRate } : {}),
     ...(cashbackCap !== undefined ? { cashbackCap } : {}),
+    ...(cashbackYearlyCap !== undefined ? { cashbackYearlyCap } : {}),
     ...(cashbackUsesFullThousandBlocks ? { cashbackUsesFullThousandBlocks: true } : {}),
     ...(cashbackStartingBalance !== undefined ? { cashbackStartingBalance } : {}),
     ...(cashbackRedeemed !== undefined ? { cashbackRedeemed } : {}),
@@ -307,14 +355,27 @@ export async function createCreditCard(
   if (input.minimumPaymentOverride !== undefined) {
     payload.minimumPaymentOverride = input.minimumPaymentOverride
   }
+  if (input.madnessLimit !== undefined) payload.madnessLimit = input.madnessLimit
+  if (input.madnessUsed !== undefined) payload.madnessUsed = input.madnessUsed
   if (input.rewardName !== undefined) {
     payload.rewardName = input.rewardName.trim() || 'Cashback'
   }
+  if (input.rewardType !== undefined) payload.rewardType = input.rewardType
+  if (input.pointsPerSpend !== undefined) payload.pointsPerSpend = input.pointsPerSpend
+  if (input.pointsSpendIncrement !== undefined) payload.pointsSpendIncrement = input.pointsSpendIncrement
+  if (input.pointsRules !== undefined) {
+    const normalizedRules = normalizePointsRules(input.pointsRules)
+    payload.pointsRules = normalizedRules ?? []
+  }
+  if (input.rewardDescription !== undefined) payload.rewardDescription = input.rewardDescription.trim()
   if (input.cashbackRate !== undefined) {
     payload.cashbackRate = input.cashbackRate
   }
   if (input.cashbackCap !== undefined) {
     payload.cashbackCap = input.cashbackCap
+  }
+  if (input.cashbackYearlyCap !== undefined) {
+    payload.cashbackYearlyCap = input.cashbackYearlyCap
   }
   if (input.cashbackUsesFullThousandBlocks !== undefined) {
     payload.cashbackUsesFullThousandBlocks = input.cashbackUsesFullThousandBlocks
@@ -393,10 +454,45 @@ export async function updateCreditCard(
   } else {
     payload.minimumPaymentOverride = null
   }
+  if (input.madnessLimit !== undefined) {
+    payload.madnessLimit = input.madnessLimit
+  } else {
+    payload.madnessLimit = null
+  }
+  if (input.madnessUsed !== undefined) {
+    payload.madnessUsed = input.madnessUsed
+  } else {
+    payload.madnessUsed = null
+  }
   if (input.rewardName !== undefined) {
     payload.rewardName = input.rewardName.trim() || 'Cashback'
   } else {
     payload.rewardName = null
+  }
+  if (input.rewardType !== undefined) {
+    payload.rewardType = input.rewardType
+  } else {
+    payload.rewardType = null
+  }
+  if (input.pointsPerSpend !== undefined) {
+    payload.pointsPerSpend = input.pointsPerSpend
+  } else {
+    payload.pointsPerSpend = null
+  }
+  if (input.pointsSpendIncrement !== undefined) {
+    payload.pointsSpendIncrement = input.pointsSpendIncrement
+  } else {
+    payload.pointsSpendIncrement = null
+  }
+  if (input.pointsRules !== undefined) {
+    payload.pointsRules = normalizePointsRules(input.pointsRules) ?? []
+  } else {
+    payload.pointsRules = null
+  }
+  if (input.rewardDescription !== undefined) {
+    payload.rewardDescription = input.rewardDescription.trim()
+  } else {
+    payload.rewardDescription = null
   }
   if (input.cashbackRate !== undefined) {
     payload.cashbackRate = input.cashbackRate
@@ -407,6 +503,11 @@ export async function updateCreditCard(
     payload.cashbackCap = input.cashbackCap
   } else {
     payload.cashbackCap = null
+  }
+  if (input.cashbackYearlyCap !== undefined) {
+    payload.cashbackYearlyCap = input.cashbackYearlyCap
+  } else {
+    payload.cashbackYearlyCap = null
   }
   if (input.cashbackUsesFullThousandBlocks !== undefined) {
     payload.cashbackUsesFullThousandBlocks = input.cashbackUsesFullThousandBlocks
@@ -601,20 +702,27 @@ export function computeStatement(
   const interest = computeInterest(card, previousBalance, newCharges, paymentsCredits, statementDate, dueDate)
   const statementBalance = Math.max(0, previousBalance + newCharges - paymentsCredits + interest)
   const outstandingBalance = computeOutstandingBalance(card, allTransactions, year, month)
-  const minimumPayment = card.minimumPaymentOverride !== undefined
-    ? Math.min(statementBalance, card.minimumPaymentOverride)
+  const minimumPaymentOverride = getMinimumPaymentOverride(card)
+  const minimumPayment = minimumPaymentOverride !== undefined
+    ? Math.min(statementBalance, minimumPaymentOverride)
     : card.apr && card.apr > 0
       ? computeMinimumPaymentWithInterest(statementBalance, card.apr)
       : Math.min(statementBalance, Math.max(statementBalance * 0.03, 100))
   const availableCredit = Math.max(0, card.limit - outstandingBalance)
   const isPaid = statementBalance <= 0
   const cashbackEligibleSpend = getCashbackEligibleSpend(card, periodTransactions)
-  const cashbackPeriodEarned = computeCashbackEarned(card, periodTransactions)
+  const uncappedPeriodEarned = periodTransactions.reduce(
+    (sum, tx) => sum + awardedCashbackForTransaction(card, tx, allTransactions),
+    0,
+  )
+  const statementCap = typeof card.cashbackCap === 'number' ? card.cashbackCap : Number.POSITIVE_INFINITY
+  const cashbackPeriodEarned = Math.min(uncappedPeriodEarned, statementCap)
   const cashbackStartingBalance = typeof card.cashbackStartingBalance === 'number' ? card.cashbackStartingBalance : 0
   const cashbackCap = typeof card.cashbackCap === 'number' ? card.cashbackCap : Number.POSITIVE_INFINITY
   const cashbackEarned = Math.min(cashbackStartingBalance + cashbackPeriodEarned, cashbackCap)
   const cashbackRedeemed = typeof card.cashbackRedeemed === 'number' ? Math.max(0, card.cashbackRedeemed) : 0
   const availableCashback = Math.max(0, cashbackEarned - cashbackRedeemed)
+  const pointsEarned = computePointsEarned(card, periodTransactions)
 
   return {
     card,
@@ -633,40 +741,70 @@ export function computeStatement(
     cashbackEarned,
     cashbackRedeemed,
     availableCashback,
+    pointsEarned,
     transactions: periodTransactions,
     transactionHistory,
   }
 }
 
+const CATEGORY_ALIASES: Record<string, string[]> = {
+  groceries: ['groceries', 'grocery', 'supermarket', 'supermarkets'],
+  utilities: ['utilities', 'utility', 'water', 'electricity', 'internet', 'phone', 'payment', 'bills'],
+  drugstores: ['drug store', 'drug stores', 'pharmacy', 'pharmacies'],
+  fuel: ['fuel', 'gas', 'petrol', 'gasoline', 'petron'],
+  food: ['food', 'dining', 'restaurant', 'restaurants'],
+}
+
+function categoryKey(value: string): string {
+  const normalized = value.trim().toLowerCase()
+  if (!normalized || normalized === '*' || normalized === 'all' || normalized.includes('all other')) {
+    return '*'
+  }
+
+  const compact = normalized.replace(/[^a-z]+/g, ' ').trim()
+  if (!compact) return '*'
+
+  for (const [canonical, aliases] of Object.entries(CATEGORY_ALIASES)) {
+    if (aliases.includes(compact)) return canonical
+  }
+
+  return compact
+}
+
+export function computePointsForTransaction(
+  card: Pick<CreditCard, 'id' | 'rewardType' | 'pointsPerSpend' | 'pointsSpendIncrement' | 'pointsRules'>,
+  tx: Partial<Transaction> & {
+    type: Transaction['type']
+    amount: number
+    category: string
+    description?: string
+    creditCardId?: string
+    creditCardPayment?: boolean
+    isAnnualFee?: boolean
+  },
+): number {
+  if (card.rewardType !== 'points' || tx.creditCardId !== card.id) return 0
+  if (tx.creditCardPayment === true || (tx.type !== 'expense' && tx.type !== 'bill')) return 0
+  if (isAnnualFeeTransaction({ category: tx.category, description: tx.description ?? '', isAnnualFee: tx.isAnnualFee })) return 0
+
+  const target = categoryKey(tx.category)
+  const rules = card.pointsRules ?? []
+  const matched = rules.find((rule) => rule.categories.some((item) => categoryKey(item) === target))
+    ?? rules.find((rule) => rule.categories.some((item) => categoryKey(item) === '*'))
+  const pointsPerSpend = matched?.pointsPerSpend ?? card.pointsPerSpend ?? 0
+  const spendIncrement = matched?.pointsSpendIncrement ?? card.pointsSpendIncrement ?? 0
+  if (pointsPerSpend <= 0 || spendIncrement <= 0 || tx.amount < spendIncrement) return 0
+
+  return Math.floor(tx.amount / spendIncrement) * pointsPerSpend
+}
+
+function computePointsEarned(card: CreditCard, transactions: Transaction[]): number {
+  return transactions.reduce((total, tx) => total + computePointsForTransaction(card, tx), 0)
+}
+
 export function resolveCashbackRateForCategory(card: Pick<CreditCard, 'cashbackRules'>, category: string): number {
-  const normalizedCategory = category.trim().toLowerCase()
   const rules = Array.isArray(card.cashbackRules) ? card.cashbackRules : []
-
-  const normalizeKey = (value: string): string => value.trim().toLowerCase().replace(/[^a-z]+/g, ' ').trim()
-  const aliasMap: Record<string, string[]> = {
-    groceries: ['groceries', 'grocery', 'supermarket', 'supermarkets'],
-    utilities: ['utilities', 'utility', 'water', 'electricity', 'internet', 'phone', 'payment', 'bills'],
-    drugstores: ['drug store', 'drug stores', 'pharmacy', 'pharmacies'],
-  }
-  const categoryKey = (value: string): string => {
-    const normalized = value.trim().toLowerCase()
-    if (!normalized || normalized === '*' || normalized === 'all' || normalized.includes('all other')) {
-      return '*'
-    }
-
-    const compact = normalizeKey(value)
-    if (!compact) return '*'
-
-    for (const [canonical, aliases] of Object.entries(aliasMap)) {
-      if (aliases.includes(compact)) {
-        return canonical
-      }
-    }
-
-    return compact
-  }
-
-  const targetKey = categoryKey(normalizedCategory)
+  const targetKey = categoryKey(category)
   const exactMatch = rules
     .filter((rule) => Array.isArray(rule.categories) && rule.categories.length > 0)
     .find((rule) => rule.categories.some((item) => categoryKey(item) === targetKey))
@@ -687,6 +825,8 @@ export function resolveCashbackRateForCategory(card: Pick<CreditCard, 'cashbackR
 }
 
 function getCashbackEligibleSpend(card: CreditCard, transactions: Transaction[]): number {
+  if (card.rewardType === 'points') return 0
+
   return transactions
     .filter((tx) => {
       if (tx.creditCardId !== card.id) return false
@@ -714,7 +854,7 @@ function isAnnualFeeTransaction(tx: Pick<Transaction, 'category' | 'description'
 }
 
 export function computeCashbackForTransaction(
-  card: Pick<CreditCard, 'id' | 'cashbackRules' | 'cashbackCap' | 'cashbackMinSpend' | 'cashbackUsesFullThousandBlocks'>,
+  card: Pick<CreditCard, 'id' | 'rewardType' | 'cashbackRules' | 'cashbackCap' | 'cashbackMinSpend' | 'cashbackUsesFullThousandBlocks'>,
   tx: Partial<Transaction> & {
     type: Transaction['type']
     amount: number
@@ -725,6 +865,7 @@ export function computeCashbackForTransaction(
     isAnnualFee?: boolean
   },
 ): number {
+  if (card.rewardType === 'points') return 0
   if (tx.creditCardId !== card.id) return 0
   if (tx.creditCardPayment === true) return 0
   if (tx.type !== 'expense' && tx.type !== 'bill') return 0
@@ -742,29 +883,92 @@ export function computeCashbackForTransaction(
   return eligibleAmount * (rate / 100)
 }
 
-export function getCurrentCashbackForTransaction(
-  card: CreditCard | undefined,
+function transactionSortKey(tx: { id?: string; occurredAt?: string }): string {
+  const time = tx.occurredAt ? new Date(tx.occurredAt).getTime() : 0
+  return `${Number.isFinite(time) ? time : 0}:${tx.id ?? ''}`
+}
+
+export function awardedCashbackForTransaction(
+  card: Pick<CreditCard, 'id' | 'rewardType' | 'cashbackRules' | 'cashbackCap' | 'cashbackMinSpend' | 'cashbackUsesFullThousandBlocks' | 'cashbackYearlyCap'>,
   tx: Partial<Transaction> & {
+    id?: string
+    occurredAt?: string
     type: Transaction['type']
     amount: number
     category: string
+    description?: string
     creditCardId?: string
     creditCardPayment?: boolean
+    isAnnualFee?: boolean
   },
+  allTransactions: Array<Partial<Transaction> & {
+    id?: string
+    occurredAt?: string
+    type: Transaction['type']
+    amount: number
+    category: string
+    description?: string
+    creditCardId?: string
+    creditCardPayment?: boolean
+    isAnnualFee?: boolean
+  }>,
 ): number {
-  if (!card) return 0
-  return computeCashbackForTransaction(card, tx)
-}
+  const raw = computeCashbackForTransaction(card, tx)
+  const cap = card.cashbackYearlyCap
+  if (typeof cap !== 'number' || !Number.isFinite(cap)) return raw
 
-function computeCashbackEarned(card: CreditCard, transactions: Transaction[]): number {
-  const cap = typeof card.cashbackCap === 'number' ? card.cashbackCap : Number.POSITIVE_INFINITY
+  const occurredAt = tx.occurredAt ? new Date(tx.occurredAt) : new Date(NaN)
+  const year = Number.isFinite(occurredAt.getTime()) ? occurredAt.getFullYear() : new Date().getFullYear()
+  const ordered = allTransactions
+    .filter((item) => {
+      if (item.creditCardId !== card.id) return false
+      const itemDate = item.occurredAt ? new Date(item.occurredAt) : new Date(NaN)
+      return Number.isFinite(itemDate.getTime()) && itemDate.getFullYear() === year
+    })
+    .sort((a, b) => transactionSortKey(a).localeCompare(transactionSortKey(b)))
 
-  let total = 0
-  for (const tx of transactions) {
-    total += computeCashbackForTransaction(card, tx)
+  let used = 0
+  for (const item of ordered) {
+    const itemRaw = computeCashbackForTransaction(card, item)
+    const awarded = Math.max(0, Math.min(itemRaw, cap - used))
+    const sameTransaction = (tx.id && item.id && tx.id === item.id) || item === tx
+    if (sameTransaction) return awarded
+    used += awarded
   }
 
-  return Math.min(total, cap)
+  return Math.max(0, Math.min(raw, cap - used))
+}
+
+export function getCurrentCashbackForTransaction(
+  card: CreditCard | undefined,
+  tx: Partial<Transaction> & {
+    id?: string
+    occurredAt?: string
+    type: Transaction['type']
+    amount: number
+    category: string
+    description?: string
+    creditCardId?: string
+    creditCardPayment?: boolean
+    isAnnualFee?: boolean
+  },
+  allTransactions?: Array<Partial<Transaction> & {
+    id?: string
+    occurredAt?: string
+    type: Transaction['type']
+    amount: number
+    category: string
+    description?: string
+    creditCardId?: string
+    creditCardPayment?: boolean
+    isAnnualFee?: boolean
+  }>,
+): number {
+  if (!card) return 0
+  if (allTransactions && typeof card.cashbackYearlyCap === 'number') {
+    return awardedCashbackForTransaction(card, tx, allTransactions)
+  }
+  return computeCashbackForTransaction(card, tx)
 }
 
 /**
@@ -926,9 +1130,23 @@ export function computeAggregateCashback(
   month: number,
 ): number {
   return cards
-    .filter((card) => card.active && (card.cashbackRules?.length ?? 0) > 0)
+    .filter((card) => card.active && card.rewardType !== 'points' && (card.cashbackRules?.length ?? 0) > 0)
     .reduce(
       (sum, card) => sum + Math.max(0, computeStatement(card, allTransactions, year, month).availableCashback),
+      0,
+    )
+}
+
+export function computeAggregatePoints(
+  cards: CreditCard[],
+  allTransactions: Transaction[],
+  year: number,
+  month: number,
+): number {
+  return cards
+    .filter((card) => card.active && card.rewardType === 'points')
+    .reduce(
+      (sum, card) => sum + Math.max(0, computeStatement(card, allTransactions, year, month).pointsEarned),
       0,
     )
 }
@@ -1064,8 +1282,8 @@ export function projectInterest(
       currentBalance: 0,
       monthlyInterestRate: 0,
       dailyInterestRate: 0,
-      ...(card.minimumPaymentOverride !== undefined
-        ? { minimumPaymentOverride: card.minimumPaymentOverride }
+      ...(getMinimumPaymentOverride(card) !== undefined
+        ? { minimumPaymentOverride: getMinimumPaymentOverride(card) }
         : {}),
       projectedBalances: [],
       projectedBalancesMinPay: [],
@@ -1088,8 +1306,9 @@ export function projectInterest(
 
   for (let month = 0; month < monthsToProject && balanceMinPay > 0; month++) {
     const interest = balanceMinPay * monthlyRate
-    const minimumPayment = card.minimumPaymentOverride !== undefined
-      ? Math.min(balanceMinPay, card.minimumPaymentOverride)
+    const minimumPaymentOverride = getMinimumPaymentOverride(card)
+    const minimumPayment = minimumPaymentOverride !== undefined
+      ? Math.min(balanceMinPay, minimumPaymentOverride)
       : computeMinimumPaymentWithInterest(balanceMinPay, apr)
     const payment = minimumPayment
     const principal = payment - interest
@@ -1112,8 +1331,9 @@ export function projectInterest(
   }
 
   // Scenario 2: Fixed payment
-  const firstMinimumPayment = card.minimumPaymentOverride !== undefined
-    ? Math.min(currentBalance, card.minimumPaymentOverride)
+  const minimumPaymentOverride = getMinimumPaymentOverride(card)
+  const firstMinimumPayment = minimumPaymentOverride !== undefined
+    ? Math.min(currentBalance, minimumPaymentOverride)
     : computeMinimumPaymentWithInterest(currentBalance, apr)
   const defaultFixedPayment = Math.max(currentBalance * 0.05, 500)
   const fixedPayAmount = Math.max(fixedPayment ?? defaultFixedPayment, firstMinimumPayment)

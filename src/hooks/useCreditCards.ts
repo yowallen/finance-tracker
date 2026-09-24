@@ -4,6 +4,7 @@ import {
   computeTotalAvailableCredit,
   computeTotalOutstanding,
   computeAggregateCashback,
+  computeAggregatePoints,
   computeAggregateUtilization,
   buildUtilizationHistory,
   createCreditCard,
@@ -94,6 +95,11 @@ export function useCreditCards(
     [activeCards, allTransactions, year, month],
   )
 
+  const aggregatePoints = useMemo(
+    () => computeAggregatePoints(activeCards, allTransactions, year, month),
+    [activeCards, allTransactions, year, month],
+  )
+
   const aggregateUtilization = useMemo(
     () => computeAggregateUtilization(activeCards, allTransactions, year, month),
     [activeCards, allTransactions, year, month],
@@ -127,6 +133,7 @@ export function useCreditCards(
     interestProjections,
     utilizationHistories,
     aggregateCashback,
+    aggregatePoints,
     aggregateUtilization,
     cardById,
     loading: userId ? loading : false,

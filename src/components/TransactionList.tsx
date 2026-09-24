@@ -24,6 +24,7 @@ type SortDirection = 'asc' | 'desc'
 
 interface TransactionListProps {
   transactions: Transaction[]
+  allTransactions?: Transaction[]
   loading: boolean
   onEdit: (tx: Transaction) => void
   onDelete: (id: string) => Promise<void>
@@ -240,6 +241,7 @@ function SortDropdown({
 
 export function TransactionList({
   transactions,
+  allTransactions = transactions,
   loading,
   onEdit,
   onDelete,
@@ -357,6 +359,8 @@ export function TransactionList({
             const card = tx.creditCardId ? cardById?.get(tx.creditCardId) : undefined
             const cashbackValue = card && tx.creditCardId && tx.creditCardPayment !== true
               ? getCurrentCashbackForTransaction(card, {
+                  id: tx.id,
+                  occurredAt: tx.occurredAt,
                   type: tx.type,
                   amount: tx.amount,
                   category: tx.category,
@@ -364,7 +368,7 @@ export function TransactionList({
                   creditCardId: tx.creditCardId,
                   creditCardPayment: false,
                   isAnnualFee: tx.isAnnualFee,
-                })
+                }, allTransactions)
               : 0
 
             return (

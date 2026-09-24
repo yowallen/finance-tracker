@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type SubmitEvent } from 'react'
 import { Bell, Check, CreditCard as CreditCardIcon, Plus, WalletCards, X, Pencil, Trash2 } from 'lucide-react'
 import { formatMoney, formatYearMonth, monthLabel, toMonthInputValue } from '../lib/format'
 import {
@@ -179,8 +179,8 @@ export function BillReminders({
     })
   }
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
+  async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault()
     setFormError(null)
     const amount = Number.parseFloat(amountText)
     if (!Number.isFinite(amount) || amount <= 0) {

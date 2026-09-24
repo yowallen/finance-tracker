@@ -10,7 +10,7 @@ import './App.css'
 const LedgerApp = lazy(() => import('./components/LedgerApp'))
 
 function App() {
-  const { user, loading: authLoading, error: authError, signIn, logOut } = useAuth()
+  const { user, loading: authLoading, error: authError, signIn, signUp, resetPassword, logOut } = useAuth()
   const { theme, toggleTheme } = useTheme()
 
   if (authLoading) {
@@ -25,6 +25,8 @@ function App() {
     return (
       <AuthForm
         onSignIn={signIn}
+        onSignUp={signUp}
+        onResetPassword={resetPassword}
         error={authError}
         theme={theme}
         onToggleTheme={toggleTheme}

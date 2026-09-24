@@ -1,10 +1,12 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type SubmitEvent } from 'react'
 import { BookMarked, Eye, EyeOff } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
 import type { ThemeMode } from '../lib/theme'
 
 interface AuthFormProps {
   onSignIn: (email: string, password: string) => Promise<void>
+  onSignUp: (email: string, password: string) => Promise<void>
+  onResetPassword: (email: string) => Promise<void>
   error: string | null
   theme: ThemeMode
   onToggleTheme: () => void
@@ -12,6 +14,8 @@ interface AuthFormProps {
 
 export function AuthForm({
   onSignIn,
+  onSignUp,
+  onResetPassword,
   error,
   theme,
   onToggleTheme,
@@ -19,17 +23,31 @@ export function AuthForm({
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [mode, setMode] = useState<'signIn' | 'signUp' | 'reset'>('signIn')
   const [busy, setBusy] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
+  async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault()
     setLocalError(null)
     setBusy(true)
     try {
-      await onSignIn(email.trim(), password)
+      if (mode === 'reset') {
+        await onResetPassword(email.trim())
+        setLocalError('Password reset email sent. Check your inbox.')
+      } else if (mode === 'signUp') {
+        await onSignUp(email.trim(), password)
+      } else {
+        await onSignIn(email.trim(), password)
+      }
     } catch {
-      setLocalError('Could not sign in. Check your email and password.')
+      setLocalError(
+        mode === 'reset'
+          ? 'Could not send a reset email. Check the address and try again.'
+          : mode === 'signUp'
+            ? 'Could not create the account. Check the details and try again.'
+            : 'Could not sign in. Check your email and password.',
+      )
     } finally {
       setBusy(false)
     }
@@ -45,9 +63,13 @@ export function AuthForm({
           <BookMarked className="brand-icon" aria-hidden="true" />
           Ledger
         </p>
-        <h1>Welcome back</h1>
+        <h1>{mode === 'signUp' ? 'Start your ledger' : mode === 'reset' ? 'Reset your password' : 'Welcome back'}</h1>
         <p className="auth-sub">
-          Private personal finance tracker — sign in to continue.
+          {mode === 'signUp'
+            ? 'Create a private financial track for your own goals.'
+            : mode === 'reset'
+              ? 'We will send a secure link to reset your password.'
+              : 'Sign in to continue your financial track.'}
         </p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
@@ -62,29 +84,40 @@ export function AuthForm({
               placeholder="you@example.com"
             />
           </label>
-          <label>
-            Password
-            <span className="password-field">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                autoComplete="current-password"
-                required
-                minLength={6}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Your password"
-              />
-              <button
-                type="button"
-                className="password-toggle"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-                aria-pressed={showPassword}
-                onClick={() => setShowPassword((v) => !v)}
-              >
-                {showPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
-              </button>
-            </span>
-          </label>
+          {mode !== 'reset' && (
+            <label>
+              Password
+              <span className="password-field">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete={mode === 'signUp' ? 'new-password' : 'current-password'}
+                  required
+                  minLength={6}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="At least 6 characters"
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((v) => !v)}
+                >
+                  {showPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+                </button>
+              </span>
+            </label>
+          )}
+          {mode === 'signIn' && (
+            <button
+              type="button"
+              className="link-btn auth-forgot"
+              onClick={() => { setMode('reset'); setLocalError(null) }}
+            >
+              Forgot password?
+            </button>
+          )}
 
           {(localError || error) && (
             <p className="form-error" role="alert">
@@ -93,9 +126,29 @@ export function AuthForm({
           )}
 
           <button type="submit" className="btn-primary" disabled={busy}>
-            {busy ? 'Please wait…' : 'Sign in'}
+            {busy ? 'Please wait…' : mode === 'signUp' ? 'Create account' : mode === 'reset' ? 'Send reset email' : 'Sign in'}
           </button>
         </form>
+        {mode === 'signIn' ? (
+          <div className="auth-create">
+            <p>New to Ledger?</p>
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => { setMode('signUp'); setLocalError(null) }}
+            >
+              Create an account
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="link-btn auth-back"
+            onClick={() => { setMode('signIn'); setLocalError(null) }}
+          >
+            Back to sign in
+          </button>
+        )}
       </div>
     </div>
   )

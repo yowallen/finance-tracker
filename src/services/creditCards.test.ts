@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { CreditCard } from '../types/creditCard'
 import {
+  awardedCashbackForTransaction,
   computeAggregateCashback,
   computeCashbackForTransaction,
+  computePointsForTransaction,
   computeStatement,
   getCurrentCashbackForTransaction,
   resolveCashbackRateForCategory,
@@ -93,6 +95,179 @@ function mapLegacyCreditCardDocForTest(data: Record<string, unknown>) {
 }
 
 describe('cashback perk rules', () => {
+  it('awards one BPI Rewards point per complete Php 35 spend', () => {
+    const card = {
+      id: 'card-bpi-rewards',
+      rewardType: 'points' as const,
+      pointsPerSpend: 1,
+      pointsSpendIncrement: 35,
+    }
+
+    const transaction = (amount: number) => ({
+      type: 'expense' as const,
+      amount,
+      category: 'Shopping',
+      description: 'Purchase',
+      creditCardId: card.id,
+    })
+
+    expect(computePointsForTransaction(card, transaction(34))).toBe(0)
+    expect(computePointsForTransaction(card, transaction(35))).toBe(1)
+    expect(computePointsForTransaction(card, transaction(70))).toBe(2)
+  })
+
+  it('awards a 3% Petron rebate on fuel only', () => {
+    const card = {
+      id: 'card-petron',
+      rewardType: 'cashback' as const,
+      cashbackRules: [{ rate: 3, categories: ['Fuel'] }],
+      cashbackMinSpend: 0,
+      cashbackUsesFullThousandBlocks: false,
+    }
+
+    expect(computeCashbackForTransaction(card, {
+      type: 'expense',
+      amount: 1000,
+      category: 'Fuel',
+      description: 'Petron',
+      creditCardId: card.id,
+    })).toBe(30)
+    expect(computeCashbackForTransaction(card, {
+      type: 'expense',
+      amount: 1000,
+      category: 'Groceries',
+      description: 'Supermarket',
+      creditCardId: card.id,
+    })).toBe(0)
+    expect(resolveCashbackRateForCategory(card, 'Gasoline')).toBe(3)
+  })
+
+  it('stops Petron fuel rebates at 15000 for the calendar year', () => {
+    const card = {
+      id: 'card-petron-cap',
+      rewardType: 'cashback' as const,
+      cashbackRules: [{ rate: 3, categories: ['Fuel'] }],
+      cashbackMinSpend: 0,
+      cashbackYearlyCap: 15000,
+    }
+    const fuel = (id: string, amount: number, occurredAt: string) => ({
+      id,
+      type: 'expense' as const,
+      amount,
+      category: 'Fuel',
+      description: 'Petron',
+      creditCardId: card.id,
+      occurredAt,
+      creditCardPayment: false as const,
+    })
+    const january = fuel('jan', 400000, '2026-01-10T00:00:00Z')
+    const june = fuel('jun', 120000, '2026-06-10T00:00:00Z')
+    const july = fuel('jul', 1000, '2026-07-01T00:00:00Z')
+    const nextYear = fuel('next', 1000, '2027-01-02T00:00:00Z')
+    const history = [january, june, july, nextYear]
+
+    expect(awardedCashbackForTransaction(card, january, history)).toBe(12000)
+    expect(awardedCashbackForTransaction(card, june, history)).toBe(3000)
+    expect(awardedCashbackForTransaction(card, july, history)).toBe(0)
+    expect(awardedCashbackForTransaction(card, nextYear, history)).toBe(30)
+  })
+
+  it('awards one EastWest point per complete Php 100 spend', () => {
+    const card = {
+      id: 'card-eastwest',
+      rewardType: 'points' as const,
+      pointsPerSpend: 1,
+      pointsSpendIncrement: 100,
+    }
+
+    expect(computePointsForTransaction(card, {
+      type: 'expense',
+      amount: 5831,
+      category: 'Shopping',
+      description: 'Purchase',
+      creditCardId: card.id,
+    })).toBe(58)
+  })
+
+  it('awards one Metrobank Platinum point per complete Php 20 spend', () => {
+    const card = {
+      id: 'card-metrobank',
+      rewardType: 'points' as const,
+      pointsPerSpend: 1,
+      pointsSpendIncrement: 20,
+    }
+
+    expect(computePointsForTransaction(card, {
+      type: 'expense',
+      amount: 5000,
+      category: 'Shopping',
+      description: 'Purchase',
+      creditCardId: card.id,
+    })).toBe(250)
+  })
+
+  it('awards one UnionBank Rewards Platinum point per complete Php 30 spend', () => {
+    const card = {
+      id: 'card-unionbank',
+      rewardType: 'points' as const,
+      pointsPerSpend: 1,
+      pointsSpendIncrement: 30,
+    }
+
+    const transaction = (amount: number) => ({
+      type: 'expense' as const,
+      amount,
+      category: 'Shopping',
+      description: 'Purchase',
+      creditCardId: card.id,
+    })
+
+    expect(computePointsForTransaction(card, transaction(30))).toBe(1)
+    expect(computePointsForTransaction(card, transaction(29))).toBe(0)
+  })
+
+  it('awards UnionBank triple points on food and shopping', () => {
+    const card = {
+      id: 'card-unionbank-bonus',
+      rewardType: 'points' as const,
+      pointsPerSpend: 1,
+      pointsSpendIncrement: 30,
+      pointsRules: [
+        { pointsPerSpend: 3, pointsSpendIncrement: 30, categories: ['Food', 'Shopping'] },
+        { pointsPerSpend: 1, pointsSpendIncrement: 30, categories: ['*'] },
+      ],
+    }
+    const purchase = (amount: number, category: string) => ({
+      type: 'expense' as const,
+      amount,
+      category,
+      description: 'Purchase',
+      creditCardId: card.id,
+    })
+
+    expect(computePointsForTransaction(card, purchase(3000, 'Food'))).toBe(300)
+    expect(computePointsForTransaction(card, purchase(3000, 'Dining'))).toBe(300)
+    expect(computePointsForTransaction(card, purchase(3000, 'Shopping'))).toBe(300)
+    expect(computePointsForTransaction(card, purchase(3000, 'Groceries'))).toBe(100)
+  })
+
+  it('does not calculate cashback from stale rules on a points card', () => {
+    const card = {
+      id: 'card-bpi-rewards',
+      rewardType: 'points' as const,
+      cashbackRules: [{ rate: 5, categories: ['Shopping'] }],
+      cashbackMinSpend: 0,
+    }
+
+    expect(computeCashbackForTransaction(card, {
+      type: 'expense',
+      amount: 1000,
+      category: 'Shopping',
+      description: 'Purchase',
+      creditCardId: card.id,
+    })).toBe(0)
+  })
+
   it('prefers category-specific rates before a fallback all-else rate', () => {
     const card = {
       id: 'card-1',

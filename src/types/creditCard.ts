@@ -7,6 +7,13 @@ export interface CashbackRule {
   categories: string[]
 }
 
+/** Category points rate. A category of "*" is the fallback for every other purchase. */
+export interface PointsRule {
+  pointsPerSpend: number
+  pointsSpendIncrement: number
+  categories: string[]
+}
+
 export function parseCashbackRules(input: string): CashbackRule[] {
   if (!input.trim()) return []
 
@@ -56,12 +63,28 @@ export interface CreditCard {
   gracePeriodDays?: number
   /** Issuer-provided minimum payment override */
   minimumPaymentOverride?: number
+  /** Separate BPI installment/Credit-to-Cash bonus line. */
+  madnessLimit?: number
+  /** Amount currently used from the separate Madness Limit line. */
+  madnessUsed?: number
   /** Reward name, such as "Amore Cashback". */
   rewardName?: string
+  /** Reward unit used by the card, such as cashback or points. */
+  rewardType?: 'cashback' | 'points'
+  /** Number of points earned for each complete spend increment. */
+  pointsPerSpend?: number
+  /** Spend increment required to earn points, in pesos. */
+  pointsSpendIncrement?: number
+  /** Category earn rates. When set, these override the flat points rate for matching categories. */
+  pointsRules?: PointsRule[]
+  /** Description of issuer redemption options and terms. */
+  rewardDescription?: string
   /** Default cashback rate as a percentage, e.g. 1 for 1%. */
   cashbackRate?: number
   /** Maximum cashback earned in one statement/period. */
   cashbackCap?: number
+  /** Maximum cashback earned across a calendar year. */
+  cashbackYearlyCap?: number
   /** When true, cashback is calculated only from complete 1,000-peso spend blocks. */
   cashbackUsesFullThousandBlocks?: boolean
   /** Cashback already available at the start of the current statement period. */
@@ -89,9 +112,17 @@ export interface CreditCardInput {
   interestCalculationMethod?: 'daily' | 'monthly'
   gracePeriodDays?: number
   minimumPaymentOverride?: number
+  madnessLimit?: number
+  madnessUsed?: number
   rewardName?: string
+  rewardType?: 'cashback' | 'points'
+  pointsPerSpend?: number
+  pointsSpendIncrement?: number
+  pointsRules?: PointsRule[]
+  rewardDescription?: string
   cashbackRate?: number
   cashbackCap?: number
+  cashbackYearlyCap?: number
   cashbackUsesFullThousandBlocks?: boolean
   cashbackStartingBalance?: number
   cashbackRedeemed?: number
@@ -124,6 +155,7 @@ export interface CreditCardStatement {
   cashbackEarned: number
   cashbackRedeemed: number
   availableCashback: number
+  pointsEarned: number
   transactions: Transaction[]
   transactionHistory: Transaction[]
 }
@@ -132,12 +164,12 @@ export const CARD_COLORS = [
   '#3B82F6', // blue
   '#EF4444', // red
   '#10B981', // green
-  '#F59E0B', // amber
-  '#8B5CF6', // violet
-  '#EC4899', // pink
-  '#06B6D4', // cyan
-  '#84CC16', // lime
   '#F97316', // orange
+  '#8B5CF6', // violet
+  '#06B6D4', // cyan
+  '#EC4899', // pink
+  '#84CC16', // lime
+  '#F59E0B', // amber
   '#6B7280', // gray
 ] as const
 
@@ -172,6 +204,16 @@ export function validateCreditCardInput(input: CreditCardInput): void {
   if (input.minimumPaymentOverride !== undefined && (!Number.isFinite(input.minimumPaymentOverride) || input.minimumPaymentOverride < 0)) {
     throw new Error('Minimum payment override must be zero or greater.')
   }
+  if (input.madnessLimit !== undefined && (!Number.isFinite(input.madnessLimit) || input.madnessLimit < 0)) {
+    throw new Error('Madness Limit must be zero or greater.')
+  }
+  if (input.madnessUsed !== undefined && (
+    !Number.isFinite(input.madnessUsed) ||
+    input.madnessUsed < 0 ||
+    (input.madnessLimit !== undefined && input.madnessUsed > input.madnessLimit)
+  )) {
+    throw new Error('Madness Limit used must be between zero and the Madness Limit.')
+  }
   if (input.rewardName !== undefined && typeof input.rewardName !== 'string') {
     throw new Error('Reward name must be text if provided.')
   }
@@ -180,6 +222,9 @@ export function validateCreditCardInput(input: CreditCardInput): void {
   }
   if (input.cashbackCap !== undefined && (!Number.isFinite(input.cashbackCap) || input.cashbackCap < 0)) {
     throw new Error('Cashback cap must be zero or greater.')
+  }
+  if (input.cashbackYearlyCap !== undefined && (!Number.isFinite(input.cashbackYearlyCap) || input.cashbackYearlyCap < 0)) {
+    throw new Error('Yearly cashback cap must be zero or greater.')
   }
   if (input.cashbackStartingBalance !== undefined && (!Number.isFinite(input.cashbackStartingBalance) || input.cashbackStartingBalance < 0)) {
     throw new Error('Starting cashback balance must be zero or greater.')
@@ -206,6 +251,16 @@ export function validateCreditCardInput(input: CreditCardInput): void {
     })
   )) {
     throw new Error('Cashback rules must contain valid percentages and category lists.')
+  }
+  if (input.pointsRules !== undefined && (
+    !Array.isArray(input.pointsRules) ||
+    input.pointsRules.some((rule) => {
+      if (!Number.isFinite(rule?.pointsPerSpend) || rule.pointsPerSpend < 0) return true
+      if (!Number.isFinite(rule?.pointsSpendIncrement) || rule.pointsSpendIncrement <= 0) return true
+      return !Array.isArray(rule.categories) || rule.categories.some((category) => typeof category !== 'string' || !category.trim())
+    })
+  )) {
+    throw new Error('Points rules must contain a positive spend increment and category lists.')
   }
 }
 

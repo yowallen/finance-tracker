@@ -78,7 +78,7 @@ export interface MonthlySavingsStats {
 
 export const CATEGORIES: Record<TransactionType, string[]> = {
   income: ['Salary', 'Freelance', 'Investment', 'Gift', 'Other'],
-  expense: ['Food', 'Groceries', 'Shopping', 'Entertainment', 'Health', 'Other'],
+  expense: ['Food', 'Groceries', 'Shopping', 'Entertainment', 'Health', 'Fuel', 'Other'],
   bill: ['Rent', 'Utilities', 'Phone', 'Subscription', 'Insurance', 'Loan', 'Fee', 'Other'],
   savings: ['Savings deposit', 'Savings withdrawal'],
 }

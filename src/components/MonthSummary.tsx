@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import {
   CreditCard as CreditCardIcon,
   PiggyBank,
@@ -8,10 +8,11 @@ import {
   Wallet,
 } from 'lucide-react'
 import { BalanceOutlook } from './BalanceOutlook'
+import { CreditLimitBar } from './CreditLimitBar'
 import type { MonthBalanceOutlook } from '../services/balanceOutlook'
 import type { MonthlySummary } from '../types/transaction'
 import { formatMoney } from '../lib/format'
-import type { CreditCard, CreditCardStatement } from '../types/creditCard'
+import type { CreditCardStatement } from '../types/creditCard'
 
 const OUTLOOK_STORAGE_KEY = 'ledger.showBalanceOutlook'
 
@@ -31,13 +32,12 @@ interface MonthSummaryProps {
   onSelectMonth: (year: number, month: number) => void
   /** Whether the user has at least one active credit card. */
   hasActiveCards: boolean
-  /** Credit card summary data */
+  /** One statement per active card, so the overview can name each card. */
+  cardSnapshots?: CreditCardStatement[]
+  /** Combined outstanding across active cards. */
   totalOutstanding?: number
+  /** Combined available credit across active cards. */
   totalAvailableCredit?: number
-  nextDueStatement?: { card: CreditCard; statement: CreditCardStatement } | null
-  hasRewardCards?: boolean
-  aggregateCashback?: number
-  aggregateUtilization?: { totalBalance: number; totalLimit: number; utilizationPercent: number }
   onNavigateToCards?: () => void
 }
 
@@ -62,12 +62,9 @@ export function MonthSummary({
   outlookRows,
   onSelectMonth,
   hasActiveCards,
+  cardSnapshots = [],
   totalOutstanding,
   totalAvailableCredit,
-  nextDueStatement,
-  hasRewardCards = false,
-  aggregateCashback,
-  aggregateUtilization,
   onNavigateToCards,
 }: MonthSummaryProps) {
   const netPositive = runningBalance >= 0
@@ -75,10 +72,6 @@ export function MonthSummary({
   const [outlookVisible, setOutlookVisible] = useState(readStoredOutlookVisibility)
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const dueDate = nextDueStatement?.statement.dueDate
-  const nextDueIsOverdue = Boolean(
-    isCurrentMonth && dueDate && dueDate.getTime() < today.getTime(),
-  )
 
   function toggleOutlook() {
     setOutlookVisible((prev) => {
@@ -158,57 +151,85 @@ export function MonthSummary({
               </button>
             )}
           </h3>
-          <div className="cc-summary-grid">
-            {totalOutstanding !== undefined && (
-              <article className="cc-stat outstanding">
-                <span className="cc-stat-label">Total outstanding</span>
-                <strong className="cc-stat-value">{formatMoney(totalOutstanding)}</strong>
-              </article>
-            )}
-            {totalAvailableCredit !== undefined && (
-              <article className="cc-stat available">
-                <span className="cc-stat-label">Available credit</span>
-                <strong className="cc-stat-value">{formatMoney(totalAvailableCredit)}</strong>
-              </article>
-            )}
-            {hasRewardCards && aggregateCashback !== undefined ? (
-              <article className="cc-stat utilization">
-                <span className="cc-stat-label">Available cashback</span>
-                <strong className="cc-stat-value">{formatMoney(aggregateCashback)}</strong>
-                <span className="cc-stat-meta">Across active reward cards</span>
-              </article>
-            ) : aggregateUtilization && (
-              <article className="cc-stat utilization">
-                <span className="cc-stat-label">Utilization</span>
-                <strong className="cc-stat-value">{aggregateUtilization.utilizationPercent.toFixed(1)}%</strong>
-                <span className="cc-stat-meta">
-                  {formatMoney(aggregateUtilization.totalBalance)} of {formatMoney(aggregateUtilization.totalLimit)} used
-                </span>
-              </article>
-            )}
-            {nextDueStatement && (
-              <article className={`cc-stat due ${nextDueIsOverdue ? 'overdue' : ''}`}>
-                <span className="cc-stat-label">Next due</span>
-                <strong className="cc-stat-value">
-                  {formatMoney(nextDueStatement.statement.minimumPayment)}
-                </strong>
-                <span className="cc-stat-meta">
-                  Minimum payment · {nextDueStatement.card.name} · ••••{' '}
-                  {nextDueStatement.card.lastFour}
-                </span>
-                <span className={`cc-stat-due-status ${nextDueIsOverdue ? 'danger' : ''}`}>
-                  {nextDueIsOverdue ? 'Overdue · ' : 'Due '}
-                  {nextDueStatement.statement.dueDate.toLocaleDateString(undefined, {
-                    month: 'short',
-                    day: 'numeric',
-                    year: nextDueStatement.statement.dueDate.getFullYear() !== today.getFullYear()
-                      ? 'numeric'
-                      : undefined,
-                  })}
-                </span>
-              </article>
-            )}
+          <div className="cc-snapshot-list">
+            {cardSnapshots.map((statement) => {
+              const card = statement.card
+              const overdue = Boolean(
+                isCurrentMonth &&
+                !statement.isPaid &&
+                statement.dueDate.getTime() < today.getTime(),
+              )
+              const dueLabel = statement.dueDate.toLocaleDateString(undefined, {
+                month: 'short',
+                day: 'numeric',
+                year: statement.dueDate.getFullYear() !== today.getFullYear() ? 'numeric' : undefined,
+              })
+              const hasPoints = card.rewardType === 'points'
+              const hasCashback = card.rewardType !== 'points' && (card.cashbackRules?.length ?? 0) > 0
+              return (
+                <article
+                  key={card.id}
+                  className="cc-snapshot"
+                  style={{ '--card-color': card.color ?? 'var(--accent)' } as CSSProperties}
+                >
+                  <header className="cc-snapshot-head">
+                    <h4 className="cc-snapshot-name">{card.name}</h4>
+                    <span className="cc-snapshot-number">•••• {card.lastFour}</span>
+                  </header>
+                  <div className="cc-snapshot-stats">
+                    <div className="cc-snapshot-stat">
+                      <span className="cc-stat-label">Outstanding</span>
+                      <strong className="cc-stat-value outstanding">{formatMoney(statement.outstandingBalance)}</strong>
+                    </div>
+                    <div className="cc-snapshot-stat">
+                      <span className="cc-stat-label">Available</span>
+                      <strong className="cc-stat-value available">{formatMoney(statement.availableCredit)}</strong>
+                    </div>
+                    {hasPoints ? (
+                      <div className="cc-snapshot-stat">
+                        <span className="cc-stat-label">Points</span>
+                        <strong className="cc-stat-value">{statement.pointsEarned.toLocaleString()} pts</strong>
+                      </div>
+                    ) : hasCashback ? (
+                      <div className="cc-snapshot-stat">
+                        <span className="cc-stat-label">Cashback</span>
+                        <strong className="cc-stat-value available">{formatMoney(statement.availableCashback)}</strong>
+                      </div>
+                    ) : (
+                      <div className="cc-snapshot-stat">
+                        <span className="cc-stat-label">Used</span>
+                        <strong className="cc-stat-value">
+                          {card.limit > 0
+                            ? `${Math.min(100, (statement.outstandingBalance / card.limit) * 100).toFixed(0)}%`
+                            : '0%'}
+                        </strong>
+                      </div>
+                    )}
+                    <div className={`cc-snapshot-stat ${overdue ? 'overdue' : ''}`}>
+                      <span className="cc-stat-label">{overdue ? 'Overdue' : 'Due'}</span>
+                      <strong className="cc-stat-value due">{formatMoney(statement.minimumPayment)}</strong>
+                      <span className={`cc-stat-due-status ${overdue ? 'danger' : ''}`}>{dueLabel}</span>
+                    </div>
+                  </div>
+                  {(card.madnessLimit ?? 0) > 0 && (
+                    <CreditLimitBar
+                      compact
+                      cardName={card.name}
+                      cardLimit={card.limit}
+                      availableCredit={statement.availableCredit}
+                      madnessLimit={card.madnessLimit ?? 0}
+                      madnessUsed={card.madnessUsed ?? 0}
+                    />
+                  )}
+                </article>
+              )
+            })}
           </div>
+          {cardSnapshots.length > 1 && totalOutstanding !== undefined && totalAvailableCredit !== undefined && (
+            <p className="cc-snapshot-total">
+              All cards · outstanding {formatMoney(totalOutstanding)} · available {formatMoney(totalAvailableCredit)}
+            </p>
+          )}
         </div>
       )}
 

@@ -2,8 +2,8 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type FormEvent,
   type MouseEvent,
+  type SubmitEvent,
 } from 'react'
 import { Check, MapPinned, PiggyBank, Plus, Pencil, Trash2 } from 'lucide-react'
 import { formatMoney } from '../lib/format'
@@ -135,8 +135,8 @@ export function SavingsGoals({
     }
   }
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
+  async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault()
     setFormError(null)
 
     const targetAmount = Number.parseFloat(targetText)
@@ -178,8 +178,8 @@ export function SavingsGoals({
     closeOpenForms()
   }
 
-  async function handleContribute(e: FormEvent) {
-    e.preventDefault()
+  async function handleContribute(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault()
     setContributeError(null)
     const amount = Number.parseFloat(contributeText)
     if (!Number.isFinite(amount) || amount <= 0) {

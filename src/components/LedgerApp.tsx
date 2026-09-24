@@ -137,6 +137,21 @@ function cardToInput(card: CreditCard): CreditCardInput {
     interestCalculationMethod: card.interestCalculationMethod,
     gracePeriodDays: card.gracePeriodDays,
     minimumPaymentOverride: card.minimumPaymentOverride,
+    madnessLimit: card.madnessLimit,
+    madnessUsed: card.madnessUsed,
+    rewardName: card.rewardName,
+    rewardType: card.rewardType,
+    pointsPerSpend: card.pointsPerSpend,
+    pointsSpendIncrement: card.pointsSpendIncrement,
+    pointsRules: card.pointsRules,
+    rewardDescription: card.rewardDescription,
+    cashbackCap: card.cashbackCap,
+    cashbackYearlyCap: card.cashbackYearlyCap,
+    cashbackUsesFullThousandBlocks: card.cashbackUsesFullThousandBlocks,
+    cashbackStartingBalance: card.cashbackStartingBalance,
+    cashbackRedeemed: card.cashbackRedeemed,
+    cashbackMinSpend: card.cashbackMinSpend,
+    cashbackRules: card.cashbackRules,
   }
 }
 
@@ -171,10 +186,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
     interestProjections,
     totalOutstanding,
     totalAvailableCredit,
-    nextDueStatement,
     utilizationHistories,
-    aggregateCashback,
-    aggregateUtilization,
     cardById,
     loading: ccLoading,
     error: ccError,
@@ -205,6 +217,12 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
   } = useRecurringBills(userId, year, month, transactions, cards, statements, allTransactions)
 
   const dataLoading = txLoading || billLoading || goalsLoading
+  const isFreshAccount = !dataLoading
+    && allTransactions.length === 0
+    && bills.length === 0
+    && cards.length === 0
+    && savingsJourney.stops.length === 0
+    && savingsJourney.savedAmount === 0
 
   useEffect(() => {
     if (!userId || dataLoading || cards.length === 0 || transactions.length === 0) {
@@ -507,6 +525,27 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
           onNext={() => shiftMonth(1)}
         />
 
+        {isFreshAccount && (
+          <section className="first-use-panel" aria-labelledby="first-use-heading">
+            <div>
+              <p className="eyebrow">Your private ledger is ready</p>
+              <h2 id="first-use-heading">Start your financial track</h2>
+              <p>
+                Add your first transaction, recurring bill, credit card, or savings goal.
+                Your records stay private to this account.
+              </p>
+            </div>
+            <div className="first-use-actions">
+              <button type="button" className="btn-primary" onClick={() => openTransactionSheet()}>
+                Add first transaction
+              </button>
+              <button type="button" className="btn-ghost" onClick={() => scrollToSection('reminders')}>
+                Set up a bill
+              </button>
+            </div>
+          </section>
+        )}
+
         {dataLoading ? (
           <section className="month-summary">
             <LoadingState variant="page" label="Reloading your ledger…" />
@@ -526,13 +565,9 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
               outlookRows={outlookRows}
               onSelectMonth={selectMonth}
               hasActiveCards={activeCards.length > 0}
+              cardSnapshots={statements.filter((statement) => statement.card.active)}
               totalOutstanding={totalOutstanding}
               totalAvailableCredit={totalAvailableCredit}
-              nextDueStatement={nextDueStatement}
-              hasRewardCards={activeCards.some((card) =>
-                ((card.cashbackRules?.length ?? 0) > 0))}
-              aggregateCashback={aggregateCashback}
-              aggregateUtilization={aggregateUtilization}
               onNavigateToCards={() => scrollToSection('credit-cards')}
             />
 
@@ -604,6 +639,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
 
             <TransactionList
               transactions={transactions}
+              allTransactions={allTransactions}
               loading={txLoading}
               onEdit={(tx) => openTransactionSheet(tx)}
               onDelete={handleDelete}
@@ -613,6 +649,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
             <CreditCards
               cards={cards}
               statements={statements}
+              allTransactions={allTransactions}
               interestProjections={interestProjections}
               utilizationHistories={utilizationHistories}
               loading={ccLoading}

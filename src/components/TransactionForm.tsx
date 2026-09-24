@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type SubmitEvent } from 'react'
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -114,8 +114,8 @@ export function TransactionForm({
     setCategory(next === 'deposit' ? CATEGORIES.savings[0] : CATEGORIES.savings[1])
   }
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
+  async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault()
     setError(null)
     const parsed = Number.parseFloat(amount)
     if (!Number.isFinite(parsed) || parsed <= 0) {

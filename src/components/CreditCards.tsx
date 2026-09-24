@@ -18,11 +18,13 @@ import {
   ChevronDown,
 } from 'lucide-react'
 import { CreditCardForm } from './CreditCardForm'
+import { CreditLimitBar } from './CreditLimitBar'
 import { LoadingState } from './LoadingState'
 import { InterestProjection as InterestProjectionComponent } from './InterestProjection'
 import { UtilizationChart } from './UtilizationChart'
 import { formatDate, formatMoney } from '../lib/format'
-import { getCurrentCashbackForTransaction, getNextBillingCycleBalance } from '../services/creditCards'
+import { computePointsForTransaction, getCurrentCashbackForTransaction, getNextBillingCycleBalance } from '../services/creditCards'
+import type { Transaction } from '../types/transaction'
 import type {
   CreditCard,
   CreditCardInput,
@@ -34,6 +36,7 @@ import type {
 interface CreditCardsProps {
   cards: CreditCard[]
   statements: CreditCardStatement[]
+  allTransactions?: Transaction[]
   interestProjections: InterestProjection[]
   utilizationHistories: UtilizationHistory[]
   loading: boolean
@@ -52,11 +55,6 @@ function daysUntil(dueDate: Date): number {
   const due = new Date(dueDate)
   due.setHours(0, 0, 0, 0)
   return Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-}
-
-function utilizationPercent(statement: CreditCardStatement): number {
-  if (statement.card.limit <= 0) return 0
-  return Math.min(100, (statement.outstandingBalance / statement.card.limit) * 100)
 }
 
 function statementStatus(
@@ -89,6 +87,7 @@ function statementStatus(
 export function CreditCards({
   cards,
   statements,
+  allTransactions = [],
   interestProjections,
   utilizationHistories,
   loading,
@@ -277,10 +276,18 @@ export function CreditCards({
       gracePeriodDays: card.gracePeriodDays,
       minimumPaymentOverride: card.minimumPaymentOverride,
       cashbackCap: card.cashbackCap,
+      cashbackYearlyCap: card.cashbackYearlyCap,
       cashbackStartingBalance: card.cashbackStartingBalance,
       cashbackRedeemed: card.cashbackRedeemed,
       cashbackMinSpend: card.cashbackMinSpend,
+      cashbackUsesFullThousandBlocks: card.cashbackUsesFullThousandBlocks,
       cashbackRules: card.cashbackRules,
+      rewardName: card.rewardName,
+      rewardType: card.rewardType,
+      pointsPerSpend: card.pointsPerSpend,
+      pointsSpendIncrement: card.pointsSpendIncrement,
+      pointsRules: card.pointsRules,
+      rewardDescription: card.rewardDescription,
     }
   }
 
@@ -409,8 +416,7 @@ export function CreditCards({
                 const statement = statementByCardId.get(card.id)
                 if (!statement) return null
                 const status = statementStatus(statement, isCurrentMonth)
-                const utilization = utilizationPercent(statement)
-                const hasRewards = (card.cashbackRules?.length ?? 0) > 0
+                const hasRewards = card.rewardType === 'points' || (card.cashbackRules?.length ?? 0) > 0
                 const cardColor = card.color ?? '#3B82F6'
                 const utilizationHistory = utilizationByCardId.get(card.id)
                 const nextStatementProjection = getNextBillingCycleBalance(statement)
@@ -512,7 +518,15 @@ export function CreditCards({
                             )}
                           </>
                         )}
-                        {(card.cashbackRules?.length ?? 0) > 0 && (
+                        {card.rewardType === 'points' ? (
+                          <div className="cc-card-stat">
+                            <span className="cc-card-stat-label">
+                              <WalletCards aria-hidden="true" />
+                              {card.rewardName ?? 'Rewards points'}
+                            </span>
+                            <strong className="cc-card-stat-value success">{statement.pointsEarned.toLocaleString()} pts</strong>
+                          </div>
+                        ) : (card.cashbackRules?.length ?? 0) > 0 && (
                           <div className="cc-card-stat">
                             <span className="cc-card-stat-label">
                               <WalletCards aria-hidden="true" />
@@ -523,29 +537,13 @@ export function CreditCards({
                         )}
                       </div>
 
-                      <div className="cc-utilization">
-                        <div className="cc-utilization-top">
-                          <span>Credit used</span>
-                          <strong>{utilization.toFixed(1)}%</strong>
-                        </div>
-                        <div
-                          className="cc-utilization-bar"
-                          role="progressbar"
-                          aria-label={`Credit utilization for ${card.name}`}
-                          aria-valuenow={utilization}
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                          aria-valuetext={`${utilization.toFixed(1)}% used, ${formatMoney(statement.outstandingBalance)} of ${formatMoney(card.limit)} limit`}
-                        >
-                          <div
-                            className={`cc-utilization-fill ${status.tone}`}
-                            style={{ width: `${utilization}%` }}
-                          />
-                        </div>
-                        <p className="cc-utilization-meta">
-                          {formatMoney(statement.outstandingBalance)} of {formatMoney(card.limit)} limit
-                        </p>
-                      </div>
+                      <CreditLimitBar
+                        cardName={card.name}
+                        cardLimit={card.limit}
+                        availableCredit={statement.availableCredit}
+                        madnessLimit={card.madnessLimit ?? 0}
+                        madnessUsed={card.madnessUsed ?? 0}
+                      />
 
                       {utilizationHistory && <UtilizationChart history={utilizationHistory} />}
 
@@ -608,8 +606,8 @@ export function CreditCards({
                             <ul id={`cc-history-list-${card.id}`} className="cc-history-list">
                               {statement.transactions.map((transaction) => {
                                 const isPayment = transaction.creditCardPayment === true
-                                const cashbackValue = !isPayment && transaction.creditCardId === card.id
-                                  ? getCurrentCashbackForTransaction(card, {
+                                const pointsValue = !isPayment && transaction.creditCardId === card.id
+                                  ? computePointsForTransaction(card, {
                                       type: transaction.type,
                                       amount: transaction.amount,
                                       category: transaction.category,
@@ -619,6 +617,19 @@ export function CreditCards({
                                       isAnnualFee: transaction.isAnnualFee,
                                     })
                                   : 0
+                                const cashbackValue = !isPayment && transaction.creditCardId === card.id
+                                  ? getCurrentCashbackForTransaction(card, {
+                                      id: transaction.id,
+                                      occurredAt: transaction.occurredAt,
+                                      type: transaction.type,
+                                      amount: transaction.amount,
+                                      category: transaction.category,
+                                      description: transaction.description,
+                                      creditCardId: transaction.creditCardId,
+                                      creditCardPayment: false,
+                                      isAnnualFee: transaction.isAnnualFee,
+                                    }, allTransactions)
+                                  : 0
                                 return (
                                   <li key={transaction.id} className="cc-history-item">
                                     <div className="cc-history-main">
@@ -627,7 +638,10 @@ export function CreditCards({
                                         <time dateTime={transaction.occurredAt}>
                                           {formatDate(transaction.occurredAt)}
                                         </time>
-                                        {!isPayment && cashbackValue > 0 && (
+                                        {!isPayment && pointsValue > 0 && (
+                                          <span className="cc-history-cashback">Points +{pointsValue.toLocaleString()}</span>
+                                        )}
+                                        {!isPayment && pointsValue === 0 && cashbackValue > 0 && (
                                           <span className="cc-history-cashback">Cashback +{formatMoney(cashbackValue)}</span>
                                         )}
                                       </div>
