@@ -9,6 +9,10 @@ service cloud.firestore {
       return isSignedIn() && resource.data.userId == request.auth.uid;
     }
 
+    function keepsOwner() {
+      return isOwner() && request.resource.data.userId == request.auth.uid;
+    }
+
     function isCreatingOwn() {
       return isSignedIn() && request.resource.data.userId == request.auth.uid;
     }
@@ -20,28 +24,28 @@ service cloud.firestore {
     match /transactions/{transactionId} {
       allow read: if canRead();
       allow create: if isCreatingOwn();
-      allow update: if isOwner();
+      allow update: if keepsOwner();
       allow delete: if isOwner();
     }
 
     match /recurringBills/{billId} {
       allow read: if canRead();
       allow create: if isCreatingOwn();
-      allow update: if isOwner();
+      allow update: if keepsOwner();
       allow delete: if isOwner();
     }
 
     match /savingsGoals/{goalId} {
       allow read: if canRead();
       allow create: if isCreatingOwn();
-      allow update: if isOwner();
+      allow update: if keepsOwner();
       allow delete: if isOwner();
     }
 
     match /creditCards/{cardId} {
       allow read: if canRead();
       allow create: if isCreatingOwn();
-      allow update: if isOwner();
+      allow update: if keepsOwner();
       allow delete: if isOwner();
     }
 

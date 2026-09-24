@@ -45,7 +45,7 @@ export function QuickActions({
   ]
 
   return (
-    <nav className="quick-actions" aria-label="Quick actions">
+    <nav id="quick-actions" className="quick-actions" aria-label="Quick actions">
       {actions.map(({ label, icon: Icon, onClick, strong, ariaLabel }) => (
         <button
           key={label}

@@ -2442,6 +2442,67 @@ html[data-theme='light'] .outlook-sub {
   font-weight: 600;
 }
 
+.tutorial-target {
+  outline: 3px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: var(--radius);
+}
+
+.tutorial-panel {
+  position: fixed;
+  z-index: 30;
+  left: 50%;
+  bottom: calc(1rem + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(34rem, calc(100% - 1.5rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 1rem 1.1rem 1.05rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--elevation-3);
+}
+
+.tutorial-panel h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.tutorial-panel p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.tutorial-progress {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tutorial-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.35rem;
+}
+
+.tutorial-nav {
+  display: flex;
+  gap: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .tutorial-panel {
+    bottom: calc(5.4rem + env(safe-area-inset-bottom));
+  }
+}
 html[data-theme='light'] .cc-card-stat,
 html[data-theme='light'] .cc-snapshot-stat,
 html[data-theme='light'] .calendar-detail-item {

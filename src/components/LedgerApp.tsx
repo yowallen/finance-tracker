@@ -11,6 +11,7 @@ import { MonthSelector } from './MonthSelector'
 import { MonthSummary } from './MonthSummary'
 import { QuickActions } from './QuickActions'
 import { SavingsGoals } from './SavingsGoals'
+import { SectionTutorial, hasSeenTutorial } from './SectionTutorial'
 import { ThemeToggle } from './ThemeToggle'
 import { TransactionForm } from './TransactionForm'
 import { TransactionList } from './TransactionList'
@@ -162,6 +163,8 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth()
   const [editing, setEditing] = useState<Transaction | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [tourOpen, setTourOpen] = useState(false)
+  const [tourSession, setTourSession] = useState(0)
   const [saving, setSaving] = useState(false)
   const [pendingUndo, setPendingUndo] = useState<PendingUndo | null>(null)
   const undoIdRef = useRef(0)
@@ -223,6 +226,16 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
     && cards.length === 0
     && savingsJourney.stops.length === 0
     && savingsJourney.savedAmount === 0
+
+  function openTour() {
+    setTourSession((session) => session + 1)
+    setTourOpen(true)
+  }
+
+  useEffect(() => {
+    if (!isFreshAccount || hasSeenTutorial(userId)) return
+    setTourOpen(true)
+  }, [isFreshAccount, userId])
 
   useEffect(() => {
     if (!userId || dataLoading || cards.length === 0 || transactions.length === 0) {
@@ -490,6 +503,9 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
         </div>
         <div className="topbar-actions">
           <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+          <button type="button" className="btn-ghost" onClick={openTour}>
+            Tour
+          </button>
           <button
             type="button"
             className="btn-ghost btn-with-icon"
@@ -536,7 +552,10 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
               </p>
             </div>
             <div className="first-use-actions">
-              <button type="button" className="btn-primary" onClick={() => openTransactionSheet()}>
+              <button type="button" className="btn-primary" onClick={openTour}>
+                Show me around
+              </button>
+              <button type="button" className="btn-ghost" onClick={() => openTransactionSheet()}>
                 Add first transaction
               </button>
               <button type="button" className="btn-ghost" onClick={() => scrollToSection('reminders')}>
@@ -700,6 +719,12 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
               onGoCalendar={() => scrollToSection('calendar')}
               onOpenAdd={() => openTransactionSheet()}
               onGoHistory={() => scrollToSection('history')}
+            />
+            <SectionTutorial
+              key={tourSession}
+              userId={userId}
+              open={tourOpen && !dataLoading}
+              onClose={() => setTourOpen(false)}
             />
           </>
         )}

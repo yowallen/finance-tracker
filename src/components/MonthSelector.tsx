@@ -10,7 +10,7 @@ interface MonthSelectorProps {
 
 export function MonthSelector({ year, month, onPrev, onNext }: MonthSelectorProps) {
   return (
-    <nav className="month-selector" aria-label="Month navigation">
+    <nav id="month-nav" className="month-selector" aria-label="Month navigation">
       <button
         type="button"
         className="icon-btn"
