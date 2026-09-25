@@ -12,7 +12,7 @@ import { CreditLimitBar } from './CreditLimitBar'
 import type { MonthBalanceOutlook } from '../services/balanceOutlook'
 import type { MonthlySummary } from '../types/transaction'
 import { formatMoney } from '../lib/format'
-import type { CreditCardStatement } from '../types/creditCard'
+import type { CreditCard, CreditCardStatement } from '../types/creditCard'
 
 const OUTLOOK_STORAGE_KEY = 'ledger.showBalanceOutlook'
 
@@ -34,6 +34,7 @@ interface MonthSummaryProps {
   hasActiveCards: boolean
   /** One statement per active card, so the overview can name each card. */
   cardSnapshots?: CreditCardStatement[]
+  creditCards?: CreditCard[]
   /** Combined outstanding across active cards. */
   totalOutstanding?: number
   /** Combined available credit across active cards. */
@@ -63,6 +64,7 @@ export function MonthSummary({
   onSelectMonth,
   hasActiveCards,
   cardSnapshots = [],
+  creditCards = [],
   totalOutstanding,
   totalAvailableCredit,
   onNavigateToCards,
@@ -164,8 +166,12 @@ export function MonthSummary({
                 day: 'numeric',
                 year: statement.dueDate.getFullYear() !== today.getFullYear() ? 'numeric' : undefined,
               })
-              const hasPoints = card.rewardType === 'points'
-              const hasCashback = card.rewardType !== 'points' && (card.cashbackRules?.length ?? 0) > 0
+              const members = card.sharedLimitGroupId
+                ? creditCards.filter((item) => item.sharedLimitGroupId === card.sharedLimitGroupId)
+                : [card]
+              const shownMembers = members.length > 1 ? members : [card]
+              const hasPoints = shownMembers.some((item) => item.rewardType === 'points')
+              const hasCashback = shownMembers.some((item) => item.rewardType !== 'points' && (item.cashbackRules?.length ?? 0) > 0)
               return (
                 <article
                   key={card.id}
@@ -173,8 +179,12 @@ export function MonthSummary({
                   style={{ '--card-color': card.color ?? 'var(--accent)' } as CSSProperties}
                 >
                   <header className="cc-snapshot-head">
-                    <h4 className="cc-snapshot-name">{card.name}</h4>
-                    <span className="cc-snapshot-number">•••• {card.lastFour}</span>
+                    <h4 className="cc-snapshot-name">
+                      {shownMembers.map((member) => member.name).join(' · ')}
+                    </h4>
+                    <span className="cc-snapshot-number">
+                      {shownMembers.map((member) => `•••• ${member.lastFour}`).join(' · ')}
+                    </span>
                   </header>
                   <div className="cc-snapshot-stats">
                     <div className="cc-snapshot-stat">

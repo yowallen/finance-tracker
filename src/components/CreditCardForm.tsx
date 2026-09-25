@@ -2,10 +2,12 @@ import { useEffect, useRef, useState, type ReactNode, type SubmitEvent } from 'r
 import { CreditCard as CreditCardIcon, Pencil } from 'lucide-react'
 import {
   CARD_COLORS,
+  type CardIssuer,
   type CreditCard,
   type CreditCardInput,
   type PointsRule,
 } from '../types/creditCard'
+import { cardsCanShareLimit, resolveCardIssuer } from '../services/creditCards'
 
 const COLOR_NAMES = [
   'Blue',
@@ -22,6 +24,7 @@ const COLOR_NAMES = [
 
 interface CreditCardFormProps {
   editing: CreditCard | null
+  otherCards?: CreditCard[]
   onSubmit: (input: CreditCardInput) => Promise<void>
   onCancelEdit: () => void
 }
@@ -325,6 +328,7 @@ function LabeledField({
 
 export function CreditCardForm({
   editing,
+  otherCards = [],
   onSubmit,
   onCancelEdit,
 }: Readonly<CreditCardFormProps>) {
@@ -364,6 +368,10 @@ export function CreditCardForm({
       })
       .join('; '),
   )
+  const [sharesWith, setSharesWith] = useState(() => {
+    if (!editing?.sharedLimitGroupId) return ''
+    return otherCards.find((card) => card.sharedLimitGroupId === editing.sharedLimitGroupId && card.id !== editing.id)?.id ?? ''
+  })
   const [selectedPreset, setSelectedPreset] = useState<string>(() => {
     const match = REWARD_PRESETS.find((preset) => {
       if (preset.id === 'custom') return false
@@ -435,15 +443,35 @@ export function CreditCardForm({
     }
   }
 
+  function issuerForCard(): CardIssuer | undefined {
+    if (selectedPreset.startsWith('bpi')) return 'bpi'
+    if (selectedPreset.startsWith('eastwest')) return 'eastwest'
+    if (selectedPreset.startsWith('metrobank')) return 'metrobank'
+    if (selectedPreset.startsWith('unionbank')) return 'unionbank'
+    return resolveCardIssuer({ name, issuer: editing?.issuer })
+  }
+
+  const shareTarget = otherCards.find((card) => card.id === sharesWith)
+  const followsSharedLimit = Boolean(shareTarget) && editing?.sharedLimitPrimary !== true
+  const sameBankCards = otherCards.filter((card) => card.id !== editing?.id && cardsCanShareLimit(
+    { name, issuer: issuerForCard() },
+    card,
+  ))
+
   async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
     setErrors({})
 
-    const parsedLimit = Number.parseFloat(limit)
-    const parsedStatementDay = Number.parseInt(statementDay, 10)
-    const parsedDueDayOffset = Number.parseInt(dueDayOffset, 10)
-    const parsedApr = apr.trim() !== '' ? Number.parseFloat(apr) : undefined
+    const limitSource = followsSharedLimit ? shareTarget : undefined
+    const parsedLimit = limitSource ? limitSource.limit : Number.parseFloat(limit)
+    const parsedStatementDay = limitSource ? limitSource.statementDay : Number.parseInt(statementDay, 10)
+    const parsedDueDayOffset = limitSource
+      ? (limitSource.dueDayOffset ?? Number.parseInt(dueDayOffset, 10))
+      : Number.parseInt(dueDayOffset, 10)
+    const parsedApr = limitSource
+      ? limitSource.apr
+      : (apr.trim() !== '' ? Number.parseFloat(apr) : undefined)
     const parsedGracePeriodDays = gracePeriodDays.trim() !== '' ? Number.parseInt(gracePeriodDays, 10) : undefined
     const parsedMinimumPaymentOverride = minimumPaymentOverride.trim() !== '' ? Number.parseFloat(minimumPaymentOverride) : undefined
     const parsedMadnessLimit = madnessLimit.trim() !== '' ? Number.parseFloat(madnessLimit) : undefined
@@ -488,6 +516,7 @@ export function CreditCardForm({
         lastFour,
         limit: parsedLimit,
         statementDay: parsedStatementDay,
+        dueDay: limitSource?.dueDay,
         dueDayOffset: parsedDueDayOffset,
         color,
         active,
@@ -509,6 +538,8 @@ export function CreditCardForm({
         cashbackStartingBalance: parsedCashbackStartingBalance,
         cashbackMinSpend: parsedCashbackMinSpend,
         cashbackRules: parsedCashbackRules,
+        issuer: issuerForCard(),
+        sharedLimitWithId: sharesWith || null,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save credit card.')
@@ -564,6 +595,26 @@ export function CreditCardForm({
           </LabeledField>
         </div>
 
+        <LabeledField
+          label="Shares a limit with"
+          hint={followsSharedLimit && shareTarget
+            ? `Limit, statement day, due day, and APR follow ${shareTarget.name}.`
+            : 'Only cards from the same bank can share a credit line.'}
+        >
+          <select
+            value={sharesWith}
+            onChange={(event) => setSharesWith(event.target.value)}
+            aria-label="Shares a limit with"
+          >
+            <option value="">No shared limit</option>
+            {sameBankCards.map((card) => (
+              <option key={card.id} value={card.id}>
+                {card.name} •••• {card.lastFour}
+              </option>
+            ))}
+          </select>
+        </LabeledField>
+
         <div className="form-row">
           <LabeledField label="Credit limit (₱)" error={errors.limit} errorId="cc-form-error-limit">
             <input
@@ -573,7 +624,8 @@ export function CreditCardForm({
               min="1"
               step="0.01"
               required
-              value={limit}
+              disabled={followsSharedLimit}
+              value={followsSharedLimit && shareTarget ? String(shareTarget.limit) : limit}
               onChange={(e) => setLimit(e.target.value)}
               placeholder="50000"
               aria-invalid={errors.limit ? true : undefined}
@@ -582,9 +634,10 @@ export function CreditCardForm({
           </LabeledField>
           <LabeledField label="Statement day">
             <select
-              value={statementDay}
+              value={followsSharedLimit && shareTarget ? String(shareTarget.statementDay) : statementDay}
               onChange={(e) => setStatementDay(e.target.value)}
               aria-label="Statement day"
+              disabled={followsSharedLimit}
             >
               {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
                 <option key={day} value={day}>
@@ -636,7 +689,8 @@ export function CreditCardForm({
               max="60"
               step="1"
               required
-              value={dueDayOffset}
+              disabled={followsSharedLimit}
+              value={followsSharedLimit && shareTarget?.dueDayOffset !== undefined ? String(shareTarget.dueDayOffset) : dueDayOffset}
               onChange={(e) => setDueDayOffset(e.target.value)}
               placeholder="21"
               aria-invalid={errors.dueDayOffset ? true : undefined}
@@ -657,7 +711,8 @@ export function CreditCardForm({
               min="0"
               max="100"
               step="0.01"
-              value={apr}
+              disabled={followsSharedLimit}
+              value={followsSharedLimit && shareTarget?.apr !== undefined ? String(shareTarget.apr) : apr}
               onChange={(e) => setApr(e.target.value)}
               placeholder="3.5"
               aria-invalid={errors.apr ? true : undefined}

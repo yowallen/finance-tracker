@@ -6,6 +6,7 @@ interface MobileBottomNavProps {
   onGoCalendar: () => void
   onOpenAdd: () => void
   onGoHistory: () => void
+  historyOpen?: boolean
 }
 
 const SECTION_IDS = ['overview', 'calendar', 'history']
@@ -15,6 +16,7 @@ export function MobileBottomNav({
   onGoCalendar,
   onOpenAdd,
   onGoHistory,
+  historyOpen = false,
 }: MobileBottomNavProps) {
   const [activeSection, setActiveSection] = useState('overview')
 
@@ -43,22 +45,24 @@ export function MobileBottomNav({
     return () => observer.disconnect()
   }, [])
 
+  const currentSection = historyOpen ? 'history' : activeSection
+
   return (
     <nav className="mobile-bottom-nav" aria-label="Mobile navigation">
       <button
         type="button"
-        className={`mobile-bottom-nav__item ${activeSection === 'overview' ? 'active' : ''}`}
+        className={`mobile-bottom-nav__item ${currentSection === 'overview' ? 'active' : ''}`}
         onClick={onGoOverview}
-        aria-current={activeSection === 'overview' ? 'page' : undefined}
+        aria-current={currentSection === 'overview' ? 'page' : undefined}
       >
         <Wallet aria-hidden="true" />
         <span>Overview</span>
       </button>
       <button
         type="button"
-        className={`mobile-bottom-nav__item ${activeSection === 'calendar' ? 'active' : ''}`}
+        className={`mobile-bottom-nav__item ${currentSection === 'calendar' ? 'active' : ''}`}
         onClick={onGoCalendar}
-        aria-current={activeSection === 'calendar' ? 'page' : undefined}
+        aria-current={currentSection === 'calendar' ? 'page' : undefined}
       >
         <CalendarDays aria-hidden="true" />
         <span>Calendar</span>
@@ -74,9 +78,9 @@ export function MobileBottomNav({
       </button>
       <button
         type="button"
-        className={`mobile-bottom-nav__item ${activeSection === 'history' ? 'active' : ''}`}
+        className={`mobile-bottom-nav__item ${currentSection === 'history' ? 'active' : ''}`}
         onClick={onGoHistory}
-        aria-current={activeSection === 'history' ? 'page' : undefined}
+        aria-current={currentSection === 'history' ? 'page' : undefined}
       >
         <List aria-hidden="true" />
         <span>History</span>

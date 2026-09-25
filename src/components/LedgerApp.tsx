@@ -14,6 +14,7 @@ import { SavingsGoals } from './SavingsGoals'
 import { SectionTutorial, hasSeenTutorial } from './SectionTutorial'
 import { ThemeToggle } from './ThemeToggle'
 import { TransactionForm } from './TransactionForm'
+import { TransactionHistoryPanel } from './TransactionHistoryPanel'
 import { TransactionList } from './TransactionList'
 import { TransactionSheet } from './TransactionSheet'
 import { UndoToast, type PendingUndo, type UndoResource } from './UndoToast'
@@ -163,6 +164,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth()
   const [editing, setEditing] = useState<Transaction | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
   const [tourSession, setTourSession] = useState(0)
   const [saving, setSaving] = useState(false)
@@ -342,7 +344,11 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
         setPendingUndo(null)
         // Announce context for screen readers by focusing the section heading.
         requestAnimationFrame(() => {
-          document.getElementById(UNDO_FOCUS_TARGET[pending.resource])?.focus()
+          const historyHeading = document.getElementById('history-panel-heading')
+          const targetId = pending.resource === 'transaction' && historyHeading
+            ? 'history-panel-heading'
+            : UNDO_FOCUS_TARGET[pending.resource]
+          document.getElementById(targetId)?.focus()
         })
       } catch (err) {
         console.error('Failed to undo deletion', err)
@@ -364,6 +370,14 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
   function closeTransactionSheet() {
     setSheetOpen(false)
     setEditing(null)
+  }
+
+  function openHistory() {
+    setHistoryOpen(true)
+  }
+
+  function closeHistory() {
+    setHistoryOpen(false)
   }
 
   async function handleSubmit(input: TransactionInput) {
@@ -519,6 +533,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
             title="Log out"
             onClick={() => {
               closeTransactionSheet()
+              closeHistory()
               dismissUndo()
               onLogOut()
             }}
@@ -591,6 +606,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
               onSelectMonth={selectMonth}
               hasActiveCards={activeCards.length > 0}
               cardSnapshots={statements.filter((statement) => statement.card.active)}
+              creditCards={cards}
               totalOutstanding={totalOutstanding}
               totalAvailableCredit={totalAvailableCredit}
               onNavigateToCards={() => scrollToSection('credit-cards')}
@@ -632,7 +648,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
             <QuickActions
               onAddTransaction={() => openTransactionSheet()}
               onReviewBills={() => scrollToSection('reminders')}
-              onOpenHistory={() => scrollToSection('history')}
+              onOpenHistory={openHistory}
               onOpenCreditCards={() => scrollToSection('credit-cards')}
             />
 
@@ -668,6 +684,20 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
               loading={txLoading}
               onEdit={(tx) => openTransactionSheet(tx)}
               onDelete={handleDelete}
+              onViewAll={openHistory}
+              cardById={cardById}
+            />
+
+            <TransactionHistoryPanel
+              open={historyOpen}
+              suspended={sheetOpen}
+              transactions={transactions}
+              allTransactions={allTransactions}
+              loading={txLoading}
+              onClose={closeHistory}
+              onAdd={() => openTransactionSheet()}
+              onEdit={(tx) => openTransactionSheet(tx)}
+              onDelete={handleDelete}
               cardById={cardById}
             />
 
@@ -680,6 +710,8 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
               loading={ccLoading}
               error={ccError}
               isCurrentMonth={isCurrentMonth}
+              year={year}
+              month={month}
               onAdd={addCard}
               onUpdate={updateCard}
               onDelete={handleRemoveCard}
@@ -724,7 +756,8 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
               onGoOverview={() => scrollToSection('overview')}
               onGoCalendar={() => scrollToSection('calendar')}
               onOpenAdd={() => openTransactionSheet()}
-              onGoHistory={() => scrollToSection('history')}
+              onGoHistory={openHistory}
+              historyOpen={historyOpen}
             />
             <SectionTutorial
               key={tourSession}

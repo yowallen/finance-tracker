@@ -1,6 +1,7 @@
 import { getFirestoreClient } from '../lib/firebase'
 import type { Timestamp, Unsubscribe } from 'firebase/firestore'
 import type {
+  CardIssuer,
   CashbackRule,
   CreditCard,
   CreditCardInput,
@@ -25,6 +26,70 @@ export function getMinimumPaymentOverride(card: Pick<CreditCard, 'name' | 'minim
   }
 
   return card.name.trim().toLowerCase().includes('bpi') ? BPI_MINIMUM_PAYMENT : undefined
+}
+
+const CARD_ISSUERS: CardIssuer[] = ['bpi', 'eastwest', 'metrobank', 'unionbank']
+
+const ISSUER_NAME_MARKERS: Array<{ issuer: CardIssuer; markers: string[] }> = [
+  { issuer: 'bpi', markers: ['bpi'] },
+  { issuer: 'eastwest', markers: ['eastwest', 'east west'] },
+  { issuer: 'metrobank', markers: ['metrobank', 'metro bank'] },
+  { issuer: 'unionbank', markers: ['unionbank', 'union bank'] },
+]
+
+export function resolveCardIssuer(card: Pick<CreditCard, 'issuer' | 'name'>): CardIssuer | undefined {
+  if (card.issuer && CARD_ISSUERS.includes(card.issuer)) return card.issuer
+  const name = card.name.trim().toLowerCase()
+  return ISSUER_NAME_MARKERS.find((entry) => entry.markers.some((marker) => name.includes(marker)))?.issuer
+}
+
+export function cardsCanShareLimit(
+  left: Pick<CreditCard, 'issuer' | 'name'>,
+  right: Pick<CreditCard, 'issuer' | 'name'>,
+): boolean {
+  const leftIssuer = resolveCardIssuer(left)
+  const rightIssuer = resolveCardIssuer(right)
+  return leftIssuer !== undefined && leftIssuer === rightIssuer
+}
+
+export interface CreditLimitPool {
+  id: string
+  cards: CreditCard[]
+  primary: CreditCard
+}
+
+export function groupCreditCards(cards: CreditCard[]): CreditLimitPool[] {
+  const groups = new Map<string, CreditCard[]>()
+  const solos: CreditCard[] = []
+
+  for (const card of cards) {
+    if (!card.sharedLimitGroupId) {
+      solos.push(card)
+      continue
+    }
+    const members = groups.get(card.sharedLimitGroupId) ?? []
+    members.push(card)
+    groups.set(card.sharedLimitGroupId, members)
+  }
+
+  const pools: CreditLimitPool[] = solos.map((card) => ({
+    id: card.id,
+    cards: [card],
+    primary: card,
+  }))
+
+  for (const [id, members] of groups) {
+    if (members.length < 2) {
+      const [only] = members
+      pools.push({ id: only.id, cards: [only], primary: only })
+      continue
+    }
+    const primary = members.find((card) => card.sharedLimitPrimary)
+      ?? [...members].sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0]
+    pools.push({ id, cards: members, primary })
+  }
+
+  return pools
 }
 
 function toIso(value: unknown, timestampCtor: typeof Timestamp): string {
@@ -167,6 +232,11 @@ function mapDoc(
   const cashbackMinSpend = coerceNumeric(data.cashbackMinSpend)
   const cashbackCategories = coerceStringArray(data.cashbackCategories)
   const cashbackRules = normalizeLegacyCashbackRules(data.cashbackRules)
+  const issuer = typeof data.issuer === 'string' && CARD_ISSUERS.includes(data.issuer as CardIssuer)
+    ? data.issuer as CardIssuer
+    : undefined
+  const sharedLimitGroupId = typeof data.sharedLimitGroupId === 'string' ? data.sharedLimitGroupId : undefined
+  const sharedLimitPrimary = data.sharedLimitPrimary === true
 
   if (
     !userId ||
@@ -213,6 +283,9 @@ function mapDoc(
     ...(cashbackMinSpend !== undefined ? { cashbackMinSpend } : {}),
     ...(cashbackCategories ? { cashbackCategories } : {}),
     ...(cashbackRules ? { cashbackRules } : {}),
+    ...(issuer ? { issuer } : {}),
+    ...(sharedLimitGroupId ? { sharedLimitGroupId } : {}),
+    ...(sharedLimitPrimary ? { sharedLimitPrimary: true } : {}),
     active: typeof active === 'boolean' ? active : true,
     createdAt: toIso(data.createdAt, timestampCtor),
   }
@@ -333,6 +406,9 @@ export async function createCreditCard(
     statementDay: input.statementDay,
     active: input.active ?? true,
     createdAt: fs.serverTimestamp(),
+    ...(input.issuer ? { issuer: input.issuer } : {}),
+    ...(input.sharedLimitGroupId ? { sharedLimitGroupId: input.sharedLimitGroupId } : {}),
+    ...(input.sharedLimitPrimary ? { sharedLimitPrimary: true } : {}),
   }
   if (input.dueDay !== undefined) {
     payload.dueDay = input.dueDay
@@ -426,6 +502,9 @@ export async function updateCreditCard(
     limit: input.limit,
     statementDay: input.statementDay,
     active: input.active ?? true,
+    issuer: input.issuer ?? null,
+    sharedLimitGroupId: input.sharedLimitGroupId ?? null,
+    sharedLimitPrimary: input.sharedLimitPrimary === true ? true : null,
   }
   if (input.dueDay !== undefined) {
     payload.dueDay = input.dueDay
@@ -546,6 +625,62 @@ export async function updateCreditCard(
   }
 
   await fs.updateDoc(fs.doc(db, COLLECTION, id), payload)
+}
+
+async function writeSharedLimitFields(
+  cardId: string,
+  patch: { sharedLimitGroupId?: string; sharedLimitPrimary?: boolean; issuer?: CardIssuer },
+): Promise<void> {
+  const { fs, db } = await getFirestoreClient()
+  await fs.updateDoc(fs.doc(db, COLLECTION, cardId), {
+    sharedLimitGroupId: patch.sharedLimitGroupId ?? null,
+    sharedLimitPrimary: patch.sharedLimitPrimary === true ? true : null,
+    ...(patch.issuer ? { issuer: patch.issuer } : {}),
+  })
+}
+
+/** Join cardId to targetId's limit, or pass null to leave the pool. */
+export async function syncSharedLimitMembership(
+  card: CreditCard,
+  targetId: string | null,
+  cards: CreditCard[],
+): Promise<void> {
+  const previousGroupId = card.sharedLimitGroupId
+
+  if (!targetId) {
+    if (previousGroupId) {
+      await writeSharedLimitFields(card.id, { sharedLimitGroupId: undefined, sharedLimitPrimary: undefined })
+      const leftovers = cards.filter((item) => item.id !== card.id && item.sharedLimitGroupId === previousGroupId)
+      if (leftovers.length === 1) {
+        await writeSharedLimitFields(leftovers[0].id, { sharedLimitGroupId: undefined, sharedLimitPrimary: undefined })
+      }
+    }
+    return
+  }
+
+  const target = cards.find((item) => item.id === targetId)
+  if (!target) throw new Error('Choose a card from the same bank.')
+  if (!cardsCanShareLimit(card, target)) {
+    throw new Error('A shared limit only works between cards from the same bank.')
+  }
+
+  const groupId = target.sharedLimitGroupId ?? crypto.randomUUID()
+  const primary = cards.find((item) => item.sharedLimitGroupId === target.sharedLimitGroupId && item.sharedLimitPrimary) ?? target
+
+  if (previousGroupId && previousGroupId !== groupId) {
+    const leftovers = cards.filter((item) => item.id !== card.id && item.sharedLimitGroupId === previousGroupId)
+    if (leftovers.length === 1) {
+      await writeSharedLimitFields(leftovers[0].id, { sharedLimitGroupId: undefined, sharedLimitPrimary: undefined })
+    }
+  }
+
+  await writeSharedLimitFields(primary.id, { sharedLimitGroupId: groupId, sharedLimitPrimary: true, issuer: resolveCardIssuer(primary) })
+  if (card.id !== primary.id) {
+    await writeSharedLimitFields(card.id, { sharedLimitGroupId: groupId, sharedLimitPrimary: false, issuer: resolveCardIssuer(card) })
+  }
+  if (target.id !== primary.id && target.id !== card.id) {
+    await writeSharedLimitFields(target.id, { sharedLimitGroupId: groupId, sharedLimitPrimary: false, issuer: resolveCardIssuer(target) })
+  }
 }
 
 export async function deleteCreditCard(id: string): Promise<void> {
@@ -747,6 +882,137 @@ export function computeStatement(
   }
 }
 
+function poolCardIds(pool: CreditLimitPool): Set<string> {
+  return new Set(pool.cards.map((card) => card.id))
+}
+
+function transactionsForPool(
+  pool: CreditLimitPool,
+  transactions: Transaction[],
+  year: number,
+  month: number,
+): Transaction[] {
+  const ids = poolCardIds(pool)
+  const { startDate, endDate } = computeStatementPeriod(pool.primary, year, month)
+  const start = startDate.getTime()
+  const endOfStatementDay = new Date(endDate)
+  endOfStatementDay.setHours(23, 59, 59, 999)
+  const end = endOfStatementDay.getTime()
+
+  return transactions
+    .filter((tx) => {
+      if (!tx.creditCardId || !ids.has(tx.creditCardId)) return false
+      const t = new Date(tx.occurredAt).getTime()
+      return Number.isFinite(t) && t >= start && t <= end
+    })
+    .sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime())
+}
+
+/**
+ * One statement for a shared limit. Solo cards use the same path as computeStatement.
+ */
+export function computePoolStatement(
+  pool: CreditLimitPool,
+  allTransactions: Transaction[],
+  year: number,
+  month: number,
+): CreditCardStatement {
+  if (pool.cards.length < 2) {
+    return computeStatement(pool.primary, allTransactions, year, month)
+  }
+
+  const primary = pool.primary
+  const { statementDate, dueDate } = computeStatementPeriod(primary, year, month)
+  const periodTransactions = transactionsForPool(pool, allTransactions, year, month)
+  const ids = poolCardIds(pool)
+  const transactionHistory = allTransactions
+    .filter((tx) => {
+      if (!tx.creditCardId || !ids.has(tx.creditCardId)) return false
+      const occurredAt = new Date(tx.occurredAt).getTime()
+      const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999).getTime()
+      return Number.isFinite(occurredAt) && occurredAt <= endOfMonth
+    })
+    .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
+
+  let newCharges = 0
+  let paymentsCredits = 0
+  for (const tx of periodTransactions) {
+    if (tx.creditCardPayment === true) {
+      paymentsCredits += tx.amount
+    } else if (tx.type === 'income' || (tx.type === 'savings' && tx.savingsDirection === 'withdraw')) {
+      paymentsCredits += tx.amount
+    } else if (tx.type === 'expense' || tx.type === 'bill') {
+      newCharges += tx.amount
+    }
+  }
+
+  const { startDate } = computeStatementPeriod(primary, year, month)
+  const cutoff = startDate.getTime()
+  let previousBalance = 0
+  for (const tx of allTransactions) {
+    if (!tx.creditCardId || !ids.has(tx.creditCardId)) continue
+    const t = new Date(tx.occurredAt).getTime()
+    if (Number.isNaN(t) || t >= cutoff) continue
+    if (tx.creditCardPayment === true || tx.type === 'income' || (tx.type === 'savings' && tx.savingsDirection === 'withdraw')) {
+      previousBalance -= tx.amount
+    } else if (tx.type === 'expense' || tx.type === 'bill') {
+      previousBalance += tx.amount
+    }
+  }
+  previousBalance = Math.max(0, previousBalance)
+
+  const interest = computeInterest(primary, previousBalance, newCharges, paymentsCredits, statementDate, dueDate)
+  const statementBalance = Math.max(0, previousBalance + newCharges - paymentsCredits + interest)
+  const outstandingBalance = pool.cards.reduce(
+    (sum, card) => sum + computeOutstandingBalance(card, allTransactions, year, month),
+    0,
+  )
+  const minimumPaymentOverride = getMinimumPaymentOverride(primary)
+  const minimumPayment = minimumPaymentOverride !== undefined
+    ? Math.min(statementBalance, minimumPaymentOverride)
+    : primary.apr && primary.apr > 0
+      ? computeMinimumPaymentWithInterest(statementBalance, primary.apr)
+      : Math.min(statementBalance, Math.max(statementBalance * 0.03, 100))
+  const availableCredit = Math.max(0, primary.limit - outstandingBalance)
+  const memberCashback = pool.cards.map((member) => {
+    const memberTransactions = periodTransactions.filter((tx) => tx.creditCardId === member.id)
+    const earned = memberTransactions.reduce(
+      (sum, tx) => sum + awardedCashbackForTransaction(member, tx, allTransactions),
+      0,
+    )
+    const redeemed = typeof member.cashbackRedeemed === 'number' ? Math.max(0, member.cashbackRedeemed) : 0
+    return {
+      earned,
+      redeemed,
+      available: Math.max(0, earned - redeemed),
+      eligible: getCashbackEligibleSpend(member, memberTransactions),
+      points: computePointsEarned(member, memberTransactions),
+    }
+  })
+
+  return {
+    card: primary,
+    statementDate,
+    dueDate,
+    previousBalance,
+    newCharges,
+    paymentsCredits,
+    interestCharged: interest,
+    statementBalance,
+    outstandingBalance,
+    minimumPayment,
+    availableCredit,
+    isPaid: statementBalance <= 0,
+    cashbackEligibleSpend: memberCashback.reduce((sum, item) => sum + item.eligible, 0),
+    cashbackEarned: memberCashback.reduce((sum, item) => sum + item.earned, 0),
+    cashbackRedeemed: memberCashback.reduce((sum, item) => sum + item.redeemed, 0),
+    availableCashback: memberCashback.reduce((sum, item) => sum + item.available, 0),
+    pointsEarned: memberCashback.reduce((sum, item) => sum + item.points, 0),
+    transactions: periodTransactions,
+    transactionHistory,
+  }
+}
+
 const CATEGORY_ALIASES: Record<string, string[]> = {
   groceries: ['groceries', 'grocery', 'supermarket', 'supermarkets'],
   utilities: ['utilities', 'utility', 'water', 'electricity', 'internet', 'phone', 'payment', 'bills'],
@@ -802,8 +1068,8 @@ function computePointsEarned(card: CreditCard, transactions: Transaction[]): num
   return transactions.reduce((total, tx) => total + computePointsForTransaction(card, tx), 0)
 }
 
-export function resolveCashbackRateForCategory(card: Pick<CreditCard, 'cashbackRules'>, category: string): number {
-  const rules = Array.isArray(card.cashbackRules) ? card.cashbackRules : []
+export function resolveCashbackRateForCategory(card: { name?: string; rewardType?: CreditCard['rewardType']; cashbackRules?: CreditCard['cashbackRules'] }, category: string): number {
+  const rules = cashbackRulesFor(card)
   const targetKey = categoryKey(category)
   const exactMatch = rules
     .filter((rule) => Array.isArray(rule.categories) && rule.categories.length > 0)
@@ -837,6 +1103,22 @@ function getCashbackEligibleSpend(card: CreditCard, transactions: Transaction[])
     .reduce((sum, tx) => sum + tx.amount, 0)
 }
 
+const BPI_CASHBACK_RULES: CashbackRule[] = [
+  { rate: 4, categories: ['Groceries'] },
+  { rate: 4, categories: ['Shopping'] },
+  { rate: 1, categories: ['Utilities'] },
+  { rate: 1, categories: ['Health'] },
+  { rate: 0.3, categories: ['*'] },
+]
+
+function cashbackRulesFor(card: { name?: string; rewardType?: CreditCard['rewardType']; cashbackRules?: CreditCard['cashbackRules'] }): CashbackRule[] {
+  if (card.rewardType === 'points') return []
+  if (card.cashbackRules && card.cashbackRules.length > 0) return card.cashbackRules
+  const name = card.name?.trim().toLowerCase() ?? ''
+  if (name.includes('bpi') && name.includes('cashback')) return BPI_CASHBACK_RULES
+  return []
+}
+
 function getCashbackMinimumSpend(card: Pick<CreditCard, 'cashbackMinSpend'>): number {
   if (typeof card.cashbackMinSpend === 'number') {
     return card.cashbackMinSpend
@@ -854,7 +1136,7 @@ function isAnnualFeeTransaction(tx: Pick<Transaction, 'category' | 'description'
 }
 
 export function computeCashbackForTransaction(
-  card: Pick<CreditCard, 'id' | 'rewardType' | 'cashbackRules' | 'cashbackCap' | 'cashbackMinSpend' | 'cashbackUsesFullThousandBlocks'>,
+  card: Pick<CreditCard, 'id' | 'rewardType' | 'cashbackRules' | 'cashbackCap' | 'cashbackMinSpend' | 'cashbackUsesFullThousandBlocks'> & { name?: string },
   tx: Partial<Transaction> & {
     type: Transaction['type']
     amount: number
@@ -877,7 +1159,9 @@ export function computeCashbackForTransaction(
   const rate = resolveCashbackRateForCategory(card, tx.category)
   if (rate <= 0) return 0
 
-  const eligibleAmount = card.cashbackUsesFullThousandBlocks
+  const usesThousandBlocks = card.cashbackUsesFullThousandBlocks
+    ?? ((card.name ?? '').trim().toLowerCase().includes('bpi') && (card.name ?? '').trim().toLowerCase().includes('cashback') && !(card.cashbackRules && card.cashbackRules.length > 0))
+  const eligibleAmount = usesThousandBlocks
     ? Math.floor(tx.amount / 1000) * 1000
     : tx.amount
   return eligibleAmount * (rate / 100)
@@ -889,7 +1173,7 @@ function transactionSortKey(tx: { id?: string; occurredAt?: string }): string {
 }
 
 export function awardedCashbackForTransaction(
-  card: Pick<CreditCard, 'id' | 'rewardType' | 'cashbackRules' | 'cashbackCap' | 'cashbackMinSpend' | 'cashbackUsesFullThousandBlocks' | 'cashbackYearlyCap'>,
+  card: Pick<CreditCard, 'id' | 'rewardType' | 'cashbackRules' | 'cashbackCap' | 'cashbackMinSpend' | 'cashbackUsesFullThousandBlocks' | 'cashbackYearlyCap'> & { name?: string },
   tx: Partial<Transaction> & {
     id?: string
     occurredAt?: string
@@ -1040,13 +1324,10 @@ export function computeTotalOutstanding(
   year: number,
   month: number,
 ): number {
-  return cards
-    .filter((card) => card.active)
-    .reduce(
-      (total, card) =>
-        total + computeStatement(card, allTransactions, year, month).outstandingBalance,
-      0,
-    )
+  return groupCreditCards(cards.filter((card) => card.active)).reduce(
+    (total, pool) => total + computePoolStatement(pool, allTransactions, year, month).outstandingBalance,
+    0,
+  )
 }
 
 /**
@@ -1058,13 +1339,10 @@ export function computeTotalAvailableCredit(
   year: number,
   month: number,
 ): number {
-  return cards
-    .filter((card) => card.active)
-    .reduce(
-      (total, card) =>
-        total + computeStatement(card, allTransactions, year, month).availableCredit,
-      0,
-    )
+  return groupCreditCards(cards.filter((card) => card.active)).reduce(
+    (total, pool) => total + computePoolStatement(pool, allTransactions, year, month).availableCredit,
+    0,
+  )
 }
 
 export function getUtilizationForMonth(
@@ -1123,6 +1401,58 @@ export function buildUtilizationHistory(
   }
 }
 
+export function buildPoolUtilizationHistory(
+  pool: CreditLimitPool,
+  allTransactions: Transaction[],
+  endYear: number,
+  endMonth: number,
+  monthsBack = 12,
+): UtilizationHistory {
+  if (pool.cards.length < 2) {
+    return buildUtilizationHistory(pool.primary, allTransactions, endYear, endMonth, monthsBack)
+  }
+
+  const snapshots: UtilizationSnapshot[] = []
+  for (let offset = monthsBack - 1; offset >= 0; offset -= 1) {
+    const date = new Date(endYear, endMonth - offset, 1)
+    const year = date.getFullYear()
+    const month = date.getMonth()
+    const statement = computePoolStatement(pool, allTransactions, year, month)
+    const limit = pool.primary.limit
+    snapshots.push({
+      date: date.toISOString(),
+      year,
+      month,
+      outstandingBalance: statement.outstandingBalance,
+      limit,
+      utilizationPercent: limit > 0 ? Math.min(100, (statement.outstandingBalance / limit) * 100) : 0,
+      cardId: pool.primary.id,
+    })
+  }
+  const total = snapshots.reduce((sum, snapshot) => sum + snapshot.utilizationPercent, 0)
+  const peak = snapshots.reduce(
+    (highest, snapshot) => snapshot.utilizationPercent > highest.utilizationPercent ? snapshot : highest,
+    snapshots[0],
+  )
+  const first = snapshots[0]?.utilizationPercent ?? 0
+  const current = snapshots.at(-1)?.utilizationPercent ?? 0
+  const change = current - first
+  const cardName = pool.cards.map((card) => card.name).join(' · ')
+  return {
+    cardId: pool.primary.id,
+    cardName,
+    limit: pool.primary.limit,
+    snapshots,
+    averageUtilization: snapshots.length > 0 ? total / snapshots.length : 0,
+    peakUtilization: {
+      percent: peak?.utilizationPercent ?? 0,
+      date: peak?.date ?? new Date(endYear, endMonth, 1).toISOString(),
+    },
+    currentUtilization: current,
+    trend: change < -1 ? 'improving' : change > 1 ? 'worsening' : 'stable',
+  }
+}
+
 export function computeAggregateCashback(
   cards: CreditCard[],
   allTransactions: Transaction[],
@@ -1157,12 +1487,12 @@ export function computeAggregateUtilization(
   year: number,
   month: number,
 ): { totalBalance: number; totalLimit: number; utilizationPercent: number } {
-  const activeCards = cards.filter((card) => card.active)
-  const totalBalance = activeCards.reduce(
-    (sum, card) => sum + computeStatement(card, allTransactions, year, month).outstandingBalance,
+  const pools = groupCreditCards(cards.filter((card) => card.active))
+  const totalBalance = pools.reduce(
+    (sum, pool) => sum + computePoolStatement(pool, allTransactions, year, month).outstandingBalance,
     0,
   )
-  const totalLimit = activeCards.reduce((sum, card) => sum + card.limit, 0)
+  const totalLimit = pools.reduce((sum, pool) => sum + pool.primary.limit, 0)
   return {
     totalBalance,
     totalLimit,
@@ -1182,13 +1512,12 @@ export function getNextDueStatement(
   let next: { card: CreditCard; statement: CreditCardStatement } | null = null
   let earliestDue = Number.POSITIVE_INFINITY
 
-  for (const card of cards) {
-    if (!card.active) continue
-    const statement = computeStatement(card, allTransactions, year, month)
+  for (const pool of groupCreditCards(cards.filter((card) => card.active))) {
+    const statement = computePoolStatement(pool, allTransactions, year, month)
     const due = statement.dueDate.getTime()
     if (due < earliestDue) {
       earliestDue = due
-      next = { card, statement }
+      next = { card: pool.primary, statement }
     }
   }
 

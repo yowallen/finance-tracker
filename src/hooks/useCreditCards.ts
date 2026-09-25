@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  computeStatement,
+  computePoolStatement,
   computeTotalAvailableCredit,
   computeTotalOutstanding,
   computeAggregateCashback,
   computeAggregatePoints,
   computeAggregateUtilization,
-  buildUtilizationHistory,
+  buildPoolUtilizationHistory,
   createCreditCard,
   deleteCreditCard,
   getNextDueStatement,
+  groupCreditCards,
   projectInterest,
   subscribeCreditCards,
   updateCreditCard,
@@ -55,9 +56,11 @@ export function useCreditCards(
     [visibleCards],
   )
 
+  const pools = useMemo(() => groupCreditCards(visibleCards), [visibleCards])
+
   const statements = useMemo(
-    () => visibleCards.map((card) => computeStatement(card, allTransactions, year, month)),
-    [visibleCards, allTransactions, year, month],
+    () => pools.map((pool) => computePoolStatement(pool, allTransactions, year, month)),
+    [pools, allTransactions, year, month],
   )
 
   const totalOutstanding = useMemo(
@@ -76,18 +79,20 @@ export function useCreditCards(
   )
 
   const interestProjections = useMemo(
-    () => visibleCards
-      .filter((card) => card.active && card.apr && card.apr > 0)
-      .map((card) => {
-        const statement = computeStatement(card, allTransactions, year, month)
-        return projectInterest(card, statement.outstandingBalance, 24)
+    () => pools
+      .filter((pool) => pool.primary.active && pool.primary.apr && pool.primary.apr > 0)
+      .map((pool) => {
+        const statement = computePoolStatement(pool, allTransactions, year, month)
+        return projectInterest(pool.primary, statement.outstandingBalance, 24)
       }),
-    [visibleCards, allTransactions, year, month],
+    [pools, allTransactions, year, month],
   )
 
   const utilizationHistories = useMemo(
-    () => activeCards.map((card) => buildUtilizationHistory(card, allTransactions, year, month, 12)),
-    [activeCards, allTransactions, year, month],
+    () => pools
+      .filter((pool) => pool.cards.some((card) => card.active))
+      .map((pool) => buildPoolUtilizationHistory(pool, allTransactions, year, month, 12)),
+    [pools, allTransactions, year, month],
   )
 
   const aggregateCashback = useMemo(
@@ -110,9 +115,9 @@ export function useCreditCards(
     [visibleCards],
   )
 
-  async function add(input: CreditCardInput, id?: string): Promise<void> {
+  async function add(input: CreditCardInput, id?: string): Promise<string> {
     if (!userId) throw new Error('Missing user id.')
-    await createCreditCard(userId, input, id)
+    return createCreditCard(userId, input, id)
   }
 
   async function update(id: string, input: CreditCardInput): Promise<void> {
@@ -125,6 +130,7 @@ export function useCreditCards(
 
   return {
     cards: visibleCards,
+    pools,
     activeCards,
     statements,
     totalOutstanding,

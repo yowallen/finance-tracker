@@ -41,12 +41,20 @@ export function parseCashbackRules(input: string): CashbackRule[] {
   return rules
 }
 
+export type CardIssuer = 'bpi' | 'eastwest' | 'metrobank' | 'unionbank'
+
 export interface CreditCard {
   id: string
   userId: string
   name: string
   lastFour: string
   limit: number
+  /** Bank that issued the card. Shared limits are only allowed within one issuer. */
+  issuer?: CardIssuer
+  /** Cards with the same id draw from one credit line. */
+  sharedLimitGroupId?: string
+  /** The member whose limit, statement cycle, and APR define the shared line. */
+  sharedLimitPrimary?: boolean
   statementDay: number
   /** Actual calendar day the payment is due; legacy cards may use dueDayOffset. */
   dueDay?: number
@@ -103,6 +111,11 @@ export interface CreditCardInput {
   name: string
   lastFour: string
   limit: number
+  issuer?: CardIssuer
+  sharedLimitGroupId?: string
+  sharedLimitPrimary?: boolean
+  /** Card id to share a limit with. Null leaves any current pool. */
+  sharedLimitWithId?: string | null
   statementDay: number
   dueDay?: number
   dueDayOffset?: number

@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import type { CreditCard } from '../types/creditCard'
+import type { Transaction } from '../types/transaction'
 import {
   awardedCashbackForTransaction,
+  cardsCanShareLimit,
   computeAggregateCashback,
   computeCashbackForTransaction,
   computePointsForTransaction,
+  computePoolStatement,
   computeStatement,
+  computeTotalAvailableCredit,
+  computeTotalOutstanding,
   getCurrentCashbackForTransaction,
+  groupCreditCards,
   resolveCashbackRateForCategory,
 } from './creditCards'
 
@@ -725,5 +731,99 @@ describe('cashback perk rules', () => {
     expect(statement.cashbackEarned).toBe(120)
     expect(statement.cashbackRedeemed).toBe(25)
     expect(statement.availableCashback).toBe(95)
+  })
+})
+
+describe('shared credit limit', () => {
+  function card(partial: Partial<CreditCard> & Pick<CreditCard, 'id' | 'name'>): CreditCard {
+    return {
+      userId: 'user-1',
+      lastFour: '1111',
+      limit: 50000,
+      statementDay: 15,
+      dueDayOffset: 20,
+      active: true,
+      createdAt: '2024-01-01T00:00:00Z',
+      ...partial,
+    }
+  }
+
+  function charge(id: string, creditCardId: string, amount: number): Transaction {
+    return {
+      id,
+      userId: 'user-1',
+      type: 'expense',
+      amount,
+      category: 'Food',
+      description: id,
+      occurredAt: '2026-09-10T00:00:00Z',
+      createdAt: '2026-09-10T00:00:00Z',
+      creditCardId,
+    }
+  }
+
+  const rewards = card({ id: 'rewards', name: 'BPI Rewards', lastFour: '1234', sharedLimitGroupId: 'bpi-line', sharedLimitPrimary: true, issuer: 'bpi' })
+  const amore = card({ id: 'amore', name: 'BPI Amore', lastFour: '5877', sharedLimitGroupId: 'bpi-line', issuer: 'bpi', createdAt: '2024-02-01T00:00:00Z' })
+
+  it('keeps one 50000 limit when either card is charged', () => {
+    const transactions = [charge('a', 'rewards', 20000), charge('b', 'amore', 10000)]
+    const [pool] = groupCreditCards([rewards, amore])
+    const statement = computePoolStatement(pool, transactions, 2026, 8)
+
+    expect(pool.primary.id).toBe('rewards')
+    expect(statement.outstandingBalance).toBe(30000)
+    expect(statement.availableCredit).toBe(20000)
+    expect(statement.transactions).toHaveLength(2)
+  })
+
+  it('does not double-count the shared limit in totals', () => {
+    const transactions = [charge('a', 'rewards', 20000)]
+    expect(computeTotalOutstanding([rewards, amore], transactions, 2026, 8)).toBe(20000)
+    expect(computeTotalAvailableCredit([rewards, amore], transactions, 2026, 8)).toBe(30000)
+  })
+
+  it('shows BPI Cashback grocery cashback when the card has no stored rules', () => {
+    const cashback = card({
+      id: 'cashback',
+      name: 'BPI Cashback',
+      rewardType: 'cashback',
+      sharedLimitGroupId: 'bpi-line',
+      issuer: 'bpi',
+    })
+    const grocery = { ...charge('sm', 'cashback', 8000), category: 'Groceries' }
+    const [pool] = groupCreditCards([rewards, cashback])
+    const statement = computePoolStatement(pool, [grocery], 2026, 8)
+    expect(statement.cashbackEarned).toBe(320)
+  })
+
+  it('awards the cashback card perk on a shared line', () => {
+    const cashback = card({
+      id: 'amore',
+      name: 'BPI Amore',
+      lastFour: '5877',
+      sharedLimitGroupId: 'bpi-line',
+      issuer: 'bpi',
+      createdAt: '2024-02-01T00:00:00Z',
+      rewardType: 'cashback',
+      cashbackMinSpend: 0,
+      cashbackRules: [
+        { rate: 4, categories: ['Groceries'] },
+        { rate: 0.3, categories: ['*'] },
+      ],
+    })
+    const grocery = {
+      ...charge('grocery', 'amore', 8000),
+      category: 'Groceries',
+    }
+    const [pool] = groupCreditCards([rewards, cashback])
+    const statement = computePoolStatement(pool, [grocery], 2026, 8)
+    expect(statement.cashbackEarned).toBe(320)
+    expect(statement.transactions.find((tx) => tx.id === 'grocery')?.creditCardId).toBe('amore')
+  })
+
+  it('refuses a shared limit between different banks', () => {
+    const metrobank = card({ id: 'metro', name: 'Metrobank Platinum', issuer: 'metrobank' })
+    expect(cardsCanShareLimit(rewards, amore)).toBe(true)
+    expect(cardsCanShareLimit(rewards, metrobank)).toBe(false)
   })
 })

@@ -22,13 +22,27 @@ import { LoadingState } from './LoadingState'
 type SortField = 'date' | 'amount' | 'type' | 'category'
 type SortDirection = 'asc' | 'desc'
 
+/** Newest rows kept on the ledger. The rest open in the history panel. */
+export const TRANSACTION_PREVIEW_COUNT = 6
+
 interface TransactionListProps {
   transactions: Transaction[]
   allTransactions?: Transaction[]
   loading: boolean
   onEdit: (tx: Transaction) => void
   onDelete: (id: string) => Promise<void>
+  onViewAll: () => void
   cardById?: Map<string, CreditCard>
+}
+
+interface TransactionEntriesProps {
+  transactions: Transaction[]
+  allTransactions: Transaction[]
+  onEdit: (tx: Transaction) => void
+  onDelete: (id: string) => Promise<void>
+  cardById?: Map<string, CreditCard>
+  /** Focused when the list becomes empty after a delete. */
+  focusHeadingId: string
 }
 
 function sortTransactions(
@@ -239,22 +253,15 @@ function SortDropdown({
   )
 }
 
-export function TransactionList({
+function TransactionEntries({
   transactions,
-  allTransactions = transactions,
-  loading,
+  allTransactions,
   onEdit,
   onDelete,
   cardById,
-}: TransactionListProps) {
-  const headingRef = useRef<HTMLHeadingElement>(null)
+  focusHeadingId,
+}: TransactionEntriesProps) {
   const listRef = useRef<HTMLUListElement>(null)
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'date', direction: 'desc' })
-
-  const sortedTransactions = useMemo(
-    () => sortTransactions(transactions, sortConfig.field, sortConfig.direction),
-    [transactions, sortConfig.field, sortConfig.direction],
-  )
 
   // Delete without a confirm dialog; keep keyboard users anchored by moving
   // focus to the neighbouring row (or the heading when the list empties).
@@ -274,11 +281,44 @@ export function TransactionList({
           const neighbor = remaining[Math.min(deletedIndex, remaining.length - 1)]
           neighbor.querySelector('button')?.focus()
         } else {
-          headingRef.current?.focus()
+          document.getElementById(focusHeadingId)?.focus()
         }
       })
     }
   }
+
+  return (
+    <ul ref={listRef} className="tx-list" role="list">
+      {transactions.map((tx) => (
+        <TransactionRow
+          key={tx.id}
+          tx={tx}
+          allTransactions={allTransactions}
+          cardById={cardById}
+          onEdit={onEdit}
+          onDelete={(id) => {
+            void handleDelete(id)
+          }}
+        />
+      ))}
+    </ul>
+  )
+}
+
+export function TransactionHistoryBody({
+  transactions,
+  allTransactions = transactions,
+  loading,
+  onEdit,
+  onDelete,
+  cardById,
+}: Omit<TransactionListProps, 'onViewAll'>) {
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'date', direction: 'desc' })
+
+  const sortedTransactions = useMemo(
+    () => sortTransactions(transactions, sortConfig.field, sortConfig.direction),
+    [transactions, sortConfig.field, sortConfig.direction],
+  )
 
   const handleSortClick = (field: SortField) => {
     setSortConfig((prev) => ({
@@ -295,14 +335,8 @@ export function TransactionList({
   }
 
   return (
-    <section id="history" className="tx-list-section" aria-labelledby="list-heading">
+    <>
       <div className="tx-list-header">
-        <h2 ref={headingRef} id="list-heading" tabIndex={-1} className="section-title">
-          <List className="section-icon" aria-hidden="true" />
-          Transactions
-        </h2>
-
-        {/* Sort header row - clickable column headers */}
         <div className="sort-header-row" role="row" aria-label="Transaction columns">
           <SortHeaderButton
             field="date"
@@ -341,8 +375,6 @@ export function TransactionList({
             onKeyDown={(e) => handleSortKeyDown(e, 'amount')}
           />
         </div>
-
-        {/* Dropdown fallback for mobile / dense sorting options */}
         <SortDropdown value={sortConfig} onChange={setSortConfig} />
       </div>
 
@@ -353,90 +385,163 @@ export function TransactionList({
           No transactions this month yet. Use Add to record an expense or income.
         </p>
       ) : (
-        <ul ref={listRef} className="tx-list" role="list">
-          {sortedTransactions.map((tx) => {
-            const isInflow = tx.type === 'income' || isSavingsWithdraw(tx)
-            const card = tx.creditCardId ? cardById?.get(tx.creditCardId) : undefined
-            const cashbackValue = card && tx.creditCardId && tx.creditCardPayment !== true
-              ? getCurrentCashbackForTransaction(card, {
-                  id: tx.id,
-                  occurredAt: tx.occurredAt,
-                  type: tx.type,
-                  amount: tx.amount,
-                  category: tx.category,
-                  description: tx.description,
-                  creditCardId: tx.creditCardId,
-                  creditCardPayment: false,
-                  isAnnualFee: tx.isAnnualFee,
-                }, allTransactions)
-              : 0
+        <TransactionEntries
+          transactions={sortedTransactions}
+          allTransactions={allTransactions}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          cardById={cardById}
+          focusHeadingId="history-panel-heading"
+        />
+      )}
+    </>
+  )
+}
+
+function TransactionRow({
+  tx,
+  allTransactions,
+  cardById,
+  onEdit,
+  onDelete,
+}: {
+  tx: Transaction
+  allTransactions: Transaction[]
+  cardById?: Map<string, CreditCard>
+  onEdit: (tx: Transaction) => void
+  onDelete: (id: string) => void
+}) {
+  const isInflow = tx.type === 'income' || isSavingsWithdraw(tx)
+  const card = tx.creditCardId ? cardById?.get(tx.creditCardId) : undefined
+  const cashbackValue = card && tx.creditCardId && tx.creditCardPayment !== true
+    ? getCurrentCashbackForTransaction(card, {
+        id: tx.id,
+        occurredAt: tx.occurredAt,
+        type: tx.type,
+        amount: tx.amount,
+        category: tx.category,
+        description: tx.description,
+        creditCardId: tx.creditCardId,
+        creditCardPayment: false,
+        isAnnualFee: tx.isAnnualFee,
+      }, allTransactions)
+    : 0
+
+  return (
+    <li data-tx-id={tx.id} className={`tx-item ${tx.type}`} role="listitem">
+      <div className="tx-main">
+        <div className="tx-top">
+          <span className={`tx-type-badge ${tx.type}`}>{tx.type}</span>
+          <span className="tx-category">{tx.category}</span>
+          {tx.creditCardId && (() => {
+            const cardLabel = card ? `•••• ${card.lastFour}` : 'Deleted Card'
+            const badgeText = tx.creditCardPayment === true
+              ? `Payment to ${cardLabel}`
+              : `Charged to ${cardLabel}`
 
             return (
-              <li key={tx.id} data-tx-id={tx.id} className={`tx-item ${tx.type}`} role="listitem">
-                <div className="tx-main">
-                  <div className="tx-top">
-                    <span className={`tx-type-badge ${tx.type}`}>{tx.type}</span>
-                    <span className="tx-category">{tx.category}</span>
-                    {tx.creditCardId && (() => {
-                      const cardLabel = card ? `•••• ${card.lastFour}` : 'Deleted Card'
-                      const badgeText = tx.creditCardPayment === true
-                        ? `Payment to ${cardLabel}`
-                        : `Charged to ${cardLabel}`
-
-                      return (
-                        <span className={`tx-cc-badge ${tx.creditCardPayment === true ? 'payment' : ''}`}>
-                          <CreditCardIcon className="tx-cc-icon" aria-hidden="true" />
-                          {badgeText}
-                        </span>
-                      )
-                    })()}
-                  </div>
-                  {tx.description.trim() ? (
-                    <p className="tx-desc">{tx.description}</p>
-                  ) : (
-                    <p className="tx-desc muted">{tx.category}</p>
-                  )}
-                  <div className="tx-meta-row">
-                    <time className="tx-when" dateTime={tx.occurredAt}>
-                      {formatDate(tx.occurredAt)}
-                    </time>
-                    {cashbackValue > 0 && tx.creditCardId && tx.creditCardPayment !== true && (
-                      <span className="tx-cashback">Cashback {formatMoney(cashbackValue)}</span>
-                    )}
-                  </div>
-                </div>
-                <div className="tx-side">
-                  <strong className={`tx-amount ${isInflow ? 'income' : tx.type}`}>
-                    {isInflow ? '+' : '−'}
-                    {formatMoney(tx.amount)}
-                  </strong>
-                  <div className="tx-actions">
-                    <button
-                      type="button"
-                      className="icon-btn icon-btn--edit"
-                      onClick={() => onEdit(tx)}
-                      aria-label={`Edit ${tx.description.trim() || tx.category}`}
-                      title="Edit transaction"
-                    >
-                      <Pencil aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-btn danger"
-                      onClick={() => {
-                        void handleDelete(tx.id)
-                      }}
-                      aria-label={`Delete ${tx.description.trim() || tx.category}`}
-                      title="Delete transaction"
-                    >
-                      <Trash2 aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
-              </li>
+              <span className={`tx-cc-badge ${tx.creditCardPayment === true ? 'payment' : ''}`}>
+                <CreditCardIcon className="tx-cc-icon" aria-hidden="true" />
+                {badgeText}
+              </span>
             )
-          })}
-        </ul>
+          })()}
+        </div>
+        {tx.description.trim() ? (
+          <p className="tx-desc">{tx.description}</p>
+        ) : (
+          <p className="tx-desc muted">{tx.category}</p>
+        )}
+        <div className="tx-meta-row">
+          <time className="tx-when" dateTime={tx.occurredAt}>
+            {formatDate(tx.occurredAt)}
+          </time>
+          {cashbackValue > 0 && tx.creditCardId && tx.creditCardPayment !== true && (
+            <span className="tx-cashback">Cashback {formatMoney(cashbackValue)}</span>
+          )}
+        </div>
+      </div>
+      <div className="tx-side">
+        <strong className={`tx-amount ${isInflow ? 'income' : tx.type}`}>
+          {isInflow ? '+' : '−'}
+          {formatMoney(tx.amount)}
+        </strong>
+        <div className="tx-actions">
+          <button
+            type="button"
+            className="icon-btn icon-btn--edit"
+            onClick={() => onEdit(tx)}
+            aria-label={`Edit ${tx.description.trim() || tx.category}`}
+            title="Edit transaction"
+          >
+            <Pencil aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="icon-btn danger"
+            onClick={() => onDelete(tx.id)}
+            aria-label={`Delete ${tx.description.trim() || tx.category}`}
+            title="Delete transaction"
+          >
+            <Trash2 aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+    </li>
+  )
+}
+
+export function TransactionList({
+  transactions,
+  allTransactions = transactions,
+  loading,
+  onEdit,
+  onDelete,
+  onViewAll,
+  cardById,
+}: TransactionListProps) {
+  const preview = useMemo(() => {
+    return [...transactions]
+      .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
+      .slice(0, TRANSACTION_PREVIEW_COUNT)
+  }, [transactions])
+
+  const countLabel = transactions.length === 1 ? '1 this month' : `${transactions.length} this month`
+  const hiddenCount = transactions.length - preview.length
+  const viewAllLabel = hiddenCount > 0 ? `View all ${transactions.length}` : 'View all'
+
+  return (
+    <section id="history" className="tx-list-section" aria-labelledby="list-heading">
+      <div className="tx-preview-bar">
+        <div className="tx-preview-heading">
+          <h2 id="list-heading" tabIndex={-1} className="section-title">
+            <List className="section-icon" aria-hidden="true" />
+            Transactions
+          </h2>
+          <p className="tx-list-count">{countLabel}</p>
+        </div>
+        {transactions.length > 0 && (
+          <button type="button" className="text-btn tx-view-all" onClick={onViewAll}>
+            {viewAllLabel}
+          </button>
+        )}
+      </div>
+
+      {loading ? (
+        <LoadingState variant="section" label="Loading transactions…" />
+      ) : preview.length === 0 ? (
+        <p className="empty-state">
+          No transactions this month yet. Use Add to record an expense or income.
+        </p>
+      ) : (
+        <TransactionEntries
+          transactions={preview}
+          allTransactions={allTransactions}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          cardById={cardById}
+          focusHeadingId="list-heading"
+        />
       )}
     </section>
   )

@@ -23,7 +23,7 @@ import { LoadingState } from './LoadingState'
 import { InterestProjection as InterestProjectionComponent } from './InterestProjection'
 import { UtilizationChart } from './UtilizationChart'
 import { formatDate, formatMoney } from '../lib/format'
-import { computePointsForTransaction, getCurrentCashbackForTransaction, getNextBillingCycleBalance } from '../services/creditCards'
+import { computePointsForTransaction, getCurrentCashbackForTransaction, getNextBillingCycleBalance, groupCreditCards, syncSharedLimitMembership } from '../services/creditCards'
 import type { Transaction } from '../types/transaction'
 import type {
   CreditCard,
@@ -42,7 +42,9 @@ interface CreditCardsProps {
   loading: boolean
   error: string | null
   isCurrentMonth?: boolean
-  onAdd: (input: CreditCardInput) => Promise<void>
+  year: number
+  month: number
+  onAdd: (input: CreditCardInput) => Promise<string | void>
   onUpdate: (id: string, input: CreditCardInput) => Promise<void>
   onDelete: (card: CreditCard) => Promise<void>
 }
@@ -181,7 +183,7 @@ export function CreditCards({
   }
 
   function isHistoryExpanded(cardId: string) {
-    return historyExpandedByCardId[cardId] ?? true
+    return historyExpandedByCardId[cardId] ?? false
   }
 
   const statementByCardId = useMemo(
@@ -216,12 +218,38 @@ export function CreditCards({
 
   async function handleSubmit(input: CreditCardInput) {
     const wasEditing = Boolean(editing)
+    const { sharedLimitWithId, ...cardInput } = input
     setSaving(true)
     try {
+      let savedId = editing?.id
       if (wasEditing && editing) {
-        await onUpdate(editing.id, input)
+        await onUpdate(editing.id, cardInput)
       } else {
-        await onAdd(input)
+        const createdId = await onAdd(cardInput)
+        savedId = typeof createdId === 'string' ? createdId : undefined
+      }
+      if (savedId) {
+        const savedCard: CreditCard = {
+          id: savedId,
+          userId: editing?.userId ?? cards[0]?.userId ?? '',
+          createdAt: editing?.createdAt ?? new Date().toISOString(),
+          name: cardInput.name,
+          lastFour: cardInput.lastFour,
+          limit: cardInput.limit,
+          statementDay: cardInput.statementDay,
+          dueDay: cardInput.dueDay,
+          dueDayOffset: cardInput.dueDayOffset,
+          color: cardInput.color,
+          active: cardInput.active ?? true,
+          issuer: cardInput.issuer,
+          sharedLimitGroupId: editing?.sharedLimitGroupId,
+          sharedLimitPrimary: editing?.sharedLimitPrimary,
+          apr: cardInput.apr,
+        }
+        await syncSharedLimitMembership(savedCard, sharedLimitWithId ?? null, [
+          ...cards.filter((card) => card.id !== savedId),
+          savedCard,
+        ])
       }
       closeForm()
       announce(wasEditing ? 'Credit card updated.' : 'Credit card added.')
@@ -245,6 +273,9 @@ export function CreditCards({
     }
     setSaving(true)
     try {
+      if (card.sharedLimitGroupId) {
+        await syncSharedLimitMembership(card, null, cards)
+      }
       await onDelete(card)
     } finally {
       setSaving(false)
@@ -288,6 +319,11 @@ export function CreditCards({
       pointsSpendIncrement: card.pointsSpendIncrement,
       pointsRules: card.pointsRules,
       rewardDescription: card.rewardDescription,
+      issuer: card.issuer,
+      sharedLimitGroupId: card.sharedLimitGroupId,
+      sharedLimitPrimary: card.sharedLimitPrimary,
+      madnessLimit: card.madnessLimit,
+      madnessUsed: card.madnessUsed,
     }
   }
 
@@ -384,6 +420,7 @@ export function CreditCards({
         <CreditCardForm
           key={editing?.id ?? 'new'}
           editing={editing}
+          otherCards={cards}
           onSubmit={handleSubmit}
           onCancelEdit={closeForm}
         />
@@ -412,7 +449,8 @@ export function CreditCards({
         ) : (
           <>
             <div className="cc-grid">
-              {cards.map((card) => {
+              {groupCreditCards(cards).map((pool) => {
+                const card = pool.primary
                 const statement = statementByCardId.get(card.id)
                 if (!statement) return null
                 const status = statementStatus(statement, isCurrentMonth)
@@ -435,8 +473,12 @@ export function CreditCards({
                           <CreditCardIcon className="cc-card-icon" aria-hidden="true" />
                         </div>
                         <div className="cc-card-heading">
-                          <h4 className="cc-card-name">{card.name}</h4>
-                          <p className="cc-card-number">**** **** **** {card.lastFour}</p>
+                          {pool.cards.map((member) => (
+                            <div className="cc-card-title-row" key={member.id}>
+                              <h4 className="cc-card-name">{member.name}</h4>
+                              <p className="cc-card-number">•••• {member.lastFour}</p>
+                            </div>
+                          ))}
                           <span className={`cc-status ${status.tone}`}>{status.label}</span>
                         </div>
                       </div>
@@ -518,23 +560,38 @@ export function CreditCards({
                             )}
                           </>
                         )}
-                        {card.rewardType === 'points' ? (
-                          <div className="cc-card-stat">
-                            <span className="cc-card-stat-label">
-                              <WalletCards aria-hidden="true" />
-                              {card.rewardName ?? 'Rewards points'}
-                            </span>
-                            <strong className="cc-card-stat-value success">{statement.pointsEarned.toLocaleString()} pts</strong>
-                          </div>
-                        ) : (card.cashbackRules?.length ?? 0) > 0 && (
-                          <div className="cc-card-stat">
-                            <span className="cc-card-stat-label">
-                              <WalletCards aria-hidden="true" />
-                              {card.name}
-                            </span>
-                            <strong className="cc-card-stat-value success">{formatMoney(statement.availableCashback)}</strong>
-                          </div>
-                        )}
+                        {pool.cards.map((member) => {
+                          const memberTransactions = statement.transactions.filter((tx) => tx.creditCardId === member.id)
+                          const memberPoints = memberTransactions.reduce(
+                            (sum, tx) => sum + computePointsForTransaction(member, tx),
+                            0,
+                          )
+                          const memberCashback = memberTransactions.reduce(
+                            (sum, tx) => sum + getCurrentCashbackForTransaction(member, tx, allTransactions),
+                            0,
+                          )
+                          if (member.rewardType === 'points') {
+                            return (
+                              <div className="cc-card-stat" key={member.id}>
+                                <span className="cc-card-stat-label">
+                                  <WalletCards aria-hidden="true" />
+                                  {member.rewardName ?? 'Rewards points'}
+                                </span>
+                                <strong className="cc-card-stat-value success">{memberPoints.toLocaleString()} pts</strong>
+                              </div>
+                            )
+                          }
+                          if ((member.cashbackRules?.length ?? 0) === 0 && !member.name.toLowerCase().includes('cashback')) return null
+                          return (
+                            <div className="cc-card-stat" key={member.id}>
+                              <span className="cc-card-stat-label">
+                                <WalletCards aria-hidden="true" />
+                                {member.name}
+                              </span>
+                              <strong className="cc-card-stat-value success">{formatMoney(memberCashback)}</strong>
+                            </div>
+                          )
+                        })}
                       </div>
 
                       <CreditLimitBar
@@ -603,61 +660,82 @@ export function CreditCards({
                           statement.transactions.length === 0 ? (
                             <p className="cc-history-empty">No transactions are in this statement period yet.</p>
                           ) : (
-                            <ul id={`cc-history-list-${card.id}`} className="cc-history-list">
-                              {statement.transactions.map((transaction) => {
-                                const isPayment = transaction.creditCardPayment === true
-                                const pointsValue = !isPayment && transaction.creditCardId === card.id
-                                  ? computePointsForTransaction(card, {
-                                      type: transaction.type,
-                                      amount: transaction.amount,
-                                      category: transaction.category,
-                                      description: transaction.description,
-                                      creditCardId: transaction.creditCardId,
-                                      creditCardPayment: false,
-                                      isAnnualFee: transaction.isAnnualFee,
-                                    })
-                                  : 0
-                                const cashbackValue = !isPayment && transaction.creditCardId === card.id
-                                  ? getCurrentCashbackForTransaction(card, {
-                                      id: transaction.id,
-                                      occurredAt: transaction.occurredAt,
-                                      type: transaction.type,
-                                      amount: transaction.amount,
-                                      category: transaction.category,
-                                      description: transaction.description,
-                                      creditCardId: transaction.creditCardId,
-                                      creditCardPayment: false,
-                                      isAnnualFee: transaction.isAnnualFee,
-                                    }, allTransactions)
-                                  : 0
+                            <div id={`cc-history-list-${card.id}`} className="cc-history-groups">
+                              {pool.cards.map((member) => {
+                                const memberTransactions = statement.transactions.filter(
+                                  (transaction) => transaction.creditCardId === member.id,
+                                )
+                                if (pool.cards.length > 1 && memberTransactions.length === 0) return null
+                                const rows = pool.cards.length > 1 ? memberTransactions : statement.transactions
                                 return (
-                                  <li key={transaction.id} className="cc-history-item">
-                                    <div className="cc-history-main">
-                                      <strong>{transaction.description.trim() || transaction.category}</strong>
-                                      <div className="cc-history-meta">
-                                        <time dateTime={transaction.occurredAt}>
-                                          {formatDate(transaction.occurredAt)}
-                                        </time>
-                                        {!isPayment && pointsValue > 0 && (
-                                          <span className="cc-history-cashback">Points +{pointsValue.toLocaleString()}</span>
-                                        )}
-                                        {!isPayment && pointsValue === 0 && cashbackValue > 0 && (
-                                          <span className="cc-history-cashback">Cashback +{formatMoney(cashbackValue)}</span>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <div className="cc-history-amount">
-                                      <span className={isPayment ? 'payment' : 'charge'}>
-                                        {isPayment ? 'Payment' : 'Charge'}
-                                      </span>
-                                      <strong className={isPayment ? 'payment' : 'charge'}>
-                                        {isPayment ? '+' : '-'}{formatMoney(transaction.amount)}
-                                      </strong>
-                                    </div>
-                                  </li>
+                                  <section key={member.id} className="cc-history-group" aria-label={member.name}>
+                                    {pool.cards.length > 1 && (
+                                      <h6 className="cc-history-group-title">
+                                        {member.name}
+                                        <span className="cc-history-group-number">•••• {member.lastFour}</span>
+                                        <span className="cc-history-count">{rows.length}</span>
+                                      </h6>
+                                    )}
+                                    <ul className="cc-history-list">
+                                      {rows.map((transaction) => {
+                                        const isPayment = transaction.creditCardPayment === true
+                                        const chargedCard = pool.cards.find((item) => item.id === transaction.creditCardId) ?? member
+                                        const pointsValue = !isPayment
+                                          ? computePointsForTransaction(chargedCard, {
+                                              type: transaction.type,
+                                              amount: transaction.amount,
+                                              category: transaction.category,
+                                              description: transaction.description,
+                                              creditCardId: transaction.creditCardId,
+                                              creditCardPayment: false,
+                                              isAnnualFee: transaction.isAnnualFee,
+                                            })
+                                          : 0
+                                        const cashbackValue = !isPayment
+                                          ? getCurrentCashbackForTransaction(chargedCard, {
+                                              id: transaction.id,
+                                              occurredAt: transaction.occurredAt,
+                                              type: transaction.type,
+                                              amount: transaction.amount,
+                                              category: transaction.category,
+                                              description: transaction.description,
+                                              creditCardId: transaction.creditCardId,
+                                              creditCardPayment: false,
+                                              isAnnualFee: transaction.isAnnualFee,
+                                            }, allTransactions)
+                                          : 0
+                                        return (
+                                          <li key={transaction.id} className="cc-history-item">
+                                            <div className="cc-history-main">
+                                              <strong>{transaction.description.trim() || transaction.category}</strong>
+                                              <div className="cc-history-meta">
+                                                <time dateTime={transaction.occurredAt}>
+                                                  {formatDate(transaction.occurredAt)}
+                                                </time>
+                                                {!isPayment && pointsValue > 0 && (
+                                                  <span className="cc-history-cashback">Points +{pointsValue.toLocaleString()}</span>
+                                                )}
+                                                {!isPayment && cashbackValue > 0 && (
+                                                  <span className="cc-history-cashback">Cashback +{formatMoney(cashbackValue)}</span>
+                                                )}
+                                              </div>
+                                            </div>
+                                            <div className="cc-history-amount">
+                                              <span className={isPayment ? 'payment' : 'charge'}>
+                                                {isPayment ? 'Payment' : 'Charge'}
+                                              </span>
+                                              <strong className={isPayment ? 'payment' : 'charge'}>
+                                                {isPayment ? '+' : '-'}{formatMoney(transaction.amount)}
+                                              </strong>
+                                            </div>
+                                          </li>
+                                        )
+                                      })}
+                                    </ul>
+                                  </section>
                                 )
                               })}
-                            </ul>
+                            </div>
                           )
                         )}
                       </div>
@@ -672,9 +750,7 @@ export function CreditCards({
                           aria-label={`Use cashback on ${card.name}`}
                         >
                           <WalletCards className="cc-projection-icon" aria-hidden="true" />
-                          <p className="cc-projection-label">
-                            Use cashback
-                          </p>
+                          <span className="cc-projection-label">Use cashback</span>
                         </button>
                       )}
                       {card.apr && card.apr > 0 && projectionByCardId.has(card.id) && (
@@ -685,9 +761,7 @@ export function CreditCards({
                           aria-label={`View interest projection for ${card.name}`}
                         >
                           <BarChart2 className="cc-projection-icon" aria-hidden="true" />
-                          <p className="cc-projection-label">
-                            View Projection
-                          </p>
+                          <span className="cc-projection-label">View projection</span>
                         </button>
                       )}
                     </div>

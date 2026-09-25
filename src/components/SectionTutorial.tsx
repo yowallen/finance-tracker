@@ -1,5 +1,4 @@
 import { useEffect, useId, useState } from 'react'
-import { scrollToSection } from '../lib/scrollToSection'
 
 const STORAGE_PREFIX = 'ledger.tutorialSeen:'
 
@@ -32,7 +31,7 @@ export const TUTORIAL_STEPS = [
   {
     id: 'history',
     title: 'Transactions',
-    body: 'Every income and expense for this month is listed here. You can edit or delete a row if you entered it wrong.',
+    body: 'The latest transactions for this month stay here. View all opens the full history, where you can sort, edit, or delete a row.',
   },
   {
     id: 'credit-cards',
@@ -53,6 +52,27 @@ export const TUTORIAL_STEPS = [
 
 function storageKey(userId: string): string {
   return `${STORAGE_PREFIX}${userId}`
+}
+
+function scrollTargetIntoTutorialView(id: string) {
+  const element = document.getElementById(id)
+  if (!element) return
+
+  const monthBar = document.querySelector('.month-selector')
+  const panel = document.querySelector('.tutorial-panel')
+  const topInset = (monthBar?.getBoundingClientRect().height ?? 72) + 16
+  const bottomInset = (panel?.getBoundingClientRect().height ?? 220) + 24
+  const rect = element.getBoundingClientRect()
+  const visibleTop = topInset
+  const visibleBottom = window.innerHeight - bottomInset
+  const visibleMiddle = visibleTop + (visibleBottom - visibleTop) / 2
+  const elementMiddle = rect.top + Math.min(rect.height, visibleBottom - visibleTop) / 2
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  window.scrollBy({
+    top: elementMiddle - visibleMiddle,
+    behavior: prefersReducedMotion ? 'auto' : 'smooth',
+  })
 }
 
 export function hasSeenTutorial(userId: string): boolean {
@@ -89,8 +109,11 @@ export function SectionTutorial({ userId, open, onClose }: SectionTutorialProps)
     previous?.classList.remove('tutorial-target')
     const target = document.getElementById(step.id)
     target?.classList.add('tutorial-target')
-    scrollToSection(step.id, false)
+    const frame = window.requestAnimationFrame(() => {
+      scrollTargetIntoTutorialView(step.id)
+    })
     return () => {
+      window.cancelAnimationFrame(frame)
       target?.classList.remove('tutorial-target')
     }
   }, [open, step.id])
