@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BookMarked, LogOut } from 'lucide-react'
+import { BookMarked, Compass, LogOut } from 'lucide-react'
 import type { User } from 'firebase/auth'
 import { AnalyticsSection } from './AnalyticsSection'
 import { BillReminders } from './BillReminders'
@@ -503,12 +503,18 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
         </div>
         <div className="topbar-actions">
           <ThemeToggle theme={theme} onToggle={onToggleTheme} />
-          <button type="button" className="btn-ghost" onClick={openTour}>
-            Tour
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Take a tour"
+            title="Tour"
+            onClick={openTour}
+          >
+            <Compass aria-hidden="true" />
           </button>
           <button
             type="button"
-            className="btn-ghost btn-with-icon"
+            className="icon-btn"
             aria-label="Log out"
             title="Log out"
             onClick={() => {

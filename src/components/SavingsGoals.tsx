@@ -424,7 +424,6 @@ export function SavingsGoals({
                     key={stop.goal.id}
                     className={[
                       'savings-stop',
-                      `savings-stop--${stop.placement}`,
                       stop.reached ? 'reached' : '',
                     ]
                       .filter(Boolean)
@@ -434,35 +433,41 @@ export function SavingsGoals({
                     }}
                   >
                     <span className="savings-stop-dot" aria-hidden="true" />
-                    <span className="savings-stop-stem" aria-hidden="true" />
-                    <div className="savings-stop-bubble">
-                      {stop.goal.imageDataUrl && (
-                        <img
-                          className="savings-stop-thumb"
-                          src={stop.goal.imageDataUrl}
-                          alt=""
-                        />
-                      )}
-                      <span className="savings-stop-name">{stop.goal.name}</span>
-                      <span className="savings-stop-price">
-                        {formatMoney(stop.goal.targetAmount)}
-                      </span>
-                      {stop.reached && (
-                        <span className="savings-stop-check" aria-hidden="true">
-                          <Check size={12} strokeWidth={3} />
-                        </span>
-                      )}
-                    </div>
                   </div>
                 ))}
-
-                <div className="savings-track-ends">
-                  <span>{formatMoney(0)}</span>
-                  <span>{formatMoney(journey.limit)}</span>
-                </div>
+              </div>
+              <div className="savings-track-ends">
+                <span>{formatMoney(0)}</span>
+                <span>{formatMoney(journey.limit)}</span>
               </div>
             </div>
           </div>
+
+          <ul className="savings-stop-row" aria-label="Savings stops">
+            {journey.stops.map((stop) => (
+              <li
+                key={stop.goal.id}
+                className={stop.reached ? 'reached' : ''}
+              >
+                {stop.goal.imageDataUrl && (
+                  <img
+                    className="savings-stop-thumb"
+                    src={stop.goal.imageDataUrl}
+                    alt=""
+                  />
+                )}
+                <span className="savings-stop-name">{stop.goal.name}</span>
+                <span className="savings-stop-price">
+                  {formatMoney(stop.goal.targetAmount)}
+                </span>
+                {stop.reached && (
+                  <span className="savings-stop-check" aria-hidden="true">
+                    <Check size={12} strokeWidth={3} />
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
 
           {journey.remainingToLimit > 0 && (
             <p className="savings-meta">
