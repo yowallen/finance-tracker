@@ -14,6 +14,7 @@ import type {
 } from '../types/recurringBill'
 import type { CreditCard } from '../types/creditCard'
 import type { CreditCardStatement, PaymentAllocationPlan } from '../types/creditCard'
+import { PH_BILLER_PRESETS, type PhBillerPreset } from '../data/phBillerPresets'
 import { PaymentAllocation } from './PaymentAllocation'
 import { LoadingState } from './LoadingState'
 
@@ -29,7 +30,11 @@ interface BillRemindersProps {
   creditCards: CreditCard[]
   statements: CreditCardStatement[]
   onApplyAllocation: (plan: PaymentAllocationPlan) => Promise<void>
-  onMarkPaid: (reminder: BillReminder, creditCardId?: string) => Promise<void>
+  onMarkPaid: (
+    reminder: BillReminder,
+    creditCardId?: string,
+    amount?: number,
+  ) => Promise<void>
 }
 
 function statusLabel(reminder: BillReminder): string {
@@ -124,6 +129,9 @@ export function BillReminders({
   const [paymentReminder, setPaymentReminder] = useState<BillReminder | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('cash')
   const [paymentCardId, setPaymentCardId] = useState('')
+  const [paymentAmountMode, setPaymentAmountMode] = useState<'full' | 'minimum'>('full')
+  const [paymentCustomAmount, setPaymentCustomAmount] = useState('')
+  const [paymentAmountError, setPaymentAmountError] = useState<string | null>(null)
   const paymentDialogRef = useRef<HTMLDialogElement>(null)
 
   // Remember where the form was opened from so focus can return there.
@@ -144,6 +152,36 @@ export function BillReminders({
     (reminder) => reminder.isCreditCardPayment && reminder.status !== 'paid',
   ).length
 
+  const paymentStatement = paymentReminder?.isCreditCardPayment && paymentReminder.creditCardId
+    ? statements.find((statement) => statement.card.id === paymentReminder.creditCardId) ?? null
+    : null
+
+  const paymentFullAmount = paymentReminder
+    ? (paymentStatement?.statementBalance ?? paymentReminder.bill.amount)
+    : 0
+  const paymentMinimumAmount = paymentStatement
+    ? Math.min(paymentFullAmount, Math.max(0, paymentStatement.minimumPayment))
+    : paymentFullAmount
+
+  const resolvedPaymentAmount = (() => {
+    if (!paymentReminder) return 0
+    if (!paymentReminder.isCreditCardPayment) return paymentReminder.bill.amount
+    if (paymentAmountMode === 'minimum') {
+      const parsed = Number.parseFloat(paymentCustomAmount)
+      return Number.isFinite(parsed) ? parsed : Number.NaN
+    }
+    return paymentFullAmount
+  })()
+
+  function resetPaymentModal() {
+    setPaymentReminder(null)
+    setPaymentMethod('cash')
+    setPaymentCardId('')
+    setPaymentAmountMode('full')
+    setPaymentCustomAmount('')
+    setPaymentAmountError(null)
+  }
+
   function openCreate() {
     returnFocusRef.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -162,6 +200,15 @@ export function BillReminders({
     setAmountText(String(bill.amount))
     setFormError(null)
     setShowForm(true)
+  }
+
+  function applyBillerPreset(preset: PhBillerPreset) {
+    setForm((f) => ({
+      ...f,
+      name: preset.name,
+      category: preset.category,
+      ...(preset.suggestedDueDay !== undefined ? { dueDay: preset.suggestedDueDay } : {}),
+    }))
   }
 
   /** Close the inline form and hand focus back to where it came from. */
@@ -240,14 +287,46 @@ export function BillReminders({
       ? reminder.creditCardId
       : creditCards.find((card) => card.active)?.id ?? creditCards[0]?.id ?? ''
 
+    const statement = reminder.isCreditCardPayment && reminder.creditCardId
+      ? statements.find((item) => item.card.id === reminder.creditCardId)
+      : null
+    const fullAmount = statement?.statementBalance ?? reminder.bill.amount
+    const minimumAmount = statement
+      ? Math.min(fullAmount, Math.max(0, statement.minimumPayment))
+      : fullAmount
+
     setPaymentReminder(reminder)
     setPaymentMethod(isLoanBill ? 'cash' : shouldUseCard ? 'card' : 'cash')
     setPaymentCardId(shouldUseCard ? defaultCardId : '')
+    setPaymentAmountMode('full')
+    setPaymentCustomAmount(minimumAmount > 0 ? String(minimumAmount) : '')
+    setPaymentAmountError(null)
   }
 
   async function confirmPayment() {
     if (!paymentReminder) return
+
+    if (paymentReminder.isCreditCardPayment) {
+      if (!Number.isFinite(resolvedPaymentAmount) || resolvedPaymentAmount <= 0) {
+        setPaymentAmountError('Enter a payment amount greater than zero.')
+        return
+      }
+      if (resolvedPaymentAmount + 0.001 < paymentMinimumAmount) {
+        setPaymentAmountError(
+          `Payment must be at least the minimum (${formatMoney(paymentMinimumAmount)}).`,
+        )
+        return
+      }
+      if (resolvedPaymentAmount - paymentFullAmount > 0.001) {
+        setPaymentAmountError(
+          `Payment cannot exceed the statement balance (${formatMoney(paymentFullAmount)}).`,
+        )
+        return
+      }
+    }
+
     setPayingId(paymentReminder.bill.id)
+    setPaymentAmountError(null)
     try {
       if (paymentMethod === 'cash' && paymentReminder.payWithCreditCard) {
         const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`
@@ -264,10 +343,9 @@ export function BillReminders({
       await onMarkPaid(
         paymentReminder,
         paymentMethod === 'card' ? paymentCardId : undefined,
+        paymentReminder.isCreditCardPayment ? resolvedPaymentAmount : undefined,
       )
-      setPaymentReminder(null)
-      setPaymentMethod('cash')
-      setPaymentCardId('')
+      resetPaymentModal()
       requestAnimationFrame(() => returnFocusRef.current?.focus())
     } finally {
       setPayingId(null)
@@ -351,6 +429,24 @@ export function BillReminders({
       {showForm && (
         <form className="reminder-form" onSubmit={handleSubmit}>
           <h3>{editing ? 'Edit monthly bill' : 'New monthly bill'}</h3>
+          {!editing && (
+            <div className="biller-presets">
+              <p className="biller-presets__label">Local billers</p>
+              <ul className="biller-presets__chips">
+                {PH_BILLER_PRESETS.map((preset) => (
+                  <li key={preset.id}>
+                    <button
+                      type="button"
+                      className={`biller-preset-chip${form.name === preset.name ? ' active' : ''}`}
+                      onClick={() => applyBillerPreset(preset)}
+                    >
+                      {preset.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div className="form-row">
             <label>
               Name
@@ -601,60 +697,124 @@ export function BillReminders({
         ref={paymentDialogRef}
         className="payment-modal"
         aria-labelledby="payment-modal-heading"
-        onCancel={() => setPaymentReminder(null)}
+        onCancel={resetPaymentModal}
       >
         {paymentReminder && (
           <div className="payment-modal-content">
             <div className="payment-modal-header">
               <div className="payment-modal-bill">
-                <span className="payment-modal-bill-category">Payment method</span>
+                <span className="payment-modal-bill-category">
+                  {paymentReminder.isCreditCardPayment ? 'Credit card payment' : 'Payment method'}
+                </span>
                 <h3 id="payment-modal-heading" className="payment-modal-bill-name">
                   {paymentReminder.bill.name}
                 </h3>
               </div>
               <strong className="payment-modal-amount">
-                {formatMoney(paymentReminder.bill.amount)}
+                {formatMoney(
+                  Number.isFinite(resolvedPaymentAmount)
+                    ? resolvedPaymentAmount
+                    : paymentReminder.bill.amount,
+                )}
               </strong>
             </div>
 
-            <div className="payment-method-options">
-              <button
-                type="button"
-                className={`payment-method-card ${paymentMethod === 'cash' ? 'selected' : ''}`}
-                onClick={() => {
-                  setPaymentMethod('cash')
-                  setPaymentCardId('')
-                }}
-              >
-                <span className="payment-method-card-icon cash"><WalletCards className="payment-method-svg" aria-hidden="true" /></span>
-                <span className="payment-method-card-content">
-                  <span className="payment-method-card-title">Cash or debit</span>
-                  <span className="payment-method-card-subtitle">Pay from your bank or wallet</span>
-                </span>
-                {paymentMethod === 'cash' && <span className="payment-method-card-check"><Check className="payment-method-check-svg" aria-hidden="true" /></span>}
-              </button>
-              <button
-                type="button"
-                className={`payment-method-card ${paymentMethod === 'card' ? 'selected' : ''}`}
-                onClick={() => {
-                  if (paymentReminder?.bill.category !== 'Loan') {
-                    setPaymentMethod('card')
-                  }
-                }}
-                disabled={paymentReminder?.bill.category === 'Loan' || creditCards.length === 0}
-                aria-disabled={paymentReminder?.bill.category === 'Loan'}
-                title={paymentReminder?.bill.category === 'Loan' ? 'Loans cannot be paid with a credit card.' : undefined}
-              >
-                <span className="payment-method-card-icon card"><CreditCardIcon className="payment-method-svg" aria-hidden="true" /></span>
-                <span className="payment-method-card-content">
-                  <span className="payment-method-card-title">Credit card</span>
-                  <span className="payment-method-card-subtitle">Charge this bill to a card</span>
-                </span>
-                {paymentMethod === 'card' && <span className="payment-method-card-check"><Check className="payment-method-check-svg" aria-hidden="true" /></span>}
-              </button>
-            </div>
+            {paymentReminder.isCreditCardPayment ? (
+              <div className="payment-amount-options">
+                <p className="payment-card-select-label">How much to pay</p>
+                <div className="payment-amount-mode-row payment-amount-mode-row--two">
+                  <button
+                    type="button"
+                    className={`payment-amount-mode ${paymentAmountMode === 'full' ? 'selected' : ''}`}
+                    onClick={() => {
+                      setPaymentAmountMode('full')
+                      setPaymentAmountError(null)
+                    }}
+                  >
+                    <span className="payment-amount-mode-title">Pay full</span>
+                    <span className="payment-amount-mode-value">{formatMoney(paymentFullAmount)}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`payment-amount-mode ${paymentAmountMode === 'minimum' ? 'selected' : ''}`}
+                    onClick={() => {
+                      setPaymentAmountMode('minimum')
+                      setPaymentAmountError(null)
+                      setPaymentCustomAmount(String(paymentMinimumAmount || ''))
+                    }}
+                    disabled={paymentMinimumAmount <= 0}
+                  >
+                    <span className="payment-amount-mode-title">Minimum</span>
+                    <span className="payment-amount-mode-value">{formatMoney(paymentMinimumAmount)}</span>
+                  </button>
+                </div>
+                {paymentAmountMode === 'minimum' && (
+                  <label className="payment-custom-amount">
+                    Amount (₱)
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={paymentMinimumAmount}
+                      max={paymentFullAmount}
+                      step="0.01"
+                      value={paymentCustomAmount}
+                      onChange={(event) => {
+                        setPaymentCustomAmount(event.target.value)
+                        setPaymentAmountError(null)
+                      }}
+                      placeholder={String(paymentMinimumAmount)}
+                    />
+                    <span className="payment-amount-hint">
+                      Default is the minimum. You can raise it up to {formatMoney(paymentFullAmount)}.
+                    </span>
+                  </label>
+                )}
+                {paymentAmountError && (
+                  <p className="form-error" role="alert">
+                    {paymentAmountError}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="payment-method-options">
+                <button
+                  type="button"
+                  className={`payment-method-card ${paymentMethod === 'cash' ? 'selected' : ''}`}
+                  onClick={() => {
+                    setPaymentMethod('cash')
+                    setPaymentCardId('')
+                  }}
+                >
+                  <span className="payment-method-card-icon cash"><WalletCards className="payment-method-svg" aria-hidden="true" /></span>
+                  <span className="payment-method-card-content">
+                    <span className="payment-method-card-title">Cash or debit</span>
+                    <span className="payment-method-card-subtitle">Pay from your bank or wallet</span>
+                  </span>
+                  {paymentMethod === 'cash' && <span className="payment-method-card-check"><Check className="payment-method-check-svg" aria-hidden="true" /></span>}
+                </button>
+                <button
+                  type="button"
+                  className={`payment-method-card ${paymentMethod === 'card' ? 'selected' : ''}`}
+                  onClick={() => {
+                    if (paymentReminder?.bill.category !== 'Loan') {
+                      setPaymentMethod('card')
+                    }
+                  }}
+                  disabled={paymentReminder?.bill.category === 'Loan' || creditCards.length === 0}
+                  aria-disabled={paymentReminder?.bill.category === 'Loan'}
+                  title={paymentReminder?.bill.category === 'Loan' ? 'Loans cannot be paid with a credit card.' : undefined}
+                >
+                  <span className="payment-method-card-icon card"><CreditCardIcon className="payment-method-svg" aria-hidden="true" /></span>
+                  <span className="payment-method-card-content">
+                    <span className="payment-method-card-title">Credit card</span>
+                    <span className="payment-method-card-subtitle">Charge this bill to a card</span>
+                  </span>
+                  {paymentMethod === 'card' && <span className="payment-method-card-check"><Check className="payment-method-check-svg" aria-hidden="true" /></span>}
+                </button>
+              </div>
+            )}
 
-            {paymentMethod === 'card' && creditCards.length > 0 && (
+            {paymentMethod === 'card' && !paymentReminder.isCreditCardPayment && creditCards.length > 0 && (
               <div className="payment-card-select">
                 <p className="payment-card-select-label">Choose card</p>
                 <div className="payment-card-options">
@@ -679,10 +839,18 @@ export function BillReminders({
             )}
 
             <div className="form-actions">
-              <button type="button" className="btn-ghost" onClick={() => setPaymentReminder(null)}>
+              <button type="button" className="btn-ghost" onClick={resetPaymentModal}>
                 <X aria-hidden="true" /> Cancel
               </button>
-              <button type="button" className="btn-primary" disabled={payingId !== null || (paymentMethod === 'card' && !paymentCardId)} onClick={() => void confirmPayment()}>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={
+                  payingId !== null
+                  || (paymentMethod === 'card' && !paymentReminder.isCreditCardPayment && !paymentCardId)
+                }
+                onClick={() => void confirmPayment()}
+              >
                 {payingId ? 'Saving…' : 'Confirm payment'}
               </button>
             </div>

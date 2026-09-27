@@ -683,10 +683,10 @@ describe('cashback perk rules', () => {
       cashbackCap: 10000,
     } as CreditCard
 
-    expect(computeCashbackForTransaction(card, {
+    const transactions = [{
       id: 'tx-start-1',
       userId: 'user-1',
-      type: 'expense',
+      type: 'expense' as const,
       amount: 1000,
       category: 'Groceries',
       description: 'Groceries',
@@ -694,7 +694,59 @@ describe('cashback perk rules', () => {
       createdAt: '2024-01-10T00:00:00Z',
       creditCardId: 'card-starting-balance',
       creditCardPayment: false,
-    })).toBe(10)
+    }]
+
+    const statement = computeStatement(card, transactions, 2024, 0)
+    expect(statement.cashbackEarned).toBe(1265)
+    expect(statement.availableCashback).toBe(1265)
+  })
+
+  it('stacks cashback from earlier statement periods', () => {
+    const card = {
+      id: 'card-stack',
+      userId: 'user-1',
+      name: 'BPI Amore',
+      lastFour: '2222',
+      limit: 200000,
+      statementDay: 15,
+      active: true,
+      createdAt: '2024-01-01T00:00:00Z',
+      cashbackRate: 1,
+      cashbackRules: [{ id: 'default', rate: 1, categories: ['*'] }],
+      cashbackMinSpend: 0,
+    } as CreditCard
+
+    const transactions = [
+      {
+        id: 'tx-jan',
+        userId: 'user-1',
+        type: 'expense' as const,
+        amount: 5000,
+        category: 'Groceries',
+        description: 'January spend',
+        occurredAt: '2024-01-10T00:00:00Z',
+        createdAt: '2024-01-10T00:00:00Z',
+        creditCardId: 'card-stack',
+        creditCardPayment: false,
+      },
+      {
+        id: 'tx-feb',
+        userId: 'user-1',
+        type: 'expense' as const,
+        amount: 3000,
+        category: 'Groceries',
+        description: 'February spend',
+        occurredAt: '2024-02-10T00:00:00Z',
+        createdAt: '2024-02-10T00:00:00Z',
+        creditCardId: 'card-stack',
+        creditCardPayment: false,
+      },
+    ]
+
+    const january = computeStatement(card, transactions, 2024, 0)
+    const february = computeStatement(card, transactions, 2024, 1)
+    expect(january.availableCashback).toBe(50)
+    expect(february.availableCashback).toBe(80)
   })
 
   it('reduces available cashback by redeemed amount', () => {

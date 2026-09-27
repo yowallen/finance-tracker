@@ -1,10 +1,11 @@
-import { CirclePlus, CreditCard, ListFilter, ReceiptText } from 'lucide-react'
+import { CirclePlus, CreditCard, ListFilter, ReceiptText, Upload } from 'lucide-react'
 
 interface QuickActionsProps {
   onAddTransaction: () => void
   onReviewBills: () => void
   onOpenCreditCards: () => void
   onOpenHistory: () => void
+  onImportCsv: () => void
 }
 
 export function QuickActions({
@@ -12,6 +13,7 @@ export function QuickActions({
   onReviewBills,
   onOpenCreditCards,
   onOpenHistory,
+  onImportCsv,
 }: QuickActionsProps) {
   const actions = [
     {
@@ -27,6 +29,13 @@ export function QuickActions({
       onClick: onReviewBills,
       strong: false,
       ariaLabel: 'Review bills',
+    },
+    {
+      label: 'Import CSV',
+      icon: Upload,
+      onClick: onImportCsv,
+      strong: false,
+      ariaLabel: 'Import transactions from CSV',
     },
     {
       label: 'History',

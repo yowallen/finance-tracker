@@ -11,6 +11,7 @@ import {
   DollarSign,
   Tag,
   MoreHorizontal,
+  Upload,
 } from 'lucide-react'
 import type { Transaction } from '../types/transaction'
 import type { CreditCard } from '../types/creditCard'
@@ -32,6 +33,7 @@ interface TransactionListProps {
   onEdit: (tx: Transaction) => void
   onDelete: (id: string) => Promise<void>
   onViewAll: () => void
+  onImportCsv?: () => void
   cardById?: Map<string, CreditCard>
 }
 
@@ -498,6 +500,7 @@ export function TransactionList({
   onEdit,
   onDelete,
   onViewAll,
+  onImportCsv,
   cardById,
 }: TransactionListProps) {
   const preview = useMemo(() => {
@@ -520,11 +523,19 @@ export function TransactionList({
           </h2>
           <p className="tx-list-count">{countLabel}</p>
         </div>
-        {transactions.length > 0 && (
-          <button type="button" className="text-btn tx-view-all" onClick={onViewAll}>
-            {viewAllLabel}
-          </button>
-        )}
+        <div className="tx-preview-actions">
+          {onImportCsv && (
+            <button type="button" className="text-btn" onClick={onImportCsv}>
+              <Upload aria-hidden="true" size={14} />
+              Import CSV
+            </button>
+          )}
+          {transactions.length > 0 && (
+            <button type="button" className="text-btn tx-view-all" onClick={onViewAll}>
+              {viewAllLabel}
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? (

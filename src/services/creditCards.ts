@@ -808,6 +808,59 @@ function getTransactionHistory(
 }
 
 /**
+ * Cumulative cashback for a card through a statement window.
+ * - seed: optional pre-tracking balance on the card
+ * - prior: awarded cashback on charges before this period
+ * - period: awarded this statement (capped by cashbackCap only for the period)
+ * Available = seed + prior + period − redeemed (period cap is not reapplied to the wallet total).
+ */
+export function summarizeCardCashback(
+  card: CreditCard,
+  allTransactions: Transaction[],
+  periodStart: Date,
+  periodTransactions: Transaction[],
+): {
+  cashbackEligibleSpend: number
+  cashbackPeriodEarned: number
+  cashbackStartingBalance: number
+  cashbackEarned: number
+  cashbackRedeemed: number
+  availableCashback: number
+} {
+  const seed = typeof card.cashbackStartingBalance === 'number' ? card.cashbackStartingBalance : 0
+  const statementCap = typeof card.cashbackCap === 'number' ? card.cashbackCap : Number.POSITIVE_INFINITY
+  const periodStartMs = periodStart.getTime()
+
+  const memberPeriodTransactions = periodTransactions.filter(
+    (tx) => !tx.creditCardId || tx.creditCardId === card.id,
+  )
+
+  const priorEarned = allTransactions.reduce((sum, tx) => {
+    if (tx.creditCardId !== card.id) return sum
+    const occurred = new Date(tx.occurredAt).getTime()
+    if (!Number.isFinite(occurred) || occurred >= periodStartMs) return sum
+    return sum + awardedCashbackForTransaction(card, tx, allTransactions)
+  }, 0)
+
+  const uncappedPeriodEarned = memberPeriodTransactions.reduce(
+    (sum, tx) => sum + awardedCashbackForTransaction(card, tx, allTransactions),
+    0,
+  )
+  const cashbackPeriodEarned = Math.min(uncappedPeriodEarned, statementCap)
+  const cashbackEarned = seed + priorEarned + cashbackPeriodEarned
+  const cashbackRedeemed = typeof card.cashbackRedeemed === 'number' ? Math.max(0, card.cashbackRedeemed) : 0
+
+  return {
+    cashbackEligibleSpend: getCashbackEligibleSpend(card, memberPeriodTransactions),
+    cashbackPeriodEarned,
+    cashbackStartingBalance: seed,
+    cashbackEarned,
+    cashbackRedeemed,
+    availableCashback: Math.max(0, cashbackEarned - cashbackRedeemed),
+  }
+}
+
+/**
  * Compute a card's statement for a given month.
  */
 export function computeStatement(
@@ -816,7 +869,7 @@ export function computeStatement(
   year: number,
   month: number,
 ): CreditCardStatement {
-  const { statementDate, dueDate } = computeStatementPeriod(card, year, month)
+  const { statementDate, dueDate, startDate } = computeStatementPeriod(card, year, month)
   const periodTransactions = getStatementTransactions(card, allTransactions, year, month)
   const transactionHistory = getTransactionHistory(card, allTransactions, year, month)
 
@@ -845,18 +898,7 @@ export function computeStatement(
       : Math.min(statementBalance, Math.max(statementBalance * 0.03, 100))
   const availableCredit = Math.max(0, card.limit - outstandingBalance)
   const isPaid = statementBalance <= 0
-  const cashbackEligibleSpend = getCashbackEligibleSpend(card, periodTransactions)
-  const uncappedPeriodEarned = periodTransactions.reduce(
-    (sum, tx) => sum + awardedCashbackForTransaction(card, tx, allTransactions),
-    0,
-  )
-  const statementCap = typeof card.cashbackCap === 'number' ? card.cashbackCap : Number.POSITIVE_INFINITY
-  const cashbackPeriodEarned = Math.min(uncappedPeriodEarned, statementCap)
-  const cashbackStartingBalance = typeof card.cashbackStartingBalance === 'number' ? card.cashbackStartingBalance : 0
-  const cashbackCap = typeof card.cashbackCap === 'number' ? card.cashbackCap : Number.POSITIVE_INFINITY
-  const cashbackEarned = Math.min(cashbackStartingBalance + cashbackPeriodEarned, cashbackCap)
-  const cashbackRedeemed = typeof card.cashbackRedeemed === 'number' ? Math.max(0, card.cashbackRedeemed) : 0
-  const availableCashback = Math.max(0, cashbackEarned - cashbackRedeemed)
+  const cashback = summarizeCardCashback(card, allTransactions, startDate, periodTransactions)
   const pointsEarned = computePointsEarned(card, periodTransactions)
 
   return {
@@ -872,10 +914,10 @@ export function computeStatement(
     minimumPayment,
     availableCredit,
     isPaid,
-    cashbackEligibleSpend,
-    cashbackEarned,
-    cashbackRedeemed,
-    availableCashback,
+    cashbackEligibleSpend: cashback.cashbackEligibleSpend,
+    cashbackEarned: cashback.cashbackEarned,
+    cashbackRedeemed: cashback.cashbackRedeemed,
+    availableCashback: cashback.availableCashback,
     pointsEarned,
     transactions: periodTransactions,
     transactionHistory,
@@ -922,7 +964,7 @@ export function computePoolStatement(
   }
 
   const primary = pool.primary
-  const { statementDate, dueDate } = computeStatementPeriod(primary, year, month)
+  const { statementDate, dueDate, startDate } = computeStatementPeriod(primary, year, month)
   const periodTransactions = transactionsForPool(pool, allTransactions, year, month)
   const ids = poolCardIds(pool)
   const transactionHistory = allTransactions
@@ -946,7 +988,6 @@ export function computePoolStatement(
     }
   }
 
-  const { startDate } = computeStatementPeriod(primary, year, month)
   const cutoff = startDate.getTime()
   let previousBalance = 0
   for (const tx of allTransactions) {
@@ -976,16 +1017,9 @@ export function computePoolStatement(
   const availableCredit = Math.max(0, primary.limit - outstandingBalance)
   const memberCashback = pool.cards.map((member) => {
     const memberTransactions = periodTransactions.filter((tx) => tx.creditCardId === member.id)
-    const earned = memberTransactions.reduce(
-      (sum, tx) => sum + awardedCashbackForTransaction(member, tx, allTransactions),
-      0,
-    )
-    const redeemed = typeof member.cashbackRedeemed === 'number' ? Math.max(0, member.cashbackRedeemed) : 0
+    const totals = summarizeCardCashback(member, allTransactions, startDate, memberTransactions)
     return {
-      earned,
-      redeemed,
-      available: Math.max(0, earned - redeemed),
-      eligible: getCashbackEligibleSpend(member, memberTransactions),
+      ...totals,
       points: computePointsEarned(member, memberTransactions),
     }
   })
@@ -1003,10 +1037,10 @@ export function computePoolStatement(
     minimumPayment,
     availableCredit,
     isPaid: statementBalance <= 0,
-    cashbackEligibleSpend: memberCashback.reduce((sum, item) => sum + item.eligible, 0),
-    cashbackEarned: memberCashback.reduce((sum, item) => sum + item.earned, 0),
-    cashbackRedeemed: memberCashback.reduce((sum, item) => sum + item.redeemed, 0),
-    availableCashback: memberCashback.reduce((sum, item) => sum + item.available, 0),
+    cashbackEligibleSpend: memberCashback.reduce((sum, item) => sum + item.cashbackEligibleSpend, 0),
+    cashbackEarned: memberCashback.reduce((sum, item) => sum + item.cashbackEarned, 0),
+    cashbackRedeemed: memberCashback.reduce((sum, item) => sum + item.cashbackRedeemed, 0),
+    availableCashback: memberCashback.reduce((sum, item) => sum + item.availableCashback, 0),
     pointsEarned: memberCashback.reduce((sum, item) => sum + item.points, 0),
     transactions: periodTransactions,
     transactionHistory,

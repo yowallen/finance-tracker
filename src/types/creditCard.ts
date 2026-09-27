@@ -95,7 +95,7 @@ export interface CreditCard {
   cashbackYearlyCap?: number
   /** When true, cashback is calculated only from complete 1,000-peso spend blocks. */
   cashbackUsesFullThousandBlocks?: boolean
-  /** Cashback already available at the start of the current statement period. */
+  /** Cashback already available before tracked transactions (manual seed). */
   cashbackStartingBalance?: number
   /** Cashback already redeemed and no longer available to spend. */
   cashbackRedeemed?: number

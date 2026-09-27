@@ -25,6 +25,8 @@ export interface Transaction {
   isAnnualFee?: boolean
   /** Required when type is savings. */
   savingsDirection?: SavingsDirection
+  /** Fingerprint for CSV/SMS import dedupe (source + date + amount + description). */
+  importKey?: string
 }
 
 export interface TransactionInput {
@@ -39,6 +41,7 @@ export interface TransactionInput {
   creditCardPayment?: boolean
   isAnnualFee?: boolean
   savingsDirection?: SavingsDirection
+  importKey?: string
 }
 
 export interface MonthlySummary {

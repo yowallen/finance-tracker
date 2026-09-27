@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BookMarked, Compass, LogOut } from 'lucide-react'
 import type { User } from 'firebase/auth'
+import { CsvImportSheet } from './CsvImportSheet'
+import { PaluwaganSection } from './Paluwagan'
 import { AnalyticsSection } from './AnalyticsSection'
 import { BillReminders } from './BillReminders'
 import { CreditCards } from './CreditCards'
@@ -8,6 +10,9 @@ import { FinanceCalendar } from './FinanceCalendar'
 import { LoadingState } from './LoadingState'
 import { MobileBottomNav } from './MobileBottomNav'
 import { MonthSelector } from './MonthSelector'
+import { PaydayBudget } from './PaydayBudget'
+import { usePaydayBudget } from '../hooks/usePaydayBudget'
+import { usePaluwagan } from '../hooks/usePaluwagan'
 import { MonthSummary } from './MonthSummary'
 import { QuickActions } from './QuickActions'
 import { SavingsGoals } from './SavingsGoals'
@@ -41,6 +46,7 @@ import type { SavingsGoal, SavingsGoalInput } from '../types/savingsGoal'
 import type { ThemeMode } from '../lib/theme'
 import type { Transaction, TransactionInput } from '../types/transaction'
 import { formatMoney } from '../lib/format'
+import { isFeatureEnabled } from '../lib/featureFlags'
 import { scrollToSection } from '../lib/scrollToSection'
 
 /** Heading id to refocus after an Undo restores a deleted item. */
@@ -165,6 +171,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
   const [editing, setEditing] = useState<Transaction | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [csvImportOpen, setCsvImportOpen] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
   const [tourSession, setTourSession] = useState(0)
   const [saving, setSaving] = useState(false)
@@ -177,9 +184,11 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
     transactions,
     allTransactions,
     summary,
+    existingImportKeys,
     loading: txLoading,
     error: txError,
     add,
+    addBatch,
     update,
     remove,
   } = useTransactions(userId, year, month)
@@ -221,6 +230,28 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
     remove: removeBill,
   } = useRecurringBills(userId, year, month, transactions, cards, statements, allTransactions)
 
+  const paydayBudgetEnabled = isFeatureEnabled('paydayBudget')
+  const paluwaganEnabled = isFeatureEnabled('paluwagan')
+
+  const { settings: paydaySettings, periods: paydayPeriods, save: savePayday } = usePaydayBudget(
+    userId,
+    year,
+    month,
+    allTransactions,
+    reminders,
+    paydayBudgetEnabled,
+  )
+
+  const {
+    circles: paluwaganCircles,
+    loading: paluwaganLoading,
+    error: paluwaganError,
+    add: addPaluwagan,
+    update: updatePaluwagan,
+    remove: removePaluwagan,
+    setContributions: setPaluwaganContributions,
+  } = usePaluwagan(userId, paluwaganEnabled)
+
   const dataLoading = txLoading || billLoading || goalsLoading
   const isFreshAccount = !dataLoading
     && allTransactions.length === 0
@@ -257,6 +288,16 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
         .slice(0, 3),
     [reminders],
   )
+
+  const activePayday = useMemo(
+    () => paydayPeriods.find((period) => period.active) ?? null,
+    [paydayPeriods],
+  )
+
+  const showSafeSpendChip =
+    paydayBudgetEnabled &&
+    activePayday !== null &&
+    (paydaySettings.allowance > 0 || paydayPeriods.length > 0)
 
   const attentionTone = attentionReminders.some((item) => item.status === 'overdue')
     ? 'overdue'
@@ -435,23 +476,31 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
     }
   }
 
-  async function handleMarkPaid(reminder: BillReminder, paymentCreditCardId?: string) {
+  async function handleMarkPaid(
+    reminder: BillReminder,
+    paymentCreditCardId?: string,
+    amount?: number,
+  ) {
     const day = isCurrentMonth ? now.getDate() : reminder.dueDate.getDate()
     const occurred = new Date(year, month, day, 12, 0, 0, 0)
 
     // Check if this is a credit card payment bill
     const isCreditCardPayment = (reminder as BillReminder & { isCreditCardPayment?: boolean }).isCreditCardPayment
     const creditCardId = (reminder as BillReminder & { creditCardId?: string }).creditCardId
+    const paymentAmount = amount ?? reminder.bill.amount
 
     let transaction: TransactionInput
 
     if (isCreditCardPayment && creditCardId) {
       const payee = reminder.bill.notes || `•••• ${creditCardId.slice(-4)}`
+      const isPartial = paymentAmount + 0.001 < reminder.bill.amount
       transaction = {
         type: 'bill',
-        amount: reminder.bill.amount,
+        amount: paymentAmount,
         category: 'Credit card payment',
-        description: `Payment to ${payee}`,
+        description: isPartial
+          ? `Payment to ${payee} (partial)`
+          : `Payment to ${payee}`,
         occurredAt: occurred.toISOString(),
         creditCardId,
         creditCardPayment: true,
@@ -460,7 +509,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
       // Regular recurring bill payment
       transaction = {
         type: 'bill',
-        amount: reminder.bill.amount,
+        amount: paymentAmount,
         category: reminder.bill.category,
         description: reminder.bill.name,
         occurredAt: occurred.toISOString(),
@@ -612,6 +661,31 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
               onNavigateToCards={() => scrollToSection('credit-cards')}
             />
 
+            {paydayBudgetEnabled && (
+              <PaydayBudget
+                settings={paydaySettings}
+                periods={paydayPeriods}
+                onSave={savePayday}
+              />
+            )}
+
+            {showSafeSpendChip && activePayday && (
+              <button
+                type="button"
+                className={`safe-spend-chip ${activePayday.left < 0 ? 'negative' : ''}`}
+                onClick={() => scrollToSection('payday')}
+              >
+                <span className="safe-spend-chip__label">Safe to spend</span>
+                <strong>{formatMoney(activePayday.left)}</strong>
+                {activePayday.perDay !== null && (
+                  <small>
+                    {formatMoney(activePayday.perDay)}/day · {activePayday.daysRemaining}{' '}
+                    {activePayday.daysRemaining === 1 ? 'day' : 'days'} left
+                  </small>
+                )}
+              </button>
+            )}
+
             {txError && (
               <p className="banner-error" role="alert">
                 {txError}
@@ -650,6 +724,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
               onReviewBills={() => scrollToSection('reminders')}
               onOpenHistory={openHistory}
               onOpenCreditCards={() => scrollToSection('credit-cards')}
+              onImportCsv={() => setCsvImportOpen(true)}
             />
 
             <FinanceCalendar 
@@ -685,6 +760,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
               onEdit={(tx) => openTransactionSheet(tx)}
               onDelete={handleDelete}
               onViewAll={openHistory}
+              onImportCsv={() => setCsvImportOpen(true)}
               cardById={cardById}
             />
 
@@ -727,6 +803,18 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
               onDelete={handleRemoveGoal}
             />
 
+            {paluwaganEnabled && (
+              <PaluwaganSection
+                circles={paluwaganCircles}
+                loading={paluwaganLoading}
+                error={paluwaganError}
+                onAdd={addPaluwagan}
+                onUpdate={updatePaluwagan}
+                onDelete={removePaluwagan}
+                onSetContributions={setPaluwaganContributions}
+              />
+            )}
+
             <AnalyticsSection
               year={year}
               month={month}
@@ -751,6 +839,13 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
                 onCancelEdit={closeTransactionSheet}
               />
             </TransactionSheet>
+
+            <CsvImportSheet
+              open={csvImportOpen}
+              existingImportKeys={existingImportKeys}
+              onClose={() => setCsvImportOpen(false)}
+              onImport={addBatch}
+            />
 
             <MobileBottomNav
               onGoOverview={() => scrollToSection('overview')}

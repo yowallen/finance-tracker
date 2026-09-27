@@ -4304,6 +4304,305 @@ html[data-theme='dark'] .undo-toast-undo:hover {
   gap: 0.28rem;
 }
 
+.payday-budget {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.35rem 1.4rem;
+  box-shadow: var(--elevation-1);
+}
+
+.payday-budget__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.85rem;
+}
+
+.payday-budget__note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.payday-schedule {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.payday-schedule__option {
+  min-height: 2.75rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.payday-schedule__option.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.payday-custom,
+.payday-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+  align-items: flex-end;
+}
+
+.payday-custom label,
+.payday-controls label {
+  min-width: 10rem;
+}
+
+.payday-rollover {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+}
+
+.payday-rollover input {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.payday-periods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.payday-period {
+  flex: 1 1 16rem;
+  min-width: min(100%, 16rem);
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.payday-period.active {
+  border-color: var(--accent);
+}
+
+.payday-safe-spend {
+  margin-bottom: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.payday-safe-spend.negative {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
+.payday-safe-spend__label {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.payday-safe-spend__amount {
+  margin: 0.15rem 0 0;
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.payday-safe-spend.negative .payday-safe-spend__amount {
+  color: var(--danger);
+}
+
+.payday-safe-spend__daily {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+
+.safe-spend-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.65rem;
+  width: 100%;
+  margin: 0 0 0.75rem;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: inherit;
+  cursor: pointer;
+}
+
+.safe-spend-chip.negative {
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.safe-spend-chip__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+  width: 100%;
+}
+
+.safe-spend-chip strong {
+  font-size: 1.2rem;
+  color: var(--accent);
+}
+
+.safe-spend-chip.negative strong {
+  color: var(--danger);
+}
+
+.safe-spend-chip small {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.biller-presets {
+  margin-bottom: 0.85rem;
+}
+
+.biller-presets__label {
+  margin: 0 0 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.biller-presets__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.biller-preset-chip {
+  min-height: 2rem;
+  padding: 0.25rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.biller-preset-chip:hover,
+.biller-preset-chip.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.payday-period header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.payday-period h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.payday-period__badge {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.payday-period dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem 0.75rem;
+  margin: 0;
+}
+
+.payday-period dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.payday-period dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.payday-period dd.negative {
+  color: var(--danger);
+}
+
+.payday-payslip {
+  margin-top: 0.85rem;
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.payday-payslip p {
+  margin: 0 0 0.65rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.payday-payslip dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem 0.75rem;
+  margin: 0;
+}
+
+.payday-payslip dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.payday-payslip dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.payday-use-net {
+  margin-top: 0.75rem;
+  min-height: 2.75rem;
+  padding: 0.45rem 0.9rem;
+}
+
+.payday-period__daily {
+  margin: 0.7rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
 .cc-history-card {
   align-self: center;
   width: fit-content;
@@ -5777,6 +6076,88 @@ html[data-theme='dark'] .undo-toast-undo:hover {
   flex-shrink: 0;
 }
 
+.payment-amount-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.payment-amount-mode-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.payment-amount-mode-row--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.payment-amount-mode {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  min-height: 4rem;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--md-sys-color-surface-container-low);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.payment-amount-mode:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.payment-amount-mode.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.payment-amount-mode:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.payment-amount-mode-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.payment-amount-mode-value {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.payment-custom-amount {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.payment-custom-amount input {
+  min-height: 2.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+}
+
+.payment-amount-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .payment-modal-divider {
   height: 1px;
   background: var(--line);
@@ -6437,6 +6818,20 @@ html[data-theme='dark'] .undo-toast-undo:hover {
   margin-bottom: 1rem;
 }
 
+.tx-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.tx-preview-actions .text-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
 .tx-preview-heading h2 {
   margin-bottom: 0.15rem;
 }
@@ -6534,4 +6929,275 @@ html[data-theme='dark'] .undo-toast-undo:hover {
     opacity: 1;
     transform: translateX(0);
   }
+}
+
+.csv-import-sheet {
+  max-height: min(92vh, 44rem);
+  overflow: auto;
+}
+
+.csv-import-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 0 1.1rem 1.25rem;
+}
+
+.csv-import-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.csv-import-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: fit-content;
+  cursor: pointer;
+}
+
+.csv-import-paste {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.csv-import-paste textarea {
+  width: 100%;
+  min-height: 6rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  font-weight: 400;
+  resize: vertical;
+}
+
+.csv-import-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+
+.csv-import-toolbar label,
+.csv-column-map label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.csv-column-map {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 0.65rem;
+}
+
+.csv-import-preview__meta {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.csv-import-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 16rem;
+  overflow: auto;
+}
+
+.csv-import-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.45rem 0.55rem;
+  align-items: start;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.csv-import-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.csv-import-row__main span {
+  font-weight: 600;
+  font-size: 0.88rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.csv-import-row__main small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.csv-import-row select {
+  grid-column: 2;
+  min-height: 2.25rem;
+}
+
+.csv-import-success {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.paluwagan-section {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.35rem 1.4rem;
+  box-shadow: var(--elevation-1);
+}
+
+.paluwagan-form {
+  margin-bottom: 1rem;
+}
+
+.paluwagan-members-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0.5rem 0;
+}
+
+.paluwagan-member-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.paluwagan-member-order {
+  flex-shrink: 0;
+  width: 1.5rem;
+  text-align: center;
+  font-weight: 700;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.paluwagan-member-row input {
+  flex: 1;
+}
+
+.paluwagan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.paluwagan-card {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.paluwagan-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.paluwagan-card__header h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1rem;
+}
+
+.paluwagan-card__header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.paluwagan-card__actions {
+  display: flex;
+  gap: 0.15rem;
+}
+
+.paluwagan-card__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem 0.75rem;
+  margin: 0 0 0.75rem;
+}
+
+.paluwagan-card__stats dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.paluwagan-card__stats dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.paluwagan-member-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.paluwagan-member-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+}
+
+.paluwagan-member-list li.recipient {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: var(--accent-soft);
+}
+
+.paluwagan-member-list li span {
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.paluwagan-member-list li small {
+  display: block;
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.paluwagan-paid-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 2.25rem;
+  font-size: 0.78rem;
+}
+
+.paluwagan-paid-btn.paid {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
 }

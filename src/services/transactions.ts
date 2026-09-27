@@ -82,6 +82,7 @@ function mapDoc(
     ...(type === 'savings'
       ? { savingsDirection: savingsDirection as SavingsDirection }
       : {}),
+    ...(typeof data.importKey === 'string' ? { importKey: data.importKey } : {}),
   }
 }
 
@@ -200,10 +201,75 @@ export async function createTransaction(
   if (input.type === 'savings' && input.savingsDirection) {
     payload.savingsDirection = input.savingsDirection
   }
+  if (input.importKey) {
+    payload.importKey = input.importKey
+  }
 
   const ref = await fs.addDoc(fs.collection(db, COLLECTION), payload)
 
   return ref.id
+}
+
+/** Create many transactions in Firestore batches (max ~450 writes per commit). */
+export async function createTransactionsBatch(
+  userId: string,
+  inputs: TransactionInput[],
+  existingImportKeys: Set<string> = new Set(),
+): Promise<{ created: number; skipped: number }> {
+  if (inputs.length === 0) return { created: 0, skipped: 0 }
+
+  const { fs, db } = await getFirestoreClient()
+  const seen = new Set(existingImportKeys)
+  let created = 0
+  let skipped = 0
+  let batch = fs.writeBatch(db)
+  let ops = 0
+
+  async function flush() {
+    if (ops === 0) return
+    await batch.commit()
+    batch = fs.writeBatch(db)
+    ops = 0
+  }
+
+  for (const input of inputs) {
+    if (input.importKey && seen.has(input.importKey)) {
+      skipped += 1
+      continue
+    }
+    validateInput(input)
+    const occurred = new Date(input.occurredAt)
+    const payload: Record<string, unknown> = {
+      userId,
+      type: input.type,
+      amount: input.amount,
+      category: input.category.trim(),
+      description: input.description.trim(),
+      occurredAt: fs.Timestamp.fromDate(occurred),
+      createdAt: fs.serverTimestamp(),
+      cashbackEarned: typeof input.cashbackEarned === 'number' ? input.cashbackEarned : 0,
+    }
+    if (input.recurringBillId) payload.recurringBillId = input.recurringBillId
+    if (input.creditCardId) payload.creditCardId = input.creditCardId
+    if (input.creditCardPayment) payload.creditCardPayment = true
+    if (typeof input.isAnnualFee === 'boolean') payload.isAnnualFee = input.isAnnualFee
+    if (input.type === 'savings' && input.savingsDirection) {
+      payload.savingsDirection = input.savingsDirection
+    }
+    if (input.importKey) {
+      payload.importKey = input.importKey
+      seen.add(input.importKey)
+    }
+
+    const ref = fs.doc(fs.collection(db, COLLECTION))
+    batch.set(ref, payload)
+    ops += 1
+    created += 1
+    if (ops >= 450) await flush()
+  }
+
+  await flush()
+  return { created, skipped }
 }
 
 export async function updateTransaction(

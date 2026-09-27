@@ -23,7 +23,7 @@ import { LoadingState } from './LoadingState'
 import { InterestProjection as InterestProjectionComponent } from './InterestProjection'
 import { UtilizationChart } from './UtilizationChart'
 import { formatDate, formatMoney } from '../lib/format'
-import { computePointsForTransaction, getCurrentCashbackForTransaction, getNextBillingCycleBalance, groupCreditCards, syncSharedLimitMembership } from '../services/creditCards'
+import { computePointsForTransaction, computeStatementPeriod, getCurrentCashbackForTransaction, getNextBillingCycleBalance, groupCreditCards, summarizeCardCashback, syncSharedLimitMembership } from '../services/creditCards'
 import type { Transaction } from '../types/transaction'
 import type {
   CreditCard,
@@ -95,6 +95,8 @@ export function CreditCards({
   loading,
   error,
   isCurrentMonth = true,
+  year,
+  month,
   onAdd,
   onUpdate,
   onDelete,
@@ -566,10 +568,13 @@ export function CreditCards({
                             (sum, tx) => sum + computePointsForTransaction(member, tx),
                             0,
                           )
-                          const memberCashback = memberTransactions.reduce(
-                            (sum, tx) => sum + getCurrentCashbackForTransaction(member, tx, allTransactions),
-                            0,
-                          )
+                          const { startDate } = computeStatementPeriod(member, year, month)
+                          const memberCashback = summarizeCardCashback(
+                            member,
+                            allTransactions,
+                            startDate,
+                            memberTransactions,
+                          ).availableCashback
                           if (member.rewardType === 'points') {
                             return (
                               <div className="cc-card-stat" key={member.id}>

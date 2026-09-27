@@ -62,5 +62,23 @@ service cloud.firestore {
         && request.auth.uid == poolId
         && resource.data.userId == request.auth.uid;
     }
+
+    match /paydayBudgets/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn()
+        && request.auth.uid == userId
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /paluwagans/{paluwaganId} {
+      allow read: if canRead();
+      allow create: if isCreatingOwn();
+      allow update: if keepsOwner();
+      allow delete: if isOwner();
+    }
   }
 }

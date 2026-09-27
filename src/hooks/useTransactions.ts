@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   computeMonthlySummary,
   createTransaction,
+  createTransactionsBatch,
   deleteTransaction,
   filterByMonth,
   subscribeTransactions,
@@ -47,9 +48,24 @@ export function useTransactions(userId: string | undefined, year: number, month:
     [monthly],
   )
 
+  const existingImportKeys = useMemo(() => {
+    const keys = new Set<string>()
+    for (const tx of visibleAll) {
+      if (tx.importKey) keys.add(tx.importKey)
+    }
+    return keys
+  }, [visibleAll])
+
   async function add(input: TransactionInput): Promise<void> {
     if (!userId) throw new Error('You must be signed in.')
     await createTransaction(userId, input)
+  }
+
+  async function addBatch(
+    inputs: TransactionInput[],
+  ): Promise<{ created: number; skipped: number }> {
+    if (!userId) throw new Error('You must be signed in.')
+    return createTransactionsBatch(userId, inputs, existingImportKeys)
   }
 
   async function update(id: string, input: TransactionInput): Promise<void> {
@@ -64,9 +80,11 @@ export function useTransactions(userId: string | undefined, year: number, month:
     transactions: monthly,
     allTransactions: visibleAll,
     summary,
+    existingImportKeys,
     loading: userId ? loading : false,
     error,
     add,
+    addBatch,
     update,
     remove,
   }
