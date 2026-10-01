@@ -786,6 +786,62 @@ describe('cashback perk rules', () => {
   })
 })
 
+describe('interest grace period', () => {
+  const card: CreditCard = {
+    id: 'amore',
+    userId: 'user-1',
+    name: 'BPI Amore',
+    lastFour: '5877',
+    limit: 50000,
+    statementDay: 16,
+    dueDay: 5,
+    apr: 36,
+    active: true,
+    createdAt: '2024-01-01T00:00:00Z',
+  }
+
+  function tx(id: string, amount: number, occurredAt: string, payment = false): Transaction {
+    return {
+      id,
+      userId: 'user-1',
+      type: payment ? 'bill' : 'expense',
+      amount,
+      category: payment ? 'Credit Card' : 'Food',
+      description: id,
+      occurredAt,
+      createdAt: occurredAt,
+      creditCardId: card.id,
+      ...(payment ? { creditCardPayment: true } : {}),
+    }
+  }
+
+  const septemberCharge = tx('sep-charge', 3904.5, '2026-09-10T12:00:00')
+  const octoberCharge = tx('oct-charge', 1000, '2026-10-01T12:00:00')
+
+  it('charges no interest when the previous statement is paid in full before its due date', () => {
+    const payment = tx('payment', 3904.5, '2026-09-30T12:00:00', true)
+    const statement = computeStatement(card, [septemberCharge, octoberCharge, payment], 2026, 9)
+
+    expect(statement.previousBalance).toBe(3904.5)
+    expect(statement.interestCharged).toBe(0)
+    expect(statement.statementBalance).toBe(1000)
+  })
+
+  it('charges interest when only part of the previous statement is paid', () => {
+    const payment = tx('payment', 1000, '2026-09-30T12:00:00', true)
+    const statement = computeStatement(card, [septemberCharge, octoberCharge, payment], 2026, 9)
+
+    expect(statement.interestCharged).toBeGreaterThan(0)
+  })
+
+  it('charges interest when the full payment arrives after the due date', () => {
+    const payment = tx('payment', 3904.5, '2026-10-08T12:00:00', true)
+    const statement = computeStatement(card, [septemberCharge, octoberCharge, payment], 2026, 9)
+
+    expect(statement.interestCharged).toBeGreaterThan(0)
+  })
+})
+
 describe('shared credit limit', () => {
   function card(partial: Partial<CreditCard> & Pick<CreditCard, 'id' | 'name'>): CreditCard {
     return {
@@ -871,6 +927,19 @@ describe('shared credit limit', () => {
     const statement = computePoolStatement(pool, [grocery], 2026, 8)
     expect(statement.cashbackEarned).toBe(320)
     expect(statement.transactions.find((tx) => tx.id === 'grocery')?.creditCardId).toBe('amore')
+  })
+
+  it('waives interest on a shared line when the previous statement was paid by its due date', () => {
+    const rewardsWithApr = { ...rewards, apr: 36, statementDay: 16, dueDay: 5, dueDayOffset: undefined }
+    const amoreWithApr = { ...amore, apr: 36, statementDay: 16, dueDay: 5, dueDayOffset: undefined }
+    const [pool] = groupCreditCards([rewardsWithApr, amoreWithApr])
+    const transactions: Transaction[] = [
+      { ...charge('sep-charge', 'amore', 3904.5), occurredAt: '2026-09-10T12:00:00' },
+      { ...charge('oct-charge', 'rewards', 1000), occurredAt: '2026-10-01T12:00:00' },
+      { ...charge('payment', 'amore', 3904.5), type: 'bill', creditCardPayment: true, occurredAt: '2026-09-30T12:00:00' },
+    ]
+
+    expect(computePoolStatement(pool, transactions, 2026, 9).interestCharged).toBe(0)
   })
 
   it('refuses a shared limit between different banks', () => {

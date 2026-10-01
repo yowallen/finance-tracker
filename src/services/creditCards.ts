@@ -887,7 +887,16 @@ export function computeStatement(
   }
 
   const previousBalance = computePreviousBalance(card, allTransactions, year, month)
-  const interest = computeInterest(card, previousBalance, newCharges, paymentsCredits, statementDate, dueDate)
+  const previousDueDate = computeStatementPeriod(card, year, month - 1).dueDate
+  const interest = computeInterest(
+    card,
+    previousBalance,
+    newCharges,
+    paymentsCredits,
+    statementDate,
+    startDate,
+    sumPaymentsThrough(periodTransactions, previousDueDate),
+  )
   const statementBalance = Math.max(0, previousBalance + newCharges - paymentsCredits + interest)
   const outstandingBalance = computeOutstandingBalance(card, allTransactions, year, month)
   const minimumPaymentOverride = getMinimumPaymentOverride(card)
@@ -1002,7 +1011,16 @@ export function computePoolStatement(
   }
   previousBalance = Math.max(0, previousBalance)
 
-  const interest = computeInterest(primary, previousBalance, newCharges, paymentsCredits, statementDate, dueDate)
+  const previousDueDate = computeStatementPeriod(primary, year, month - 1).dueDate
+  const interest = computeInterest(
+    primary,
+    previousBalance,
+    newCharges,
+    paymentsCredits,
+    statementDate,
+    startDate,
+    sumPaymentsThrough(periodTransactions, previousDueDate),
+  )
   const statementBalance = Math.max(0, previousBalance + newCharges - paymentsCredits + interest)
   const outstandingBalance = pool.cards.reduce(
     (sum, card) => sum + computeOutstandingBalance(card, allTransactions, year, month),
@@ -1575,8 +1593,29 @@ function getInterestRates(apr: number): { daily: number; monthly: number } {
 }
 
 /**
+ * Sum payments and credits in `transactions` that occurred on or before the end of `cutoff`'s day.
+ */
+export function sumPaymentsThrough(transactions: Transaction[], cutoff: Date): number {
+  const endOfCutoffDay = new Date(cutoff)
+  endOfCutoffDay.setHours(23, 59, 59, 999)
+  const end = endOfCutoffDay.getTime()
+
+  return transactions.reduce((sum, tx) => {
+    const t = new Date(tx.occurredAt).getTime()
+    if (!Number.isFinite(t) || t > end) return sum
+    const isCredit = tx.creditCardPayment === true ||
+      tx.type === 'income' ||
+      (tx.type === 'savings' && tx.savingsDirection === 'withdraw')
+    return isCredit ? sum + tx.amount : sum
+  }, 0)
+}
+
+/**
  * Compute interest for a statement period based on the card's APR and calculation method.
  * Returns the interest amount to be added to the balance.
+ *
+ * No interest is charged when the previous statement balance was paid in full
+ * by the previous due date (`paymentsByPreviousDue` covers `previousBalance`).
  */
 export function computeInterest(
   card: CreditCard,
@@ -1584,15 +1623,13 @@ export function computeInterest(
   newCharges: number,
   paymentsCredits: number,
   statementDate: Date,
-  dueDate: Date,
+  startDate: Date,
+  paymentsByPreviousDue: number,
 ): number {
   const apr = card.apr
   if (!apr || apr <= 0) return 0
 
-  // If there's a grace period and the previous balance was paid in full, no interest
-  const gracePeriodDays = card.gracePeriodDays ?? 21
-  const daysSinceDue = Math.floor((statementDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
-  if (previousBalance <= 0 && daysSinceDue <= gracePeriodDays) {
+  if (paymentsByPreviousDue >= previousBalance - 0.005) {
     return 0
   }
 
@@ -1602,7 +1639,7 @@ export function computeInterest(
   if (calculationMethod === 'daily') {
     // Daily balance method: interest = daily_rate * average_daily_balance * days_in_period
     // Simplified: use statement balance as average daily balance
-    const daysInPeriod = Math.floor((statementDate.getTime() - new Date(statementDate.getFullYear(), statementDate.getMonth() - 1, card.statementDay + 1).getTime()) / (1000 * 60 * 60 * 24))
+    const daysInPeriod = Math.floor((statementDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
     const averageDailyBalance = previousBalance + newCharges - paymentsCredits
     return Math.max(0, averageDailyBalance * daily * Math.max(1, daysInPeriod))
   } else {
