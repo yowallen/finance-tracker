@@ -98,6 +98,7 @@ function txToInput(tx: Transaction): TransactionInput {
     ...(tx.creditCardId ? { creditCardId: tx.creditCardId } : {}),
     ...(typeof tx.cashbackEarned === 'number' ? { cashbackEarned: tx.cashbackEarned } : {}),
     ...(tx.creditCardPayment ? { creditCardPayment: true } : {}),
+    ...(tx.cashbackCredit ? { cashbackCredit: true } : {}),
     ...(typeof tx.isAnnualFee === 'boolean' ? { isAnnualFee: tx.isAnnualFee } : {}),
     ...(tx.savingsDirection ? { savingsDirection: tx.savingsDirection } : {}),
   }
@@ -231,8 +232,6 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
   } = useRecurringBills(userId, year, month, transactions, cards, statements, allTransactions)
 
   const paydayBudgetEnabled = isFeatureEnabled('paydayBudget')
-  const paluwaganEnabled = isFeatureEnabled('paluwagan')
-
   const { settings: paydaySettings, periods: paydayPeriods, save: savePayday } = usePaydayBudget(
     userId,
     year,
@@ -250,7 +249,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
     update: updatePaluwagan,
     remove: removePaluwagan,
     setContributions: setPaluwaganContributions,
-  } = usePaluwagan(userId, paluwaganEnabled)
+  } = usePaluwagan(userId)
 
   const dataLoading = txLoading || billLoading || goalsLoading
   const isFreshAccount = !dataLoading
@@ -526,6 +525,20 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
     }
   }
 
+  async function handleRedeemCashback(card: CreditCard, amount: number) {
+    const today = new Date()
+    const occurred = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0, 0)
+    await add({
+      type: 'income',
+      amount,
+      category: 'Cashback',
+      description: `Cashback credit to ${card.name} •••• ${card.lastFour}`,
+      occurredAt: occurred.toISOString(),
+      creditCardId: card.id,
+      cashbackCredit: true,
+    })
+  }
+
   async function handleApplyAllocation(plan: PaymentAllocationPlan) {
     const occurred = new Date(year, month, isCurrentMonth ? now.getDate() : 1, 12, 0, 0, 0)
     for (const allocation of plan.allocations) {
@@ -724,7 +737,6 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
               onReviewBills={() => scrollToSection('reminders')}
               onOpenHistory={openHistory}
               onOpenCreditCards={() => scrollToSection('credit-cards')}
-              onImportCsv={() => setCsvImportOpen(true)}
             />
 
             <FinanceCalendar 
@@ -791,6 +803,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
               onAdd={addCard}
               onUpdate={updateCard}
               onDelete={handleRemoveCard}
+              onRedeemCashback={handleRedeemCashback}
             />
 
             <SavingsGoals
@@ -803,17 +816,15 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
               onDelete={handleRemoveGoal}
             />
 
-            {paluwaganEnabled && (
-              <PaluwaganSection
-                circles={paluwaganCircles}
-                loading={paluwaganLoading}
-                error={paluwaganError}
-                onAdd={addPaluwagan}
-                onUpdate={updatePaluwagan}
-                onDelete={removePaluwagan}
-                onSetContributions={setPaluwaganContributions}
-              />
-            )}
+            <PaluwaganSection
+              circles={paluwaganCircles}
+              loading={paluwaganLoading}
+              error={paluwaganError}
+              onAdd={addPaluwagan}
+              onUpdate={updatePaluwagan}
+              onDelete={removePaluwagan}
+              onSetContributions={setPaluwaganContributions}
+            />
 
             <AnalyticsSection
               year={year}

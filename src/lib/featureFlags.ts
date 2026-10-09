@@ -13,7 +13,6 @@ export function isLocalhostPreviewHost(hostname = typeof window !== 'undefined' 
 
 export const FEATURE_FLAGS = {
   paydayBudget: isLocalhostPreviewHost(),
-  paluwagan: isLocalhostPreviewHost(),
 } as const
 
 export type FeatureFlag = keyof typeof FEATURE_FLAGS

@@ -47,6 +47,8 @@ interface CreditCardsProps {
   onAdd: (input: CreditCardInput) => Promise<string | void>
   onUpdate: (id: string, input: CreditCardInput) => Promise<void>
   onDelete: (card: CreditCard) => Promise<void>
+  /** Posts redeemed cashback as a credit on the card. */
+  onRedeemCashback: (card: CreditCard, amount: number) => Promise<void>
 }
 
 type StatusTone = 'ok' | 'warn' | 'danger' | 'neutral'
@@ -100,6 +102,7 @@ export function CreditCards({
   onAdd,
   onUpdate,
   onDelete,
+  onRedeemCashback,
 }: CreditCardsProps) {
   const headingRef = useRef<HTMLHeadingElement>(null)
   const addTriggerRef = useRef<HTMLButtonElement>(null)
@@ -294,41 +297,6 @@ export function CreditCards({
     }
   }
 
-  function cardToInput(card: CreditCard): CreditCardInput {
-    return {
-      name: card.name,
-      lastFour: card.lastFour,
-      limit: card.limit,
-      statementDay: card.statementDay,
-      dueDay: card.dueDay,
-      dueDayOffset: card.dueDayOffset,
-      color: card.color,
-      active: card.active,
-      apr: card.apr,
-      interestCalculationMethod: card.interestCalculationMethod,
-      gracePeriodDays: card.gracePeriodDays,
-      minimumPaymentOverride: card.minimumPaymentOverride,
-      cashbackCap: card.cashbackCap,
-      cashbackYearlyCap: card.cashbackYearlyCap,
-      cashbackStartingBalance: card.cashbackStartingBalance,
-      cashbackRedeemed: card.cashbackRedeemed,
-      cashbackMinSpend: card.cashbackMinSpend,
-      cashbackUsesFullThousandBlocks: card.cashbackUsesFullThousandBlocks,
-      cashbackRules: card.cashbackRules,
-      rewardName: card.rewardName,
-      rewardType: card.rewardType,
-      pointsPerSpend: card.pointsPerSpend,
-      pointsSpendIncrement: card.pointsSpendIncrement,
-      pointsRules: card.pointsRules,
-      rewardDescription: card.rewardDescription,
-      issuer: card.issuer,
-      sharedLimitGroupId: card.sharedLimitGroupId,
-      sharedLimitPrimary: card.sharedLimitPrimary,
-      madnessLimit: card.madnessLimit,
-      madnessUsed: card.madnessUsed,
-    }
-  }
-
   async function handleRedeemCashback(card: CreditCard) {
     const statement = statementByCardId.get(card.id)
     if (!statement) {
@@ -348,14 +316,11 @@ export function CreditCards({
       return
     }
 
-    const cappedAmount = Math.min(amount, available)
+    const cappedAmount = Math.round(Math.min(amount, available) * 100) / 100
     try {
-      await onUpdate(card.id, {
-        ...cardToInput(card),
-        cashbackRedeemed: (card.cashbackRedeemed ?? 0) + cappedAmount,
-      })
+      await onRedeemCashback(card, cappedAmount)
       closeRedeemDialog()
-      announce(`Redeemed ${formatMoney(cappedAmount)} from ${card.name}.`)
+      announce(`Redeemed ${formatMoney(cappedAmount)} from ${card.name} as a statement credit.`)
     } catch (err) {
       announce(err instanceof Error ? err.message : 'Could not redeem cashback.')
     }

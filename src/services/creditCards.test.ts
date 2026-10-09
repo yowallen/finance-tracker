@@ -15,6 +15,7 @@ import {
   groupCreditCards,
   resolveCashbackRateForCategory,
 } from './creditCards'
+import { computeMonthlySummary } from './transactions'
 
 function mapLegacyCreditCardDocForTest(data: Record<string, unknown>) {
   const normalizeLegacyCashbackRules = (value: unknown) => {
@@ -839,6 +840,68 @@ describe('interest grace period', () => {
     const statement = computeStatement(card, [septemberCharge, octoberCharge, payment], 2026, 9)
 
     expect(statement.interestCharged).toBeGreaterThan(0)
+  })
+})
+
+describe('cashback statement credit', () => {
+  const card: CreditCard = {
+    id: 'cashback-card',
+    userId: 'user-1',
+    name: 'BPI Amore',
+    lastFour: '5877',
+    limit: 50000,
+    statementDay: 16,
+    dueDay: 5,
+    active: true,
+    createdAt: '2024-01-01T00:00:00Z',
+    rewardType: 'cashback',
+    cashbackMinSpend: 0,
+    cashbackStartingBalance: 200,
+  }
+
+  const purchase: Transaction = {
+    id: 'purchase',
+    userId: 'user-1',
+    type: 'expense',
+    amount: 5000,
+    category: 'Food',
+    description: 'Dinner',
+    occurredAt: '2026-09-25T12:00:00',
+    createdAt: '2026-09-25T12:00:00',
+    creditCardId: card.id,
+  }
+
+  const credit: Transaction = {
+    id: 'credit',
+    userId: 'user-1',
+    type: 'income',
+    amount: 150,
+    category: 'Cashback',
+    description: 'Cashback credit',
+    occurredAt: '2026-10-05T12:00:00',
+    createdAt: '2026-10-05T12:00:00',
+    creditCardId: card.id,
+    cashbackCredit: true,
+  }
+
+  it('lowers the statement balance and available cashback', () => {
+    const before = computeStatement(card, [purchase], 2026, 9)
+    const after = computeStatement(card, [purchase, credit], 2026, 9)
+
+    expect(after.statementBalance).toBeCloseTo(before.statementBalance - 150, 2)
+    expect(after.outstandingBalance).toBeCloseTo(before.outstandingBalance - 150, 2)
+    expect(after.cashbackRedeemed).toBeCloseTo(before.cashbackRedeemed + 150, 2)
+    expect(after.availableCashback).toBeCloseTo(before.availableCashback - 150, 2)
+  })
+
+  it('still counts as redeemed when viewing an earlier statement', () => {
+    const september = computeStatement(card, [purchase, credit], 2026, 8)
+    expect(september.cashbackRedeemed).toBe(150)
+  })
+
+  it('is not counted as cash income', () => {
+    const salary: Transaction = { ...credit, id: 'salary', amount: 20000, category: 'Salary', creditCardId: undefined, cashbackCredit: undefined }
+    expect(computeMonthlySummary([credit, salary]).income).toBe(20000)
   })
 })
 

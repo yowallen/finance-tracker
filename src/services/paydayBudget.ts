@@ -3,6 +3,7 @@ import { isPhilippineNonBankingDay } from './recurringBills'
 import type { Unsubscribe } from 'firebase/firestore'
 import type { BillReminder } from '../types/recurringBill'
 import type { Transaction } from '../types/transaction'
+import { isCashIncome } from '../types/transaction'
 import {
   DEFAULT_PAYDAY_SETTINGS,
   PAYDAY_PRESETS,
@@ -230,7 +231,7 @@ function periodTotals(
   for (const tx of transactions) {
     if (!inPeriod(transactionDay(tx.occurredAt), period)) continue
     if (tx.type === 'income') {
-      income += tx.amount
+      if (isCashIncome(tx)) income += tx.amount
       continue
     }
     // Cash/debit only: card charges wait until the statement payment hits cash.

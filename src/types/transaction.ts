@@ -21,6 +21,8 @@ export interface Transaction {
   cashbackEarned?: number
   /** True when this transaction is a payment toward a credit card balance. */
   creditCardPayment?: boolean
+  /** True for redeemed cashback posted as a card credit; lowers the card balance but is not cash income. */
+  cashbackCredit?: boolean
   /** True for a credit-card annual fee or card fee, which never earns cashback. */
   isAnnualFee?: boolean
   /** Required when type is savings. */
@@ -39,9 +41,15 @@ export interface TransactionInput {
   creditCardId?: string
   cashbackEarned?: number
   creditCardPayment?: boolean
+  cashbackCredit?: boolean
   isAnnualFee?: boolean
   savingsDirection?: SavingsDirection
   importKey?: string
+}
+
+/** Cash income only: excludes redeemed cashback posted as a card credit. */
+export function isCashIncome(tx: Pick<Transaction, 'type' | 'cashbackCredit'>): boolean {
+  return tx.type === 'income' && tx.cashbackCredit !== true
 }
 
 export interface MonthlySummary {

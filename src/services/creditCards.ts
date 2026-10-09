@@ -848,7 +848,13 @@ export function summarizeCardCashback(
   )
   const cashbackPeriodEarned = Math.min(uncappedPeriodEarned, statementCap)
   const cashbackEarned = seed + priorEarned + cashbackPeriodEarned
-  const cashbackRedeemed = typeof card.cashbackRedeemed === 'number' ? Math.max(0, card.cashbackRedeemed) : 0
+  const legacyRedeemed = typeof card.cashbackRedeemed === 'number' ? Math.max(0, card.cashbackRedeemed) : 0
+  // Counted regardless of date, so a credit posted after this statement still blocks redeeming it twice.
+  const creditedRedeemed = allTransactions.reduce(
+    (sum, tx) => (tx.creditCardId === card.id && tx.cashbackCredit === true ? sum + tx.amount : sum),
+    0,
+  )
+  const cashbackRedeemed = legacyRedeemed + creditedRedeemed
 
   return {
     cashbackEligibleSpend: getCashbackEligibleSpend(card, memberPeriodTransactions),

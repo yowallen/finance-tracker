@@ -9,7 +9,7 @@ import type {
   Transaction,
   TransactionInput,
 } from '../types/transaction'
-import { isSavingsDeposit, isSavingsWithdraw } from '../types/transaction'
+import { isCashIncome, isSavingsDeposit, isSavingsWithdraw } from '../types/transaction'
 import { computeCashbackForTransaction } from './creditCards'
 
 const COLLECTION = 'transactions'
@@ -78,6 +78,7 @@ function mapDoc(
     ...(typeof creditCardId === 'string' ? { creditCardId } : {}),
     ...(cashbackEarned !== undefined ? { cashbackEarned } : {}),
     ...(typeof creditCardPayment === 'boolean' ? { creditCardPayment } : {}),
+    ...(data.cashbackCredit === true ? { cashbackCredit: true } : {}),
     ...(isAnnualFee !== undefined ? { isAnnualFee } : {}),
     ...(type === 'savings'
       ? { savingsDirection: savingsDirection as SavingsDirection }
@@ -195,6 +196,9 @@ export async function createTransaction(
   if (input.creditCardPayment) {
     payload.creditCardPayment = true
   }
+  if (input.cashbackCredit) {
+    payload.cashbackCredit = true
+  }
   if (typeof input.isAnnualFee === 'boolean') {
     payload.isAnnualFee = input.isAnnualFee
   }
@@ -252,6 +256,7 @@ export async function createTransactionsBatch(
     if (input.recurringBillId) payload.recurringBillId = input.recurringBillId
     if (input.creditCardId) payload.creditCardId = input.creditCardId
     if (input.creditCardPayment) payload.creditCardPayment = true
+    if (input.cashbackCredit) payload.cashbackCredit = true
     if (typeof input.isAnnualFee === 'boolean') payload.isAnnualFee = input.isAnnualFee
     if (input.type === 'savings' && input.savingsDirection) {
       payload.savingsDirection = input.savingsDirection
@@ -385,8 +390,9 @@ export function computeMonthlySummary(
   let savingsWithdrawals = 0
 
   for (const tx of transactions) {
-    if (tx.type === 'income') income += tx.amount
-    else if (tx.type === 'expense') {
+    if (tx.type === 'income') {
+      if (isCashIncome(tx)) income += tx.amount
+    } else if (tx.type === 'expense') {
       // Exclude credit card expenses from cash flow - they're paid later via creditCardPayment
       if (tx.creditCardId) {
         // Track as credit card charge but don't count as cash expense

@@ -6,6 +6,7 @@ import { computeMonthlySummary, filterByMonth } from './transactions'
 import type { CreditCardPaymentBill } from './creditCardBills'
 import type { RecurringBill } from '../types/recurringBill'
 import type { Transaction } from '../types/transaction'
+import { isCashIncome } from '../types/transaction'
 
 /** Checks if a bill is flagged to be paid with credit card for a given month. */
 function isBillPaidWithCreditCard(bill: RecurringBill, year: number, month: number): boolean {
@@ -231,8 +232,9 @@ export function computeMonthNetThroughDay(
   const paidCcPaymentIds = new Set<string>()
 
   for (const tx of monthly) {
-    if (tx.type === 'income') income += tx.amount
-    else if (tx.type === 'expense') {
+    if (tx.type === 'income') {
+      if (isCashIncome(tx)) income += tx.amount
+    } else if (tx.type === 'expense') {
       // Exclude credit card expenses from cash flow - they're paid later via creditCardPayment
       if (tx.creditCardId) {
         // Track as credit card charge but don't count as cash expense

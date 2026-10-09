@@ -437,12 +437,15 @@ function TransactionRow({
           <span className="tx-category">{tx.category}</span>
           {tx.creditCardId && (() => {
             const cardLabel = card ? `•••• ${card.lastFour}` : 'Deleted Card'
-            const badgeText = tx.creditCardPayment === true
-              ? `Payment to ${cardLabel}`
-              : `Charged to ${cardLabel}`
+            const isCardCredit = tx.creditCardPayment === true || tx.cashbackCredit === true
+            const badgeText = tx.cashbackCredit === true
+              ? `Cashback credit to ${cardLabel}`
+              : tx.creditCardPayment === true
+                ? `Payment to ${cardLabel}`
+                : `Charged to ${cardLabel}`
 
             return (
-              <span className={`tx-cc-badge ${tx.creditCardPayment === true ? 'payment' : ''}`}>
+              <span className={`tx-cc-badge ${isCardCredit ? 'payment' : ''}`}>
                 <CreditCardIcon className="tx-cc-icon" aria-hidden="true" />
                 {badgeText}
               </span>
