@@ -42,10 +42,14 @@ import {
 } from '../services/transactions'
 import type { BillReminder, RecurringBill, RecurringBillInput } from '../types/recurringBill'
 import type { CreditCard, CreditCardInput, PaymentAllocationPlan } from '../types/creditCard'
+import type { CardInstallment, CardInstallmentInput } from '../types/cardInstallment'
+import { installmentLabel } from '../types/cardInstallment'
+import type { CashAdvanceRequest, CreditToCashRequest, InstallmentPurchaseRequest } from './CardCashSheet'
+import { useCardInstallments } from '../hooks/useCardInstallments'
 import type { SavingsGoal, SavingsGoalInput } from '../types/savingsGoal'
 import type { ThemeMode } from '../lib/theme'
 import type { Transaction, TransactionInput } from '../types/transaction'
-import { formatMoney } from '../lib/format'
+import { dateInputToIso, formatMoney } from '../lib/format'
 import { isFeatureEnabled } from '../lib/featureFlags'
 import { scrollToSection } from '../lib/scrollToSection'
 
@@ -55,6 +59,7 @@ const UNDO_FOCUS_TARGET: Record<UndoResource, string> = {
   bill: 'reminders-heading',
   goal: 'savings-heading',
   card: 'cc-heading',
+  installment: 'cc-heading',
 }
 
 interface LedgerAppProps {
@@ -100,7 +105,26 @@ function txToInput(tx: Transaction): TransactionInput {
     ...(tx.creditCardPayment ? { creditCardPayment: true } : {}),
     ...(tx.cashbackCredit ? { cashbackCredit: true } : {}),
     ...(typeof tx.isAnnualFee === 'boolean' ? { isAnnualFee: tx.isAnnualFee } : {}),
+    ...(tx.cashAdvance ? { cashAdvance: true } : {}),
+    ...(typeof tx.cashAdvanceMonthlyRate === 'number' ? { cashAdvanceMonthlyRate: tx.cashAdvanceMonthlyRate } : {}),
+    ...(tx.installmentPlanId ? { installmentPlanId: tx.installmentPlanId } : {}),
+    ...(tx.installmentPurchase ? { installmentPurchase: true } : {}),
     ...(tx.savingsDirection ? { savingsDirection: tx.savingsDirection } : {}),
+  }
+}
+
+function installmentToInput(plan: CardInstallment): CardInstallmentInput {
+  return {
+    cardId: plan.cardId,
+    ...(plan.kind ? { kind: plan.kind } : {}),
+    creditLine: plan.creditLine,
+    ...(plan.madnessPrincipal !== undefined ? { madnessPrincipal: plan.madnessPrincipal } : {}),
+    principal: plan.principal,
+    monthlyAddOnRate: plan.monthlyAddOnRate,
+    termMonths: plan.termMonths,
+    bookedOn: plan.bookedOn,
+    ...(plan.processingFee !== undefined ? { processingFee: plan.processingFee } : {}),
+    ...(plan.notes ? { notes: plan.notes } : {}),
   }
 }
 
@@ -195,9 +219,17 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
   } = useTransactions(userId, year, month)
 
   const {
+    plans: installmentPlans,
+    error: installmentError,
+    add: addInstallment,
+    remove: removeInstallment,
+  } = useCardInstallments(userId)
+
+  const {
     cards,
     activeCards,
     statements,
+    cardTransactions,
     interestProjections,
     totalOutstanding,
     totalAvailableCredit,
@@ -208,7 +240,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
     add: addCard,
     update: updateCard,
     remove: removeCard,
-  } = useCreditCards(userId, allTransactions, year, month)
+  } = useCreditCards(userId, allTransactions, year, month, installmentPlans)
 
   const {
     journey: savingsJourney,
@@ -229,7 +261,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
     add: addBill,
     update: updateBill,
     remove: removeBill,
-  } = useRecurringBills(userId, year, month, transactions, cards, statements, allTransactions)
+  } = useRecurringBills(userId, year, month, transactions, cards, statements, cardTransactions)
 
   const paydayBudgetEnabled = isFeatureEnabled('paydayBudget')
   const { settings: paydaySettings, periods: paydayPeriods, save: savePayday } = usePaydayBudget(
@@ -539,6 +571,123 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
     })
   }
 
+  async function handleCreditToCash({ plan, recordIncome }: CreditToCashRequest) {
+    const card = cardById.get(plan.cardId)
+    if (!card) throw new Error('This card is no longer available.')
+    const occurredAt = dateInputToIso(plan.bookedOn)
+    setSaving(true)
+    try {
+      const planId = await addInstallment(plan)
+      if ((plan.processingFee ?? 0) > 0) {
+        await add({
+          type: 'bill',
+          amount: plan.processingFee!,
+          category: 'Fee',
+          description: `Credit-to-Cash service fee · ${card.name}`,
+          occurredAt,
+          creditCardId: card.id,
+          installmentPlanId: planId,
+        })
+      }
+      if (recordIncome) {
+        await add({
+          type: 'income',
+          amount: plan.principal,
+          category: 'Credit-to-Cash',
+          description: `Credit-to-Cash from ${card.name} •••• ${card.lastFour}`,
+          occurredAt,
+          installmentPlanId: planId,
+        })
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleCashAdvance(request: CashAdvanceRequest) {
+    const card = cardById.get(request.cardId)
+    if (!card) throw new Error('This card is no longer available.')
+    const occurredAt = dateInputToIso(request.date)
+    setSaving(true)
+    try {
+      await add({
+        type: 'expense',
+        amount: request.amount,
+        category: 'Cash advance',
+        description: `Cash advance · ${card.name}`,
+        occurredAt,
+        creditCardId: card.id,
+        cashAdvance: true,
+        cashAdvanceMonthlyRate: request.monthlyRate,
+      })
+      if (request.fee > 0) {
+        await add({
+          type: 'bill',
+          amount: request.fee,
+          category: 'Fee',
+          description: `Cash advance fee · ${card.name}`,
+          occurredAt,
+          creditCardId: card.id,
+          cashAdvance: true,
+          cashAdvanceMonthlyRate: request.monthlyRate,
+        })
+      }
+      if (request.recordIncome) {
+        // No creditCardId: income linked to a card is treated as a card payment.
+        await add({
+          type: 'income',
+          amount: request.amount,
+          category: 'Cash advance',
+          description: `Cash advance from ${card.name} •••• ${card.lastFour}`,
+          occurredAt,
+        })
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleInstallmentPurchase({ plan, category }: InstallmentPurchaseRequest) {
+    const card = cardById.get(plan.cardId)
+    if (!card) throw new Error('This card is no longer available.')
+    setSaving(true)
+    try {
+      const planId = await addInstallment(plan)
+      await add({
+        type: 'expense',
+        amount: plan.principal,
+        category,
+        description: `${installmentLabel(plan)} · ${plan.termMonths}-month installment`,
+        occurredAt: dateInputToIso(plan.bookedOn),
+        creditCardId: card.id,
+        installmentPlanId: planId,
+        installmentPurchase: true,
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleRemoveInstallment(plan: CardInstallment) {
+    const linked = allTransactions.filter((tx) => tx.installmentPlanId === plan.id)
+    const label = installmentLabel(plan)
+    setSaving(true)
+    try {
+      await removeInstallment(plan.id)
+      for (const tx of linked) {
+        await remove(tx.id)
+      }
+      stageUndo(`Removed “${label}” plan`, 'installment', async () => {
+        await addInstallment(installmentToInput(plan), plan.id)
+        for (const tx of linked) {
+          await add(txToInput(tx))
+        }
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function handleApplyAllocation(plan: PaymentAllocationPlan) {
     const occurred = new Date(year, month, isCurrentMonth ? now.getDate() : 1, 12, 0, 0, 0)
     for (const allocation of plan.allocations) {
@@ -792,11 +941,11 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
             <CreditCards
               cards={cards}
               statements={statements}
-              allTransactions={allTransactions}
+              allTransactions={cardTransactions}
               interestProjections={interestProjections}
               utilizationHistories={utilizationHistories}
               loading={ccLoading}
-              error={ccError}
+              error={ccError ?? installmentError}
               isCurrentMonth={isCurrentMonth}
               year={year}
               month={month}
@@ -804,6 +953,10 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
               onUpdate={updateCard}
               onDelete={handleRemoveCard}
               onRedeemCashback={handleRedeemCashback}
+              onCreditToCash={handleCreditToCash}
+              onCashAdvance={handleCashAdvance}
+              onInstallmentPurchase={handleInstallmentPurchase}
+              onDeleteInstallment={handleRemoveInstallment}
             />
 
             <SavingsGoals

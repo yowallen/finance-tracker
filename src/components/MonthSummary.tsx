@@ -228,7 +228,7 @@ export function MonthSummary({
                       cardLimit={card.limit}
                       availableCredit={statement.availableCredit}
                       madnessLimit={card.madnessLimit ?? 0}
-                      madnessUsed={card.madnessUsed ?? 0}
+                      madnessUsed={statement.madnessUsedEffective}
                     />
                   )}
                 </article>

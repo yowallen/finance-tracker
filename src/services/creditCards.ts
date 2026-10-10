@@ -14,6 +14,8 @@ import type {
   UtilizationSnapshot,
 } from '../types/creditCard'
 import { validateCreditCardInput } from '../types/creditCard'
+import type { CardInstallmentSummary } from '../types/cardInstallment'
+import { madnessShare } from '../types/cardInstallment'
 import type { Transaction } from '../types/transaction'
 import { nextPhilippineBankingDay } from './recurringBills'
 
@@ -869,11 +871,220 @@ export function summarizeCardCashback(
 /**
  * Compute a card's statement for a given month.
  */
+export const DEFAULT_CASH_ADVANCE_MONTHLY_RATE = 3
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+function startOfDayMs(date: Date): number {
+  const copy = new Date(date)
+  copy.setHours(0, 0, 0, 0)
+  return copy.getTime()
+}
+
+function endOfDayMs(date: Date): number {
+  const copy = new Date(date)
+  copy.setHours(23, 59, 59, 999)
+  return copy.getTime()
+}
+
+/** Inclusive day count, matching BPI's sample (posted Jan 2, statement Feb 1 = 31 days). */
+function inclusiveDays(from: Date, to: Date): number {
+  return Math.max(0, Math.round((startOfDayMs(to) - startOfDayMs(from)) / DAY_MS) + 1)
+}
+
+function isCardCredit(tx: Transaction): boolean {
+  return tx.creditCardPayment === true ||
+    tx.type === 'income' ||
+    (tx.type === 'savings' && tx.savingsDirection === 'withdraw')
+}
+
+export function isCashAdvanceCharge(tx: Pick<Transaction, 'cashAdvance' | 'type' | 'creditCardPayment'>): boolean {
+  return tx.cashAdvance === true && tx.creditCardPayment !== true && (tx.type === 'expense' || tx.type === 'bill')
+}
+
+function isInstallmentChargeTx(tx: Pick<Transaction, 'installmentNumber'>): boolean {
+  return typeof tx.installmentNumber === 'number'
+}
+
+export interface CashAdvanceActivity {
+  /** Unpaid cash advances and fees carried into the period. */
+  balanceAtStart: number
+  chargesInPeriod: number
+  paymentsAppliedInPeriod: number
+  appliedPayments: Array<{ time: number; amount: number }>
+  interest: number
+}
+
+/**
+ * Cash advance finance charge for one statement period. Interest runs on the advance and its fee
+ * from posting until paid: amount x (monthly rate x 12 / 360) x days. Payments clear the oldest
+ * cash advances first, and a paid peso stops accruing on the day of the payment.
+ */
+export function computeCashAdvanceActivity(
+  cardIds: Set<string>,
+  allTransactions: Transaction[],
+  startDate: Date,
+  statementDate: Date,
+): CashAdvanceActivity {
+  const startMs = startDate.getTime()
+  const endMs = endOfDayMs(statementDate)
+  const events = allTransactions
+    .filter((tx) => tx.creditCardId && cardIds.has(tx.creditCardId) && (isCashAdvanceCharge(tx) || isCardCredit(tx)))
+    .map((tx) => ({ tx, time: new Date(tx.occurredAt).getTime() }))
+    .filter((event) => Number.isFinite(event.time) && event.time <= endMs)
+    .sort((a, b) => a.time - b.time || Number(isCardCredit(a.tx)) - Number(isCardCredit(b.tx)))
+
+  const open: Array<{ remaining: number; rate: number; accrueFrom: number }> = []
+  const dailyFactor = (rate: number) => (rate / 100) * (12 / 360)
+  let interest = 0
+  /** `paidOnDay` is set for in-period payments so the paid portion accrues up to that day. */
+  const applyPayment = (amount: number, paidOnDay?: number): number => {
+    let left = amount
+    for (const entry of open) {
+      if (left <= 0) break
+      const applied = Math.min(entry.remaining, left)
+      entry.remaining -= applied
+      left -= applied
+      if (paidOnDay !== undefined && applied > 0) {
+        interest += applied * dailyFactor(entry.rate) * Math.max(0, Math.round((paidOnDay - entry.accrueFrom) / DAY_MS))
+      }
+    }
+    return amount - left
+  }
+
+  for (const { tx, time } of events) {
+    if (time >= startMs) break
+    if (isCashAdvanceCharge(tx)) {
+      open.push({ remaining: tx.amount, rate: tx.cashAdvanceMonthlyRate ?? DEFAULT_CASH_ADVANCE_MONTHLY_RATE, accrueFrom: 0 })
+    } else {
+      applyPayment(tx.amount)
+    }
+  }
+
+  const periodStartDay = startOfDayMs(startDate)
+  let balanceAtStart = 0
+  for (const entry of open) {
+    entry.accrueFrom = periodStartDay
+    balanceAtStart += entry.remaining
+  }
+
+  const appliedPayments: Array<{ time: number; amount: number }> = []
+  let chargesInPeriod = 0
+  for (const { tx, time } of events) {
+    if (time < startMs) continue
+    if (isCashAdvanceCharge(tx)) {
+      open.push({
+        remaining: tx.amount,
+        rate: tx.cashAdvanceMonthlyRate ?? DEFAULT_CASH_ADVANCE_MONTHLY_RATE,
+        accrueFrom: startOfDayMs(new Date(time)),
+      })
+      chargesInPeriod += tx.amount
+    } else {
+      const applied = applyPayment(tx.amount, startOfDayMs(new Date(time)))
+      if (applied > 0) appliedPayments.push({ time, amount: applied })
+    }
+  }
+
+  for (const entry of open) {
+    if (entry.remaining <= 0) continue
+    interest += entry.remaining * dailyFactor(entry.rate) * inclusiveDays(new Date(entry.accrueFrom), statementDate)
+  }
+
+  return {
+    balanceAtStart,
+    chargesInPeriod,
+    paymentsAppliedInPeriod: appliedPayments.reduce((sum, item) => sum + item.amount, 0),
+    appliedPayments,
+    interest,
+  }
+}
+
+/** Regular interest on the non-cash-advance balance plus the cash advance finance charge. */
+function computeStatementInterest(
+  card: CreditCard,
+  cardIds: Set<string>,
+  allTransactions: Transaction[],
+  periodTransactions: Transaction[],
+  previousBalance: number,
+  newCharges: number,
+  paymentsCredits: number,
+  statementDate: Date,
+  startDate: Date,
+  previousDueDate: Date,
+): number {
+  const paymentsByPreviousDue = sumPaymentsThrough(periodTransactions, previousDueDate)
+  const cashAdvance = computeCashAdvanceActivity(cardIds, allTransactions, startDate, statementDate)
+  if (cashAdvance.balanceAtStart <= 0 && cashAdvance.chargesInPeriod <= 0) {
+    return computeInterest(card, previousBalance, newCharges, paymentsCredits, statementDate, startDate, paymentsByPreviousDue)
+  }
+
+  const previousDueEnd = endOfDayMs(previousDueDate)
+  const cashAdvancePaidByDue = cashAdvance.appliedPayments
+    .filter((item) => item.time <= previousDueEnd)
+    .reduce((sum, item) => sum + item.amount, 0)
+  const regularInterest = computeInterest(
+    card,
+    Math.max(0, previousBalance - cashAdvance.balanceAtStart),
+    Math.max(0, newCharges - cashAdvance.chargesInPeriod),
+    Math.max(0, paymentsCredits - cashAdvance.paymentsAppliedInPeriod),
+    statementDate,
+    startDate,
+    Math.max(0, paymentsByPreviousDue - cashAdvancePaidByDue),
+  )
+  return regularInterest + cashAdvance.interest
+}
+
+/**
+ * Regular-line principal holds its unbilled part against the credit limit. The Madness share of a
+ * plan uses the separate Madness Limit, so that share of its billed amortizations doesn't reduce
+ * regular credit. A plan split across both lines is apportioned by its Madness share.
+ */
+function applyInstallmentLimits(
+  members: CreditCard[],
+  limitCard: CreditCard,
+  allTransactions: Transaction[],
+  year: number,
+  month: number,
+  outstandingBalance: number,
+  installments: CardInstallmentSummary[],
+): { availableCredit: number; madnessUsedEffective: number; installments: CardInstallmentSummary[] } {
+  const ids = new Set(members.map((member) => member.id))
+  const relevant = installments.filter((summary) => ids.has(summary.plan.cardId))
+  const shareByPlanId = new Map<string, number>()
+  let unbilledRegular = 0
+  let unbilledMadness = 0
+  for (const summary of relevant) {
+    const share = madnessShare(summary.plan)
+    if (share > 0) shareByPlanId.set(summary.plan.id, share)
+    unbilledMadness += summary.unbilledPrincipal * share
+    unbilledRegular += summary.unbilledPrincipal * (1 - share)
+  }
+
+  let creditBalance = outstandingBalance
+  if (shareByPlanId.size > 0) {
+    const regularShareOnly = allTransactions.map((tx) => {
+      const share = isInstallmentChargeTx(tx) && tx.installmentPlanId ? shareByPlanId.get(tx.installmentPlanId) : undefined
+      return share === undefined ? tx : { ...tx, amount: tx.amount * (1 - share) }
+    })
+    creditBalance = members.reduce(
+      (sum, member) => sum + computeOutstandingBalance(member, regularShareOnly, year, month),
+      0,
+    )
+  }
+
+  return {
+    availableCredit: Math.max(0, limitCard.limit - creditBalance - unbilledRegular),
+    madnessUsedEffective: Math.max(0, limitCard.madnessUsed ?? 0) + unbilledMadness,
+    installments: relevant,
+  }
+}
+
 export function computeStatement(
   card: CreditCard,
   allTransactions: Transaction[],
   year: number,
   month: number,
+  installments: CardInstallmentSummary[] = [],
 ): CreditCardStatement {
   const { statementDate, dueDate, startDate } = computeStatementPeriod(card, year, month)
   const periodTransactions = getStatementTransactions(card, allTransactions, year, month)
@@ -894,14 +1105,17 @@ export function computeStatement(
 
   const previousBalance = computePreviousBalance(card, allTransactions, year, month)
   const previousDueDate = computeStatementPeriod(card, year, month - 1).dueDate
-  const interest = computeInterest(
+  const interest = computeStatementInterest(
     card,
+    new Set([card.id]),
+    allTransactions,
+    periodTransactions,
     previousBalance,
     newCharges,
     paymentsCredits,
     statementDate,
     startDate,
-    sumPaymentsThrough(periodTransactions, previousDueDate),
+    previousDueDate,
   )
   const statementBalance = Math.max(0, previousBalance + newCharges - paymentsCredits + interest)
   const outstandingBalance = computeOutstandingBalance(card, allTransactions, year, month)
@@ -911,7 +1125,8 @@ export function computeStatement(
     : card.apr && card.apr > 0
       ? computeMinimumPaymentWithInterest(statementBalance, card.apr)
       : Math.min(statementBalance, Math.max(statementBalance * 0.03, 100))
-  const availableCredit = Math.max(0, card.limit - outstandingBalance)
+  const limits = applyInstallmentLimits([card], card, allTransactions, year, month, outstandingBalance, installments)
+  const availableCredit = limits.availableCredit
   const isPaid = statementBalance <= 0
   const cashback = summarizeCardCashback(card, allTransactions, startDate, periodTransactions)
   const pointsEarned = computePointsEarned(card, periodTransactions)
@@ -934,6 +1149,8 @@ export function computeStatement(
     cashbackRedeemed: cashback.cashbackRedeemed,
     availableCashback: cashback.availableCashback,
     pointsEarned,
+    madnessUsedEffective: limits.madnessUsedEffective,
+    installments: limits.installments,
     transactions: periodTransactions,
     transactionHistory,
   }
@@ -973,9 +1190,10 @@ export function computePoolStatement(
   allTransactions: Transaction[],
   year: number,
   month: number,
+  installments: CardInstallmentSummary[] = [],
 ): CreditCardStatement {
   if (pool.cards.length < 2) {
-    return computeStatement(pool.primary, allTransactions, year, month)
+    return computeStatement(pool.primary, allTransactions, year, month, installments)
   }
 
   const primary = pool.primary
@@ -1018,14 +1236,17 @@ export function computePoolStatement(
   previousBalance = Math.max(0, previousBalance)
 
   const previousDueDate = computeStatementPeriod(primary, year, month - 1).dueDate
-  const interest = computeInterest(
+  const interest = computeStatementInterest(
     primary,
+    ids,
+    allTransactions,
+    periodTransactions,
     previousBalance,
     newCharges,
     paymentsCredits,
     statementDate,
     startDate,
-    sumPaymentsThrough(periodTransactions, previousDueDate),
+    previousDueDate,
   )
   const statementBalance = Math.max(0, previousBalance + newCharges - paymentsCredits + interest)
   const outstandingBalance = pool.cards.reduce(
@@ -1038,7 +1259,8 @@ export function computePoolStatement(
     : primary.apr && primary.apr > 0
       ? computeMinimumPaymentWithInterest(statementBalance, primary.apr)
       : Math.min(statementBalance, Math.max(statementBalance * 0.03, 100))
-  const availableCredit = Math.max(0, primary.limit - outstandingBalance)
+  const limits = applyInstallmentLimits(pool.cards, primary, allTransactions, year, month, outstandingBalance, installments)
+  const availableCredit = limits.availableCredit
   const memberCashback = pool.cards.map((member) => {
     const memberTransactions = periodTransactions.filter((tx) => tx.creditCardId === member.id)
     const totals = summarizeCardCashback(member, allTransactions, startDate, memberTransactions)
@@ -1066,6 +1288,8 @@ export function computePoolStatement(
     cashbackRedeemed: memberCashback.reduce((sum, item) => sum + item.cashbackRedeemed, 0),
     availableCashback: memberCashback.reduce((sum, item) => sum + item.availableCashback, 0),
     pointsEarned: memberCashback.reduce((sum, item) => sum + item.points, 0),
+    madnessUsedEffective: limits.madnessUsedEffective,
+    installments: limits.installments,
     transactions: periodTransactions,
     transactionHistory,
   }
@@ -1095,6 +1319,11 @@ function categoryKey(value: string): string {
   return compact
 }
 
+/** Cash advances, Credit-to-Cash amortizations and their fees never earn rewards. */
+function isRewardExcluded(tx: Pick<Partial<Transaction>, 'cashAdvance' | 'installmentPlanId'>): boolean {
+  return tx.cashAdvance === true || typeof tx.installmentPlanId === 'string'
+}
+
 export function computePointsForTransaction(
   card: Pick<CreditCard, 'id' | 'rewardType' | 'pointsPerSpend' | 'pointsSpendIncrement' | 'pointsRules'>,
   tx: Partial<Transaction> & {
@@ -1109,6 +1338,7 @@ export function computePointsForTransaction(
 ): number {
   if (card.rewardType !== 'points' || tx.creditCardId !== card.id) return 0
   if (tx.creditCardPayment === true || (tx.type !== 'expense' && tx.type !== 'bill')) return 0
+  if (isRewardExcluded(tx)) return 0
   if (isAnnualFeeTransaction({ category: tx.category, description: tx.description ?? '', isAnnualFee: tx.isAnnualFee })) return 0
 
   const target = categoryKey(tx.category)
@@ -1156,6 +1386,7 @@ function getCashbackEligibleSpend(card: CreditCard, transactions: Transaction[])
       if (tx.creditCardId !== card.id) return false
       if (tx.creditCardPayment === true) return false
       if (tx.type !== 'expense' && tx.type !== 'bill') return false
+      if (isRewardExcluded(tx)) return false
       return resolveCashbackRateForCategory(card, tx.category) > 0
     })
     .reduce((sum, tx) => sum + tx.amount, 0)
@@ -1209,6 +1440,7 @@ export function computeCashbackForTransaction(
   if (tx.creditCardId !== card.id) return 0
   if (tx.creditCardPayment === true) return 0
   if (tx.type !== 'expense' && tx.type !== 'bill') return 0
+  if (isRewardExcluded(tx)) return 0
   if (isAnnualFeeTransaction({ category: tx.category, description: tx.description ?? '', isAnnualFee: tx.isAnnualFee })) return 0
 
   const minimumSpend = getCashbackMinimumSpend(card)
@@ -1396,9 +1628,10 @@ export function computeTotalAvailableCredit(
   allTransactions: Transaction[],
   year: number,
   month: number,
+  installments: CardInstallmentSummary[] = [],
 ): number {
   return groupCreditCards(cards.filter((card) => card.active)).reduce(
-    (total, pool) => total + computePoolStatement(pool, allTransactions, year, month).availableCredit,
+    (total, pool) => total + computePoolStatement(pool, allTransactions, year, month, installments).availableCredit,
     0,
   )
 }

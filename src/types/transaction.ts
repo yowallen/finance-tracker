@@ -25,6 +25,21 @@ export interface Transaction {
   cashbackCredit?: boolean
   /** True for a credit-card annual fee or card fee, which never earns cashback. */
   isAnnualFee?: boolean
+  /** True for a cash advance or its fee; earns no rewards and accrues interest from posting. */
+  cashAdvance?: boolean
+  /** Monthly finance charge rate (percent) applied to a cash advance, e.g. 3 for 3%. */
+  cashAdvanceMonthlyRate?: number
+  /** Links a transaction to an installment plan (proceeds, service fee, purchase, or a computed amortization). */
+  installmentPlanId?: string
+  /**
+   * Full price of a product bought on installment. Counts in spending stats but never in card
+   * balances; the plan's monthly amortizations bill the card instead.
+   */
+  installmentPurchase?: boolean
+  /** 1-based amortization number; only set on computed installment charges, never stored. */
+  installmentNumber?: number
+  /** Total amortizations in the plan; only set on computed installment charges. */
+  installmentTerm?: number
   /** Required when type is savings. */
   savingsDirection?: SavingsDirection
   /** Fingerprint for CSV/SMS import dedupe (source + date + amount + description). */
@@ -43,6 +58,10 @@ export interface TransactionInput {
   creditCardPayment?: boolean
   cashbackCredit?: boolean
   isAnnualFee?: boolean
+  cashAdvance?: boolean
+  cashAdvanceMonthlyRate?: number
+  installmentPlanId?: string
+  installmentPurchase?: boolean
   savingsDirection?: SavingsDirection
   importKey?: string
 }

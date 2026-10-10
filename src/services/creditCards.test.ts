@@ -16,6 +16,8 @@ import {
   resolveCashbackRateForCategory,
 } from './creditCards'
 import { computeMonthlySummary } from './transactions'
+import { buildInstallmentCharges, summarizeCardInstallments } from './cardInstallments'
+import type { CardInstallment } from '../types/cardInstallment'
 
 function mapLegacyCreditCardDocForTest(data: Record<string, unknown>) {
   const normalizeLegacyCashbackRules = (value: unknown) => {
@@ -1009,5 +1011,176 @@ describe('shared credit limit', () => {
     const metrobank = card({ id: 'metro', name: 'Metrobank Platinum', issuer: 'metrobank' })
     expect(cardsCanShareLimit(rewards, amore)).toBe(true)
     expect(cardsCanShareLimit(rewards, metrobank)).toBe(false)
+  })
+})
+
+describe('Credit-to-Cash on the card', () => {
+  const card: CreditCard = {
+    id: 'amore',
+    userId: 'user-1',
+    name: 'BPI Amore Cashback',
+    lastFour: '5877',
+    limit: 100000,
+    madnessLimit: 60000,
+    madnessUsed: 1000,
+    statementDay: 16,
+    dueDay: 5,
+    active: true,
+    createdAt: '2024-01-01T00:00:00Z',
+  }
+
+  function plan(creditLine: CardInstallment['creditLine']): CardInstallment {
+    return {
+      id: `plan-${creditLine}`,
+      userId: 'user-1',
+      cardId: card.id,
+      creditLine,
+      principal: 50000,
+      monthlyAddOnRate: 1,
+      termMonths: 12,
+      bookedOn: '2026-10-10',
+      createdAt: '2026-10-10T00:00:00Z',
+    }
+  }
+
+  function statementFor(creditLine: CardInstallment['creditLine'], extra: Transaction[] = []) {
+    const plans = [plan(creditLine)]
+    const transactions = [...extra, ...buildInstallmentCharges(plans, [card])]
+    const summaries = summarizeCardInstallments([card.id], plans, [card], new Date(2026, 9, 31, 23, 59, 59, 999))
+    return computeStatement(card, transactions, 2026, 9, summaries)
+  }
+
+  it('puts the first installment on the statement', () => {
+    const statement = statementFor('regular')
+
+    expect(statement.newCharges).toBeCloseTo(4666.67, 2)
+    expect(statement.statementBalance).toBeCloseTo(4666.67, 2)
+    expect(statement.transactions[0].installmentNumber).toBe(1)
+  })
+
+  it('holds unbilled principal against the regular limit', () => {
+    const statement = statementFor('regular')
+
+    expect(statement.availableCredit).toBeCloseTo(100000 - 4666.67 - 45833.33, 2)
+    expect(statement.madnessUsedEffective).toBe(1000)
+  })
+
+  it('uses the Madness Limit instead of regular credit for a Madness plan', () => {
+    const statement = statementFor('madness')
+
+    expect(statement.statementBalance).toBeCloseTo(4666.67, 2)
+    expect(statement.availableCredit).toBe(100000)
+    expect(statement.madnessUsedEffective).toBeCloseTo(1000 + 45833.33, 2)
+  })
+
+  it('splits an installment purchase across the Madness and regular limits by share', () => {
+    const split: CardInstallment = {
+      ...plan('madness'),
+      id: 'plan-split',
+      kind: 'purchase',
+      madnessPrincipal: 30000,
+      monthlyAddOnRate: 0,
+    }
+    const transactions = buildInstallmentCharges([split], [card])
+    const summaries = summarizeCardInstallments([card.id], [split], [card], new Date(2026, 9, 31, 23, 59, 59, 999))
+    const statement = computeStatement(card, transactions, 2026, 9, summaries)
+    const billed = 50000 / 12
+    const unbilled = 50000 - billed
+
+    expect(statement.statementBalance).toBeCloseTo(billed, 2)
+    expect(statement.madnessUsedEffective).toBeCloseTo(1000 + unbilled * 0.6, 2)
+    expect(statement.availableCredit).toBeCloseTo(100000 - billed * 0.4 - unbilled * 0.4, 2)
+  })
+
+  it('does not lower the card balance when the cash is recorded as income', () => {
+    const proceeds: Transaction = {
+      id: 'proceeds',
+      userId: 'user-1',
+      type: 'income',
+      amount: 50000,
+      category: 'Credit-to-Cash',
+      description: 'Credit-to-Cash',
+      occurredAt: '2026-10-10T12:00:00',
+      createdAt: '2026-10-10T12:00:00',
+      installmentPlanId: 'plan-regular',
+    }
+    const statement = statementFor('regular', [proceeds])
+
+    expect(statement.paymentsCredits).toBe(0)
+    expect(statement.outstandingBalance).toBeCloseTo(4666.67, 2)
+  })
+})
+
+describe('cash advance', () => {
+  const card: CreditCard = {
+    id: 'free',
+    userId: 'user-1',
+    name: 'BPI Amore Cashback',
+    lastFour: '1111',
+    limit: 100000,
+    statementDay: 1,
+    dueDay: 21,
+    active: true,
+    createdAt: '2024-01-01T00:00:00Z',
+    cashbackRules: [{ rate: 1, categories: ['*'] }],
+  }
+
+  function advance(id: string, amount: number, category: string): Transaction {
+    return {
+      id,
+      userId: 'user-1',
+      type: category === 'Fee' ? 'bill' : 'expense',
+      amount,
+      category,
+      description: id,
+      occurredAt: '2026-01-02T12:00:00',
+      createdAt: '2026-01-02T12:00:00',
+      creditCardId: card.id,
+      cashAdvance: true,
+      cashAdvanceMonthlyRate: 2.5,
+    }
+  }
+
+  const cash = advance('cash', 20000, 'Cash advance')
+  const fee = advance('fee', 200, 'Fee')
+
+  it("matches BPI's sample: 20,000 + 200 fee at 2.5% over 31 days", () => {
+    const statement = computeStatement(card, [cash, fee], 2026, 1)
+
+    expect(Math.abs(statement.interestCharged - 521.62)).toBeLessThan(0.5)
+  })
+
+  it('charges interest from day one even though the card has no balance carried', () => {
+    expect(computeStatement(card, [cash, fee], 2026, 1).previousBalance).toBe(0)
+    expect(computeStatement(card, [cash, fee], 2026, 1).interestCharged).toBeGreaterThan(0)
+  })
+
+  it('keeps charging interest the next cycle while unpaid', () => {
+    const statement = computeStatement(card, [cash, fee], 2026, 2)
+
+    expect(statement.interestCharged).toBeCloseTo(20200 * 0.025 * (12 / 360) * 28, 2)
+  })
+
+  it('stops interest on the day the advance is paid', () => {
+    const payment: Transaction = {
+      id: 'payment',
+      userId: 'user-1',
+      type: 'bill',
+      amount: 20200,
+      category: 'Credit card payment',
+      description: 'payment',
+      occurredAt: '2026-02-10T12:00:00',
+      createdAt: '2026-02-10T12:00:00',
+      creditCardId: card.id,
+      creditCardPayment: true,
+    }
+    const statement = computeStatement(card, [cash, fee, payment], 2026, 2)
+
+    expect(statement.interestCharged).toBeCloseTo(20200 * 0.025 * (12 / 360) * 8, 2)
+  })
+
+  it('earns no cashback', () => {
+    expect(computeCashbackForTransaction(card, cash)).toBe(0)
+    expect(computeStatement(card, [cash, fee], 2026, 1).cashbackEligibleSpend).toBe(0)
   })
 })

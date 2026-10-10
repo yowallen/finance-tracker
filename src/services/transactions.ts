@@ -80,6 +80,12 @@ function mapDoc(
     ...(typeof creditCardPayment === 'boolean' ? { creditCardPayment } : {}),
     ...(data.cashbackCredit === true ? { cashbackCredit: true } : {}),
     ...(isAnnualFee !== undefined ? { isAnnualFee } : {}),
+    ...(data.cashAdvance === true ? { cashAdvance: true } : {}),
+    ...(typeof data.cashAdvanceMonthlyRate === 'number' && Number.isFinite(data.cashAdvanceMonthlyRate)
+      ? { cashAdvanceMonthlyRate: data.cashAdvanceMonthlyRate }
+      : {}),
+    ...(typeof data.installmentPlanId === 'string' ? { installmentPlanId: data.installmentPlanId } : {}),
+    ...(data.installmentPurchase === true ? { installmentPurchase: true } : {}),
     ...(type === 'savings'
       ? { savingsDirection: savingsDirection as SavingsDirection }
       : {}),
@@ -103,6 +109,16 @@ function validateInput(input: TransactionInput): void {
       throw new Error('Savings transfers need a deposit or withdraw direction.')
     }
   }
+}
+
+/** Cash advance and Credit-to-Cash links are set on create only; edits keep them. */
+function applyCashFields(payload: Record<string, unknown>, input: TransactionInput): void {
+  if (input.cashAdvance) payload.cashAdvance = true
+  if (typeof input.cashAdvanceMonthlyRate === 'number' && Number.isFinite(input.cashAdvanceMonthlyRate)) {
+    payload.cashAdvanceMonthlyRate = input.cashAdvanceMonthlyRate
+  }
+  if (input.installmentPlanId) payload.installmentPlanId = input.installmentPlanId
+  if (input.installmentPurchase) payload.installmentPurchase = true
 }
 
 export function subscribeTransactions(
@@ -202,6 +218,7 @@ export async function createTransaction(
   if (typeof input.isAnnualFee === 'boolean') {
     payload.isAnnualFee = input.isAnnualFee
   }
+  applyCashFields(payload, input)
   if (input.type === 'savings' && input.savingsDirection) {
     payload.savingsDirection = input.savingsDirection
   }
@@ -258,6 +275,7 @@ export async function createTransactionsBatch(
     if (input.creditCardPayment) payload.creditCardPayment = true
     if (input.cashbackCredit) payload.cashbackCredit = true
     if (typeof input.isAnnualFee === 'boolean') payload.isAnnualFee = input.isAnnualFee
+    applyCashFields(payload, input)
     if (input.type === 'savings' && input.savingsDirection) {
       payload.savingsDirection = input.savingsDirection
     }
@@ -364,6 +382,8 @@ export async function reconcileTransactionCashbackValues(
       creditCardId: tx.creditCardId,
       creditCardPayment: false,
       isAnnualFee: tx.isAnnualFee,
+      cashAdvance: tx.cashAdvance,
+      installmentPlanId: tx.installmentPlanId,
     })
     const currentValue = typeof tx.cashbackEarned === 'number' ? tx.cashbackEarned : 0
 

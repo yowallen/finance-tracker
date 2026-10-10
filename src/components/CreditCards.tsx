@@ -16,7 +16,14 @@ import {
   BarChart2,
   TrendingUp,
   ChevronDown,
+  Banknote,
 } from 'lucide-react'
+import {
+  CardCashSheet,
+  type CashAdvanceRequest,
+  type CreditToCashRequest,
+  type InstallmentPurchaseRequest,
+} from './CardCashSheet'
 import { CreditCardForm } from './CreditCardForm'
 import { CreditLimitBar } from './CreditLimitBar'
 import { LoadingState } from './LoadingState'
@@ -24,6 +31,9 @@ import { InterestProjection as InterestProjectionComponent } from './InterestPro
 import { UtilizationChart } from './UtilizationChart'
 import { formatDate, formatMoney } from '../lib/format'
 import { computePointsForTransaction, computeStatementPeriod, getCurrentCashbackForTransaction, getNextBillingCycleBalance, groupCreditCards, summarizeCardCashback, syncSharedLimitMembership } from '../services/creditCards'
+import { supportsBpiCashFeatures } from '../services/cardInstallments'
+import type { CardInstallment } from '../types/cardInstallment'
+import { installmentLabel, madnessShare } from '../types/cardInstallment'
 import type { Transaction } from '../types/transaction'
 import type {
   CreditCard,
@@ -49,6 +59,10 @@ interface CreditCardsProps {
   onDelete: (card: CreditCard) => Promise<void>
   /** Posts redeemed cashback as a credit on the card. */
   onRedeemCashback: (card: CreditCard, amount: number) => Promise<void>
+  onCreditToCash: (request: CreditToCashRequest) => Promise<void>
+  onCashAdvance: (request: CashAdvanceRequest) => Promise<void>
+  onInstallmentPurchase: (request: InstallmentPurchaseRequest) => Promise<void>
+  onDeleteInstallment: (plan: CardInstallment) => Promise<void>
 }
 
 type StatusTone = 'ok' | 'warn' | 'danger' | 'neutral'
@@ -103,6 +117,10 @@ export function CreditCards({
   onUpdate,
   onDelete,
   onRedeemCashback,
+  onCreditToCash,
+  onCashAdvance,
+  onInstallmentPurchase,
+  onDeleteInstallment,
 }: CreditCardsProps) {
   const headingRef = useRef<HTMLHeadingElement>(null)
   const addTriggerRef = useRef<HTMLButtonElement>(null)
@@ -116,6 +134,7 @@ export function CreditCards({
   const [redeemCardId, setRedeemCardId] = useState<string | null>(null)
   const [redeemAmount, setRedeemAmount] = useState('')
   const [historyExpandedByCardId, setHistoryExpandedByCardId] = useState<Record<string, boolean>>({})
+  const [cashCardId, setCashCardId] = useState<string | null>(null)
 
   const projectionByCardId = useMemo(
     () => new Map(interestProjections.map((p) => [p.cardId, p])),
@@ -323,6 +342,32 @@ export function CreditCards({
       announce(`Redeemed ${formatMoney(cappedAmount)} from ${card.name} as a statement credit.`)
     } catch (err) {
       announce(err instanceof Error ? err.message : 'Could not redeem cashback.')
+    }
+  }
+
+  async function handleCreditToCash(request: CreditToCashRequest) {
+    await onCreditToCash(request)
+    announce(`Credit-to-Cash of ${formatMoney(request.plan.principal)} added. Installments will show on your statements.`)
+  }
+
+  async function handleCashAdvance(request: CashAdvanceRequest) {
+    await onCashAdvance(request)
+    announce(`Cash advance of ${formatMoney(request.amount)} added with a ${formatMoney(request.fee)} fee.`)
+  }
+
+  async function handleInstallmentPurchase(request: InstallmentPurchaseRequest) {
+    await onInstallmentPurchase(request)
+    announce(`${installmentLabel(request.plan)} added. ${formatMoney(request.plan.principal)} will bill over ${request.plan.termMonths} months.`)
+  }
+
+  async function handleDeleteInstallment(plan: CardInstallment) {
+    setSaving(true)
+    try {
+      await onDeleteInstallment(plan)
+    } catch (err) {
+      announce(err instanceof Error ? err.message : 'Could not remove the installment plan.')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -569,8 +614,71 @@ export function CreditCards({
                         cardLimit={card.limit}
                         availableCredit={statement.availableCredit}
                         madnessLimit={card.madnessLimit ?? 0}
-                        madnessUsed={card.madnessUsed ?? 0}
+                        madnessUsed={statement.madnessUsedEffective}
                       />
+
+                      {statement.installments.length > 0 && (
+                        <section className="cc-installments" aria-labelledby={`cc-installments-${card.id}`}>
+                          <h5 id={`cc-installments-${card.id}`} className="cc-installments-title">
+                            Installments
+                          </h5>
+                          <ul className="cc-installment-list">
+                            {statement.installments.map((summary) => {
+                              const { plan } = summary
+                              const label = installmentLabel(plan)
+                              const share = madnessShare(plan)
+                              const lineLabel = share >= 1
+                                ? 'Madness Limit'
+                                : share > 0
+                                  ? `${formatMoney(plan.principal * share)} Madness + ${formatMoney(plan.principal * (1 - share))} regular`
+                                  : 'Regular limit'
+                              const progress = plan.termMonths > 0 ? (summary.billedCount / plan.termMonths) * 100 : 0
+                              return (
+                                <li key={plan.id} className="cc-installment">
+                                  <div className="cc-installment-main">
+                                    <strong>{label} · {formatMoney(plan.principal)}</strong>
+                                    <span className="cc-installment-meta">
+                                      {summary.billedCount} of {plan.termMonths} billed
+                                      {' · '}
+                                      {lineLabel}
+                                      {summary.unbilledPrincipal > 0 && ` · ${formatMoney(summary.unbilledPrincipal)} left to bill`}
+                                    </span>
+                                    {summary.nextBillingDate && (
+                                      <span className="cc-installment-meta">
+                                        Next: {formatDate(summary.nextBillingDate.toISOString())}
+                                      </span>
+                                    )}
+                                    <div
+                                      className="cc-installment-progress"
+                                      role="progressbar"
+                                      aria-label={`${label} installments billed`}
+                                      aria-valuemin={0}
+                                      aria-valuemax={plan.termMonths}
+                                      aria-valuenow={summary.billedCount}
+                                    >
+                                      <span style={{ width: `${progress}%` }} />
+                                    </div>
+                                  </div>
+                                  <span className="cc-installment-amount">
+                                    {formatMoney(summary.monthlyPayment)}
+                                    <span className="cc-installment-meta">/month</span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="icon-btn danger"
+                                    onClick={() => void handleDeleteInstallment(plan)}
+                                    aria-label={`Remove ${label} plan`}
+                                    title="Remove plan"
+                                    disabled={saving}
+                                  >
+                                    <Trash2 aria-hidden="true" />
+                                  </button>
+                                </li>
+                              )
+                            })}
+                          </ul>
+                        </section>
+                      )}
 
                       {utilizationHistory && <UtilizationChart history={utilizationHistory} />}
 
@@ -649,6 +757,11 @@ export function CreditCards({
                                     <ul className="cc-history-list">
                                       {rows.map((transaction) => {
                                         const isPayment = transaction.creditCardPayment === true
+                                        const chargeLabel = typeof transaction.installmentNumber === 'number'
+                                          ? `Installment ${transaction.installmentNumber}/${transaction.installmentTerm ?? '?'}`
+                                          : transaction.cashAdvance
+                                            ? 'Cash advance'
+                                            : 'Charge'
                                         const chargedCard = pool.cards.find((item) => item.id === transaction.creditCardId) ?? member
                                         const pointsValue = !isPayment
                                           ? computePointsForTransaction(chargedCard, {
@@ -659,6 +772,8 @@ export function CreditCards({
                                               creditCardId: transaction.creditCardId,
                                               creditCardPayment: false,
                                               isAnnualFee: transaction.isAnnualFee,
+                                              cashAdvance: transaction.cashAdvance,
+                                              installmentPlanId: transaction.installmentPlanId,
                                             })
                                           : 0
                                         const cashbackValue = !isPayment
@@ -672,6 +787,8 @@ export function CreditCards({
                                               creditCardId: transaction.creditCardId,
                                               creditCardPayment: false,
                                               isAnnualFee: transaction.isAnnualFee,
+                                              cashAdvance: transaction.cashAdvance,
+                                              installmentPlanId: transaction.installmentPlanId,
                                             }, allTransactions)
                                           : 0
                                         return (
@@ -692,7 +809,7 @@ export function CreditCards({
                                             </div>
                                             <div className="cc-history-amount">
                                               <span className={isPayment ? 'payment' : 'charge'}>
-                                                {isPayment ? 'Payment' : 'Charge'}
+                                                {isPayment ? 'Payment' : chargeLabel}
                                               </span>
                                               <strong className={isPayment ? 'payment' : 'charge'}>
                                                 {isPayment ? '+' : '-'}{formatMoney(transaction.amount)}
@@ -712,6 +829,17 @@ export function CreditCards({
                     </div>
 
                     <div className="cc-card-footer">
+                      {card.active && pool.cards.some((member) => supportsBpiCashFeatures(member)) && (
+                        <button
+                          type="button"
+                          className="btn-ghost btn-sm cc-projection-btn"
+                          onClick={() => setCashCardId(card.id)}
+                          aria-label={`Cash and installments for ${card.name}`}
+                        >
+                          <Banknote className="cc-projection-icon" aria-hidden="true" />
+                          <span className="cc-projection-label">Cash & installments</span>
+                        </button>
+                      )}
                       {hasRewards && statement.availableCashback > 0 && (
                         <button
                           type="button"
@@ -742,6 +870,23 @@ export function CreditCards({
           </>
         )}
       </div>
+
+      {cashCardId && (() => {
+        const pool = groupCreditCards(cards).find((item) => item.primary.id === cashCardId)
+        const statement = statementByCardId.get(cashCardId)
+        if (!pool || !statement) return null
+        return (
+          <CardCashSheet
+            card={pool.primary}
+            members={pool.cards.filter((member) => member.active && supportsBpiCashFeatures(member))}
+            statement={statement}
+            onClose={() => setCashCardId(null)}
+            onCreditToCash={handleCreditToCash}
+            onCashAdvance={handleCashAdvance}
+            onInstallmentPurchase={handleInstallmentPurchase}
+          />
+        )
+      })()}
 
       {projectionCardId && projectionByCardId.has(projectionCardId) && (
         <InterestProjectionComponent

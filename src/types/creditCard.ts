@@ -1,3 +1,4 @@
+import type { CardInstallmentSummary } from './cardInstallment'
 import type { Transaction } from './transaction'
 
 export interface CashbackRule {
@@ -169,6 +170,10 @@ export interface CreditCardStatement {
   cashbackRedeemed: number
   availableCashback: number
   pointsEarned: number
+  /** Manual Madness used plus principal not yet billed on Madness-line Credit-to-Cash plans. */
+  madnessUsedEffective: number
+  /** Credit-to-Cash plans on this card or shared-limit pool. */
+  installments: CardInstallmentSummary[]
   transactions: Transaction[]
   transactionHistory: Transaction[]
 }

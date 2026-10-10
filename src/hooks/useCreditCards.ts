@@ -15,14 +15,19 @@ import {
   subscribeCreditCards,
   updateCreditCard,
 } from '../services/creditCards'
+import { buildInstallmentCharges, summarizeCardInstallments } from '../services/cardInstallments'
+import type { CardInstallment } from '../types/cardInstallment'
 import type { CreditCard, CreditCardInput } from '../types/creditCard'
 import type { Transaction } from '../types/transaction'
+
+const NO_PLANS: CardInstallment[] = []
 
 export function useCreditCards(
   userId: string | undefined,
   allTransactions: Transaction[],
   year: number,
   month: number,
+  installmentPlans: CardInstallment[] = NO_PLANS,
 ) {
   const [cards, setCards] = useState<CreditCard[]>([])
   const [loading, setLoading] = useState(true)
@@ -58,56 +63,79 @@ export function useCreditCards(
 
   const pools = useMemo(() => groupCreditCards(visibleCards), [visibleCards])
 
+  /**
+   * Ledger transactions plus computed installment amortizations; use for card math only.
+   * Full-price installment purchases are dropped because their amortizations bill the card.
+   */
+  const cardTransactions = useMemo(() => {
+    const ledger = allTransactions.some((tx) => tx.installmentPurchase === true)
+      ? allTransactions.filter((tx) => tx.installmentPurchase !== true)
+      : allTransactions
+    return installmentPlans.length > 0
+      ? [...ledger, ...buildInstallmentCharges(installmentPlans, visibleCards)]
+      : ledger
+  }, [allTransactions, installmentPlans, visibleCards])
+
+  const installmentSummaries = useMemo(
+    () => summarizeCardInstallments(
+      visibleCards.map((card) => card.id),
+      installmentPlans,
+      visibleCards,
+      new Date(year, month + 1, 0, 23, 59, 59, 999),
+    ),
+    [visibleCards, installmentPlans, year, month],
+  )
+
   const statements = useMemo(
-    () => pools.map((pool) => computePoolStatement(pool, allTransactions, year, month)),
-    [pools, allTransactions, year, month],
+    () => pools.map((pool) => computePoolStatement(pool, cardTransactions, year, month, installmentSummaries)),
+    [pools, cardTransactions, year, month, installmentSummaries],
   )
 
   const totalOutstanding = useMemo(
-    () => computeTotalOutstanding(visibleCards, allTransactions, year, month),
-    [visibleCards, allTransactions, year, month],
+    () => computeTotalOutstanding(visibleCards, cardTransactions, year, month),
+    [visibleCards, cardTransactions, year, month],
   )
 
   const totalAvailableCredit = useMemo(
-    () => computeTotalAvailableCredit(visibleCards, allTransactions, year, month),
-    [visibleCards, allTransactions, year, month],
+    () => computeTotalAvailableCredit(visibleCards, cardTransactions, year, month, installmentSummaries),
+    [visibleCards, cardTransactions, year, month, installmentSummaries],
   )
 
   const nextDueStatement = useMemo(
-    () => getNextDueStatement(visibleCards, allTransactions, year, month),
-    [visibleCards, allTransactions, year, month],
+    () => getNextDueStatement(visibleCards, cardTransactions, year, month),
+    [visibleCards, cardTransactions, year, month],
   )
 
   const interestProjections = useMemo(
     () => pools
       .filter((pool) => pool.primary.active && pool.primary.apr && pool.primary.apr > 0)
       .map((pool) => {
-        const statement = computePoolStatement(pool, allTransactions, year, month)
+        const statement = computePoolStatement(pool, cardTransactions, year, month)
         return projectInterest(pool.primary, statement.outstandingBalance, 24)
       }),
-    [pools, allTransactions, year, month],
+    [pools, cardTransactions, year, month],
   )
 
   const utilizationHistories = useMemo(
     () => pools
       .filter((pool) => pool.cards.some((card) => card.active))
-      .map((pool) => buildPoolUtilizationHistory(pool, allTransactions, year, month, 12)),
-    [pools, allTransactions, year, month],
+      .map((pool) => buildPoolUtilizationHistory(pool, cardTransactions, year, month, 12)),
+    [pools, cardTransactions, year, month],
   )
 
   const aggregateCashback = useMemo(
-    () => computeAggregateCashback(activeCards, allTransactions, year, month),
-    [activeCards, allTransactions, year, month],
+    () => computeAggregateCashback(activeCards, cardTransactions, year, month),
+    [activeCards, cardTransactions, year, month],
   )
 
   const aggregatePoints = useMemo(
-    () => computeAggregatePoints(activeCards, allTransactions, year, month),
-    [activeCards, allTransactions, year, month],
+    () => computeAggregatePoints(activeCards, cardTransactions, year, month),
+    [activeCards, cardTransactions, year, month],
   )
 
   const aggregateUtilization = useMemo(
-    () => computeAggregateUtilization(activeCards, allTransactions, year, month),
-    [activeCards, allTransactions, year, month],
+    () => computeAggregateUtilization(activeCards, cardTransactions, year, month),
+    [activeCards, cardTransactions, year, month],
   )
 
   const cardById = useMemo(
@@ -133,6 +161,8 @@ export function useCreditCards(
     pools,
     activeCards,
     statements,
+    cardTransactions,
+    installmentSummaries,
     totalOutstanding,
     totalAvailableCredit,
     nextDueStatement,

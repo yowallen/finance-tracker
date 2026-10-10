@@ -142,6 +142,8 @@ export function TransactionForm({
             creditCardId: selectedCard.id,
             creditCardPayment: false,
             isAnnualFee: annualFeeFlag,
+            cashAdvance: editing?.cashAdvance,
+            installmentPlanId: editing?.installmentPlanId,
           })
         : 0
 

@@ -29,6 +29,13 @@ export interface CreditCardPaymentBill {
   category: string
   /** Card color for UI */
   color?: string
+  /** Credit-to-Cash amortizations included in `amount`. */
+  installments?: ReminderInstallmentLine[]
+}
+
+export interface ReminderInstallmentLine {
+  label: string
+  amount: number
 }
 
 /**
@@ -61,6 +68,9 @@ export function generateCreditCardPaymentBills(
       )
     }
     const recommendedPaymentDate = previousPhilippineBankingDay(dueDate, 3)
+    const installments = statement.transactions
+      .filter((tx) => typeof tx.installmentNumber === 'number')
+      .map((tx) => ({ label: tx.description, amount: tx.amount }))
 
     bills.push({
       id: `cc-payment:${card.id}:${statement.statementDate.toISOString().slice(0, 10)}`,
@@ -73,6 +83,7 @@ export function generateCreditCardPaymentBills(
       dueDay: recommendedPaymentDate.getDate(),
       category: 'Credit card payment',
       color: card.color,
+      ...(installments.length > 0 ? { installments } : {}),
     })
   }
 
@@ -157,6 +168,7 @@ export function creditCardBillToReminder(
     isCreditCardPayment: true,
     creditCardId: ccBill.cardId,
     cardColor: ccBill.color,
+    ...(ccBill.installments ? { installments: ccBill.installments } : {}),
   }
 }
 

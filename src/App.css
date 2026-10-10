@@ -1969,6 +1969,14 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
   overflow-wrap: anywhere;
 }
 
+.reminder-includes {
+  margin: 0.15rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
 .duration-fields {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -6358,6 +6366,137 @@ html[data-theme='dark'] .undo-toast-undo:hover {
 .cashback-redeem-input:focus {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Credit-to-Cash and cash advance sheet */
+.cash-form-intro {
+  margin: 0;
+}
+
+.cash-preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem 1rem;
+  margin: 0;
+  padding: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.cash-preview div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.cash-preview-wide {
+  grid-column: 1 / -1;
+}
+
+.cash-preview dt {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.cash-preview dd {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.cash-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.7rem 0.9rem 0.7rem 1.8rem;
+  border: 1px solid color-mix(in srgb, var(--expense) 35%, var(--line));
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--expense-container) 45%, transparent);
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
+/* Credit-to-Cash plans on a card */
+.cc-installments {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.cc-installments-title {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.cc-installment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cc-installment {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--surface-variant);
+}
+
+.cc-installment-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.cc-installment-main strong {
+  color: var(--ink);
+  font-size: 0.88rem;
+}
+
+.cc-installment-meta {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-installment-progress {
+  height: 0.3rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.cc-installment-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--card-color, var(--accent));
+}
+
+.cc-installment-amount {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 @keyframes slide-down {

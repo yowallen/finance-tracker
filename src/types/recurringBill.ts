@@ -53,6 +53,8 @@ export interface BillReminder {
   isCreditCardPayment?: boolean
   creditCardId?: string
   cardColor?: string
+  /** Credit-to-Cash amortizations included in a credit-card payment amount. */
+  installments?: Array<{ label: string; amount: number }>
   /** True when this bill is flagged to be paid with a credit card for the viewed month.
    *  When true, the bill is excluded from daily balance/cash flow computations. */
   payWithCreditCard?: boolean

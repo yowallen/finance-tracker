@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { RotateCcw, X } from 'lucide-react'
 
-export type UndoResource = 'transaction' | 'bill' | 'goal' | 'card'
+export type UndoResource = 'transaction' | 'bill' | 'goal' | 'card' | 'installment'
 
 export interface PendingUndo {
   /** Monotonic id so repeated actions restart the auto-dismiss window. */

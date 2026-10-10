@@ -610,6 +610,11 @@ export function BillReminders({
                   · Payment {reminder.paymentNumber} of {reminder.totalPayments} · ends {formatYearMonth(reminder.endsOn)}
                   {reminder.bill.notes ? ` · ${reminder.bill.notes}` : ''}
                 </p>
+                {reminder.installments?.map((line, index) => (
+                  <p key={`${line.label}-${index}`} className="reminder-includes">
+                    Includes {line.label} · {formatMoney(line.amount)}
+                  </p>
+                ))}
               </div>
               <div className="reminder-side">
                 <strong className="tx-amount bill">{formatMoney(reminder.bill.amount)}</strong>

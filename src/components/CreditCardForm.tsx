@@ -660,7 +660,7 @@ export function CreditCardForm({
               placeholder="e.g. 100000"
             />
           </LabeledField>
-          <LabeledField label="Madness Limit used (₱)" hint="Used from the separate installment line">
+          <LabeledField label="Madness used outside tracked plans (₱)" hint="Installments not added through Cash & installments. Tracked plans are counted automatically.">
             <input
               type="number"
               inputMode="decimal"

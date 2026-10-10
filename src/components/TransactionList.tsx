@@ -426,6 +426,8 @@ function TransactionRow({
         creditCardId: tx.creditCardId,
         creditCardPayment: false,
         isAnnualFee: tx.isAnnualFee,
+        cashAdvance: tx.cashAdvance,
+        installmentPlanId: tx.installmentPlanId,
       }, allTransactions)
     : 0
 
