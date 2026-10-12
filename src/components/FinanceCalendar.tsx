@@ -66,6 +66,7 @@ function buildEventsByDay(
   }
 
   for (const reminder of reminders) {
+    if (reminder.dueDate.getFullYear() !== year || reminder.dueDate.getMonth() !== month) continue
     ensure(reminder.dueDate.getDate()).bills.push(reminder)
   }
   for (const tx of transactions) {
@@ -325,7 +326,7 @@ export function FinanceCalendar({
                       {bill.status === 'paid' ? '−' : ''}
                       {formatMoney(bill.bill.amount)}
                     </strong>
-                    {bill.status !== 'paid' && !bill.isCreditCardPayment && (
+                    {bill.status !== 'paid' && !bill.isCreditCardPayment && !bill.isInstallmentPart && (
                       <button
                         type="button"
                         className={`icon-btn icon-btn--cc ${bill.payWithCreditCard ? 'active' : ''}`}

@@ -15,7 +15,7 @@ import {
   subscribeCreditCards,
   updateCreditCard,
 } from '../services/creditCards'
-import { buildInstallmentCharges, summarizeCardInstallments } from '../services/cardInstallments'
+import { buildInstallmentCharges, summarizeCardInstallments, isPostedInstallmentFee } from '../services/cardInstallments'
 import type { CardInstallment } from '../types/cardInstallment'
 import type { CreditCard, CreditCardInput } from '../types/creditCard'
 import type { Transaction } from '../types/transaction'
@@ -68,9 +68,9 @@ export function useCreditCards(
    * Full-price installment purchases are dropped because their amortizations bill the card.
    */
   const cardTransactions = useMemo(() => {
-    const ledger = allTransactions.some((tx) => tx.installmentPurchase === true)
-      ? allTransactions.filter((tx) => tx.installmentPurchase !== true)
-      : allTransactions
+    const ledger = allTransactions.filter(
+      (tx) => tx.installmentPurchase !== true && !isPostedInstallmentFee(tx),
+    )
     return installmentPlans.length > 0
       ? [...ledger, ...buildInstallmentCharges(installmentPlans, visibleCards)]
       : ledger

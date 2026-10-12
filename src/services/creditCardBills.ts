@@ -1,7 +1,11 @@
 import type { CreditCard } from '../types/creditCard'
 import type { CreditCardStatement } from '../types/creditCard'
+import type { CardInstallment } from '../types/cardInstallment'
+import { installmentLabel } from '../types/cardInstallment'
 import type { RecurringBill, BillReminder, BillReminderStatus } from '../types/recurringBill'
 import type { Transaction } from '../types/transaction'
+import { computeInstallmentSchedule } from './cardInstallments'
+import { computeStatementPeriod, groupCreditCards } from './creditCards'
 import { previousPhilippineBankingDay, startOfLocalDay } from './recurringBills'
 
 /**
@@ -29,13 +33,22 @@ export interface CreditCardPaymentBill {
   category: string
   /** Card color for UI */
   color?: string
-  /** Credit-to-Cash amortizations included in `amount`. */
+  /** Statement this payment covers. */
+  statementDate: Date
+  /**
+   * True when this statement is shown only so its new installments can be reminded.
+   * The full card payment is still due in a later month.
+   */
+  installmentsOnly?: boolean
+  /** Credit-to-Cash and installment-purchase amortizations included in `amount`. */
   installments?: ReminderInstallmentLine[]
 }
 
 export interface ReminderInstallmentLine {
   label: string
   amount: number
+  number?: number
+  term?: number
 }
 
 /**
@@ -70,7 +83,12 @@ export function generateCreditCardPaymentBills(
     const recommendedPaymentDate = previousPhilippineBankingDay(dueDate, 3)
     const installments = statement.transactions
       .filter((tx) => typeof tx.installmentNumber === 'number')
-      .map((tx) => ({ label: tx.description, amount: tx.amount }))
+      .map((tx) => ({
+        label: tx.description,
+        amount: tx.amount,
+        ...(typeof tx.installmentNumber === 'number' ? { number: tx.installmentNumber } : {}),
+        ...(typeof tx.installmentTerm === 'number' ? { term: tx.installmentTerm } : {}),
+      }))
 
     bills.push({
       id: `cc-payment:${card.id}:${statement.statementDate.toISOString().slice(0, 10)}`,
@@ -83,11 +101,67 @@ export function generateCreditCardPaymentBills(
       dueDay: recommendedPaymentDate.getDate(),
       category: 'Credit card payment',
       color: card.color,
+      statementDate: statement.statementDate,
       ...(installments.length > 0 ? { installments } : {}),
     })
   }
 
   return bills
+}
+
+function sameMonth(date: Date, year: number, month: number): boolean {
+  return date.getFullYear() === year && date.getMonth() === month
+}
+
+/** "iPhone 15 installment 1/24" and "iPhone 15 installment 2/24" are the same plan. */
+function installmentPlanKey(line: ReminderInstallmentLine): string {
+  const name = line.label.replace(/ installment \d+\/\d+$/, '')
+  return `${name}|${line.term ?? ''}`
+}
+
+/**
+ * Bills whose payment falls in the viewed month, plus the next statement that
+ * has an installment plan not already listed on this month's payment.
+ */
+export function reminderBillsForMonth(
+  bills: CreditCardPaymentBill[],
+  year: number,
+  month: number,
+): CreditCardPaymentBill[] {
+  const dueThisMonth = bills.filter((bill) => sameMonth(bill.scheduledDueDate, year, month))
+  const shownPlans = new Set(
+    dueThisMonth.flatMap((bill) =>
+      (bill.installments ?? []).map((line) => `${bill.cardId}:${installmentPlanKey(line)}`),
+    ),
+  )
+  const viewStart = new Date(year, month, 1).getTime()
+  const horizon = new Date(year, month + 2, 1).getTime()
+  const upcoming = bills
+    .filter((bill) => !sameMonth(bill.scheduledDueDate, year, month))
+    .map((bill) => {
+      const fresh = (bill.installments ?? []).filter(
+        (line) => !shownPlans.has(`${bill.cardId}:${installmentPlanKey(line)}`),
+      )
+      return { bill, fresh }
+    })
+    .filter(({ bill, fresh }) =>
+      fresh.length > 0
+      && bill.statementDate.getTime() >= viewStart
+      && bill.statementDate.getTime() < horizon,
+    )
+    .sort((a, b) => a.bill.statementDate.getTime() - b.bill.statementDate.getTime())
+
+  const earliestByCard = new Map<string, CreditCardPaymentBill>()
+  for (const { bill, fresh } of upcoming) {
+    if (earliestByCard.has(bill.cardId)) continue
+    earliestByCard.set(bill.cardId, {
+      ...bill,
+      installments: fresh,
+      installmentsOnly: true,
+    })
+  }
+
+  return [...dueThisMonth, ...earliestByCard.values()]
 }
 
 /**
@@ -170,6 +244,101 @@ export function creditCardBillToReminder(
     cardColor: ccBill.color,
     ...(ccBill.installments ? { installments: ccBill.installments } : {}),
   }
+}
+
+/** One reminder row per amortization. The amount stays inside the card payment, so these rows are not a second bill. */
+export function expandInstallmentReminders(reminder: BillReminder): BillReminder[] {
+  const lines = reminder.installments ?? []
+  if (lines.length === 0) return []
+  const cardName = reminder.bill.name.replace(/^Credit Card Payment - /, '')
+
+  return lines.map((line, index) => ({
+    ...reminder,
+    bill: {
+      ...reminder.bill,
+      id: `${reminder.bill.id}:installment:${index}`,
+      name: line.label,
+      amount: line.amount,
+      category: 'Installment',
+      notes: `Included in the ${cardName} payment`,
+    },
+    paymentNumber: line.number ?? index + 1,
+    totalPayments: line.term ?? Math.max(lines.length, 1),
+    isCreditCardPayment: false,
+    isInstallmentPart: true,
+    installments: undefined,
+  }))
+}
+
+function monthIndex(year: number, month: number): number {
+  return year * 12 + month
+}
+
+function planReminderKey(cardId: string, label: string, term?: number): string {
+  return `${cardId}:${installmentPlanKey({ label, amount: 0, term })}`
+}
+
+/** Installment rows for plans whose next bill is this month, next month, or was booked this month. */
+export function upcomingInstallmentReminders(
+  plans: CardInstallment[],
+  cards: CreditCard[],
+  year: number,
+  month: number,
+  monthTransactions: Transaction[],
+  coveredKeys: Set<string>,
+): BillReminder[] {
+  const viewed = monthIndex(year, month)
+  const reminders: BillReminder[] = []
+
+  for (const plan of plans) {
+    const pool = groupCreditCards(cards).find((item) => item.cards.some((card) => card.id === plan.cardId))
+    const billingCard = pool?.primary ?? cards.find((card) => card.id === plan.cardId)
+    if (!billingCard?.active) continue
+
+    const schedule = computeInstallmentSchedule(plan, billingCard)
+    const [bookedYear, bookedMonth] = plan.bookedOn.split('-').map(Number)
+    const booked = monthIndex(bookedYear, (bookedMonth ?? 1) - 1)
+    const row = schedule.find((item) => {
+      const billed = monthIndex(item.billingDate.getFullYear(), item.billingDate.getMonth())
+      return billed === viewed || billed === viewed + 1 || (booked === viewed && item.number === 1)
+    })
+    if (!row) continue
+
+    const label = `${installmentLabel(plan)} installment ${row.number}/${plan.termMonths}`
+    if (coveredKeys.has(planReminderKey(billingCard.id, label, plan.termMonths))) continue
+
+    const fee = row.number === 1 ? Math.max(0, plan.processingFee ?? 0) : 0
+    const period = computeStatementPeriod(billingCard, row.billingDate.getFullYear(), row.billingDate.getMonth())
+    const payBy = previousPhilippineBankingDay(period.dueDate, 3)
+    const parent = creditCardBillToReminder(
+      {
+        id: `installment-plan:${plan.id}:${row.number}`,
+        cardId: billingCard.id,
+        cardName: billingCard.name,
+        lastFour: billingCard.lastFour,
+        amount: Math.round((row.amount + fee) * 100) / 100,
+        dueDate: period.dueDate,
+        scheduledDueDate: payBy,
+        dueDay: payBy.getDate(),
+        category: 'Credit card payment',
+        color: billingCard.color,
+        statementDate: row.billingDate,
+        installmentsOnly: true,
+        installments: [{
+          label,
+          amount: Math.round((row.amount + fee) * 100) / 100,
+          number: row.number,
+          term: plan.termMonths,
+        }],
+      },
+      year,
+      month,
+      monthTransactions,
+    )
+    reminders.push(...expandInstallmentReminders(parent))
+  }
+
+  return reminders
 }
 
 /**

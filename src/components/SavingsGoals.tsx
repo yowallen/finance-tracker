@@ -7,6 +7,7 @@ import {
 } from 'react'
 import { Check, MapPinned, PiggyBank, Plus, Pencil, Trash2 } from 'lucide-react'
 import { formatMoney } from '../lib/format'
+import { MoneyInput } from './MoneyInput'
 import { fileToFirestoreImageDataUrl } from '../lib/imageData'
 import type {
   SavingsGoal,
@@ -274,12 +275,11 @@ export function SavingsGoals({
           </label>
           <label>
             Price
-            <input
-              inputMode="decimal"
+            <MoneyInput
               required
               value={targetText}
-              onChange={(e) => setTargetText(e.target.value)}
-              placeholder="25000"
+              onChange={setTargetText}
+              placeholder="25,000"
             />
           </label>
           <label>
@@ -343,11 +343,10 @@ export function SavingsGoals({
           </p>
           <label>
             Amount
-            <input
-              inputMode="decimal"
+            <MoneyInput
               autoFocus
               value={contributeText}
-              onChange={(e) => setContributeText(e.target.value)}
+              onChange={setContributeText}
               placeholder="e.g. 500"
             />
           </label>

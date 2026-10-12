@@ -1,6 +1,7 @@
 import { useRef, useState, type SubmitEvent } from 'react'
 import { Check, Handshake, Plus, Pencil, Trash2 } from 'lucide-react'
 import { formatMoney } from '../lib/format'
+import { MoneyInput } from './MoneyInput'
 import {
   FREQUENCY_LABELS,
   type Paluwagan,
@@ -232,16 +233,12 @@ export function PaluwaganSection({
               />
             </label>
             <label>
-              Contribution (₱)
-              <input
-                type="number"
-                inputMode="decimal"
-                min="0.01"
-                step="0.01"
+              Contribution
+              <MoneyInput
                 required
                 value={form.contributionAmount}
-                onChange={(e) => setForm((f) => ({ ...f, contributionAmount: e.target.value }))}
-                placeholder="1000"
+                onChange={(value) => setForm((f) => ({ ...f, contributionAmount: value }))}
+                placeholder="1,000"
               />
             </label>
           </div>

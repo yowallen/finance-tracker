@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CalendarRange } from 'lucide-react'
 import { formatMoney } from '../lib/format'
+import { MoneyInput } from './MoneyInput'
 import { estimatePayslip } from '../services/phPayroll'
 import { settingsFromPreset } from '../services/paydayBudget'
 import {
@@ -181,39 +182,27 @@ export function PaydayBudget({ settings, periods, onSave }: Readonly<PaydayBudge
       <div className="payday-controls">
         <label>
           Monthly basic pay
-          <input
-            type="number"
-            min={0}
-            step="0.01"
-            inputMode="decimal"
+          <MoneyInput
             value={gross}
-            onChange={(event) => setGross(event.target.value)}
+            onChange={setGross}
             onBlur={saveGross}
             placeholder="Before deductions"
           />
         </label>
         <label>
           De minimis each payday
-          <input
-            type="number"
-            min={0}
-            step="0.01"
-            inputMode="decimal"
+          <MoneyInput
             value={deMinimisInput}
-            onChange={(event) => setDeMinimisInput(event.target.value)}
+            onChange={setDeMinimisInput}
             onBlur={saveDeMinimis}
             placeholder="0"
           />
         </label>
         <label>
           Allowance per period
-          <input
-            type="number"
-            min={0}
-            step="0.01"
-            inputMode="decimal"
+          <MoneyInput
             value={allowance}
-            onChange={(event) => setAllowance(event.target.value)}
+            onChange={setAllowance}
             onBlur={saveAllowance}
             placeholder="0 = use logged income"
           />

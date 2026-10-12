@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { Banknote, CalendarClock, ShoppingBag } from 'lucide-react'
 import { TransactionSheet } from './TransactionSheet'
+import { MoneyInput } from './MoneyInput'
 import { formatDate, formatMoney, toDateInputValue } from '../lib/format'
 import {
   BPI_CASH_PRESETS,
@@ -140,6 +141,7 @@ export function CardCashSheet({
     const totalInterest = principal * (rateValue / 100) * term
     return {
       monthly: computeMonthlyInstallment(principal, term, rateValue),
+      firstPayment: computeMonthlyInstallment(principal, term, rateValue) + feeValue,
       totalInterest,
       totalCost: totalInterest + feeValue,
       firstBilling: schedule[0]?.billingDate ?? null,
@@ -388,15 +390,11 @@ export function CardCashSheet({
 
             <div className="form-row">
               <label>
-                <span>Price (₱)</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="1"
-                  step="0.01"
+                <span>Price</span>
+                <MoneyInput
                   required
                   value={purchaseAmount}
-                  onChange={(e) => setPurchaseAmount(e.target.value)}
+                  onChange={setPurchaseAmount}
                   placeholder="0.00"
                 />
                 <span className="field-hint">
@@ -489,15 +487,11 @@ export function CardCashSheet({
           <>
             <div className="form-row">
               <label>
-                <span>Amount to receive (₱)</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="1"
-                  step="0.01"
+                <span>Amount to receive</span>
+                <MoneyInput
                   required
                   value={c2cAmount}
-                  onChange={(e) => setC2cAmount(e.target.value)}
+                  onChange={setC2cAmount}
                   placeholder="0.00"
                 />
                 <span className="field-hint">Available: {formatMoney(lineAvailable)}</span>
@@ -543,20 +537,16 @@ export function CardCashSheet({
 
             <div className="form-row">
               <label>
-                <span>Service fee (₱)</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.01"
+                <span>Service fee</span>
+                <MoneyInput
                   value={feeEdited ? fee : String(autoFee)}
-                  onChange={(e) => {
+                  onChange={(value) => {
                     setFeeEdited(true)
-                    setFee(e.target.value)
+                    setFee(value)
                   }}
                 />
                 <span className="field-hint">
-                  ₱500 up to ₱50,000, ₱700 above. Billed on your next statement.
+                  ₱500 up to ₱50,000, ₱700 above. Added to the first installment.
                 </span>
               </label>
               <label>
@@ -589,6 +579,12 @@ export function CardCashSheet({
                   <dt>Monthly installment</dt>
                   <dd>{formatMoney(c2cPreview.monthly)}</dd>
                 </div>
+                {feeValue > 0 && (
+                  <div>
+                    <dt>First installment</dt>
+                    <dd>{formatMoney(c2cPreview.firstPayment)}</dd>
+                  </div>
+                )}
                 <div>
                   <dt>Total add-on interest</dt>
                   <dd>{formatMoney(c2cPreview.totalInterest)}</dd>
@@ -617,15 +613,11 @@ export function CardCashSheet({
           <>
             <div className="form-row">
               <label>
-                <span>Cash amount (₱)</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="1"
-                  step="0.01"
+                <span>Cash amount</span>
+                <MoneyInput
                   required
                   value={caAmount}
-                  onChange={(e) => setCaAmount(e.target.value)}
+                  onChange={setCaAmount}
                   placeholder="0.00"
                 />
                 <span className="field-hint">Cash advance limit: about {formatMoney(caLimit)}</span>
@@ -643,14 +635,10 @@ export function CardCashSheet({
 
             <div className="form-row">
               <label>
-                <span>Cash advance fee (₱)</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.01"
+                <span>Cash advance fee</span>
+                <MoneyInput
                   value={caFee}
-                  onChange={(e) => setCaFee(e.target.value)}
+                  onChange={setCaFee}
                 />
                 <span className="field-hint">BPI charges ₱200 per withdrawal. Other banks' ATMs may add more.</span>
               </label>

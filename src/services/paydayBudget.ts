@@ -247,7 +247,7 @@ function periodTotals(
 
   let stillDue = 0
   for (const reminder of reminders) {
-    if (reminder.status === 'paid' || reminder.payWithCreditCard) continue
+    if (reminder.status === 'paid' || reminder.payWithCreditCard || reminder.isInstallmentPart) continue
     const due = reminder.actualDueDate ?? reminder.dueDate
     if (!inPeriod(due, period)) continue
     stillDue += reminder.bill.amount

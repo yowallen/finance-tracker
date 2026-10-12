@@ -6,12 +6,16 @@ import {
   subscribeRecurringBills,
   updateRecurringBill,
 } from '../services/recurringBills'
-import { computeStatement } from '../services/creditCards'
+import { computePoolStatement, groupCreditCards } from '../services/creditCards'
 import {
   generateCreditCardPaymentBills,
   creditCardBillToReminder,
+  expandInstallmentReminders,
+  reminderBillsForMonth,
+  upcomingInstallmentReminders,
   type CreditCardPaymentBill,
 } from '../services/creditCardBills'
+import type { CardInstallment } from '../types/cardInstallment'
 import type { BillReminder, RecurringBill, RecurringBillInput } from '../types/recurringBill'
 import type { Transaction } from '../types/transaction'
 import type { CreditCard, CreditCardStatement } from '../types/creditCard'
@@ -35,6 +39,7 @@ export function useRecurringBills(
   cards: CreditCard[],
   statements: CreditCardStatement[],
   allTransactions: Transaction[],
+  installmentPlans: CardInstallment[] = [],
 ): UseRecurringBillsReturn {
   const [bills, setBills] = useState<RecurringBill[]>([])
   const [loading, setLoading] = useState(true)
@@ -66,20 +71,18 @@ export function useRecurringBills(
   // Generate credit card payment bills from cards and statements
   const ccPaymentBills = useMemo(
     () => {
-      const previousDate = new Date(year, month - 1, 1)
-      const statementCandidates = [
-        ...statements,
-        ...cards.map((card) => computeStatement(
-          card,
-          allTransactions,
-          previousDate.getFullYear(),
-          previousDate.getMonth(),
-        )),
-      ]
-      return generateCreditCardPaymentBills(cards, statementCandidates)
-        .filter((bill) =>
-          bill.scheduledDueDate.getFullYear() === year && bill.scheduledDueDate.getMonth() === month,
+      const pools = groupCreditCards(cards)
+      const neighboring = [-1, 1].flatMap((offset) => {
+        const date = new Date(year, month + offset, 1)
+        return pools.map((pool) =>
+          computePoolStatement(pool, allTransactions, date.getFullYear(), date.getMonth()),
         )
+      })
+      return reminderBillsForMonth(
+        generateCreditCardPaymentBills(cards, [...statements, ...neighboring]),
+        year,
+        month,
+      )
     },
     [cards, statements, allTransactions, year, month],
   )
@@ -87,11 +90,26 @@ export function useRecurringBills(
   // Combine regular reminders with credit card payment reminders
   const reminders = useMemo(() => {
     const regularReminders = buildBillReminders(visibleBills, monthTransactions, year, month)
-    const ccReminders = ccPaymentBills.map((ccBill) =>
-      creditCardBillToReminder(ccBill, year, month, monthTransactions),
+    const ccReminders = ccPaymentBills.flatMap((ccBill) => {
+      const reminder = creditCardBillToReminder(ccBill, year, month, monthTransactions)
+      const parts = expandInstallmentReminders(reminder)
+      return ccBill.installmentsOnly ? parts : [reminder, ...parts]
+    })
+    const covered = new Set(
+      ccReminders
+        .filter((reminder) => reminder.isInstallmentPart)
+        .map((reminder) => `${reminder.creditCardId ?? ''}:${reminder.bill.name.replace(/ installment \d+\/\d+$/, '')}|${reminder.totalPayments}`),
+    )
+    const planReminders = upcomingInstallmentReminders(
+      installmentPlans,
+      cards,
+      year,
+      month,
+      monthTransactions,
+      covered,
     )
     // Sort: overdue/due-soon first, then by due day
-    const all = [...regularReminders, ...ccReminders]
+    const all = [...regularReminders, ...ccReminders, ...planReminders]
     return all.sort((a, b) => {
       const rank: Record<string, number> = {
         overdue: 0,
@@ -104,7 +122,7 @@ export function useRecurringBills(
       const bRank = rank[b.status] ?? 99
       return aRank - bRank || a.dueDate.getTime() - b.dueDate.getTime()
     })
-  }, [visibleBills, monthTransactions, year, month, ccPaymentBills])
+  }, [visibleBills, monthTransactions, year, month, ccPaymentBills, installmentPlans, cards])
 
   async function add(input: RecurringBillInput): Promise<void> {
     if (!userId) throw new Error('Missing user id.')

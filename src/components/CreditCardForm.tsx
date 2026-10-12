@@ -8,6 +8,7 @@ import {
   type PointsRule,
 } from '../types/creditCard'
 import { cardsCanShareLimit, resolveCardIssuer } from '../services/creditCards'
+import { MoneyInput } from './MoneyInput'
 
 const COLOR_NAMES = [
   'Blue',
@@ -168,7 +169,6 @@ function createInitialState(editing: CreditCard | null): CreditCardInput {
       cashbackCap: editing.cashbackCap,
       cashbackYearlyCap: editing.cashbackYearlyCap,
       cashbackUsesFullThousandBlocks: editing.cashbackUsesFullThousandBlocks,
-      cashbackStartingBalance: editing.cashbackStartingBalance ?? 0,
       cashbackMinSpend: editing.cashbackMinSpend ?? 1000,
       cashbackRules: editing.cashbackRules ?? [{ rate: 1, categories: ['Groceries'] }, { rate: 0.3, categories: ['*'] }],
     }
@@ -260,7 +260,6 @@ function validateCardFields(input: {
   parsedMadnessLimit: number | undefined
   parsedMadnessUsed: number
   parsedCashbackCap: number | undefined
-  parsedCashbackStartingBalance: number
   parsedCashbackMinSpend: number
 }): FieldErrors {
   const nextErrors: FieldErrors = {}
@@ -289,9 +288,6 @@ function validateCardFields(input: {
   }
   if (input.parsedCashbackCap !== undefined && (!Number.isFinite(input.parsedCashbackCap) || input.parsedCashbackCap < 0)) {
     nextErrors.cashbackRate = 'Cashback cap must be zero or greater.'
-  }
-  if (!Number.isFinite(input.parsedCashbackStartingBalance) || input.parsedCashbackStartingBalance < 0) {
-    nextErrors.cashbackRate = 'Starting cashback balance must be zero or greater.'
   }
   if (!Number.isFinite(input.parsedCashbackMinSpend) || input.parsedCashbackMinSpend < 0) {
     nextErrors.cashbackRate = 'Cashback minimum spend must be zero or greater.'
@@ -354,7 +350,6 @@ export function CreditCardForm({
   const [rewardDescription, setRewardDescription] = useState(initial.rewardDescription ?? '')
   const [cashbackCap, setCashbackCap] = useState(initial.cashbackCap !== undefined ? String(initial.cashbackCap) : '')
   const [cashbackYearlyCap, setCashbackYearlyCap] = useState(initial.cashbackYearlyCap)
-  const [cashbackStartingBalance, setCashbackStartingBalance] = useState(initial.cashbackStartingBalance !== undefined ? String(initial.cashbackStartingBalance) : '0')
   const [cashbackMinSpend, setCashbackMinSpend] = useState(initial.cashbackMinSpend !== undefined ? String(initial.cashbackMinSpend) : '1000')
   const [cashbackUsesFullThousandBlocks, setCashbackUsesFullThousandBlocks] = useState(
     initial.cashbackUsesFullThousandBlocks ?? false,
@@ -477,7 +472,6 @@ export function CreditCardForm({
     const parsedMadnessLimit = madnessLimit.trim() !== '' ? Number.parseFloat(madnessLimit) : undefined
     const parsedMadnessUsed = madnessUsed.trim() !== '' ? Number.parseFloat(madnessUsed) : 0
     const parsedCashbackCap = cashbackCap.trim() !== '' ? Number.parseFloat(cashbackCap) : undefined
-    const parsedCashbackStartingBalance = cashbackStartingBalance.trim() !== '' ? Number.parseFloat(cashbackStartingBalance) : 0
     const parsedCashbackMinSpend = cashbackMinSpend.trim() !== '' ? Number.parseFloat(cashbackMinSpend) : 1000
     let parsedCashbackRules: Array<{ rate: number; categories: string[] }> = []
     if (rewardType !== 'points') {
@@ -499,7 +493,6 @@ export function CreditCardForm({
       parsedMadnessLimit,
       parsedMadnessUsed,
       parsedCashbackCap,
-      parsedCashbackStartingBalance,
       parsedCashbackMinSpend,
     })
 
@@ -535,7 +528,9 @@ export function CreditCardForm({
         cashbackCap: parsedCashbackCap,
         cashbackYearlyCap,
         cashbackUsesFullThousandBlocks,
-        cashbackStartingBalance: parsedCashbackStartingBalance,
+        ...(typeof editing?.cashbackStartingBalance === 'number'
+          ? { cashbackStartingBalance: editing.cashbackStartingBalance }
+          : {}),
         cashbackMinSpend: parsedCashbackMinSpend,
         cashbackRules: parsedCashbackRules,
         issuer: issuerForCard(),
@@ -616,18 +611,14 @@ export function CreditCardForm({
         </LabeledField>
 
         <div className="form-row">
-          <LabeledField label="Credit limit (₱)" error={errors.limit} errorId="cc-form-error-limit">
-            <input
+          <LabeledField label="Credit limit" error={errors.limit} errorId="cc-form-error-limit">
+            <MoneyInput
               ref={limitRef}
-              type="number"
-              inputMode="decimal"
-              min="1"
-              step="0.01"
               required
               disabled={followsSharedLimit}
               value={followsSharedLimit && shareTarget ? String(shareTarget.limit) : limit}
-              onChange={(e) => setLimit(e.target.value)}
-              placeholder="50000"
+              onChange={setLimit}
+              placeholder="50,000"
               aria-invalid={errors.limit ? true : undefined}
               aria-describedby={errors.limit ? 'cc-form-error-limit' : undefined}
             />
@@ -649,25 +640,17 @@ export function CreditCardForm({
         </div>
 
         <div className="form-row">
-          <LabeledField label="Madness Limit (₱) (optional)" hint="Separate BPI installment and Credit-to-Cash line">
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
+          <LabeledField label="Madness Limit (optional)" hint="Separate BPI installment and Credit-to-Cash line">
+            <MoneyInput
               value={madnessLimit}
-              onChange={(e) => setMadnessLimit(e.target.value)}
-              placeholder="e.g. 100000"
+              onChange={setMadnessLimit}
+              placeholder="e.g. 100,000"
             />
           </LabeledField>
-          <LabeledField label="Madness used outside tracked plans (₱)" hint="Installments not added through Cash & installments. Tracked plans are counted automatically.">
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
+          <LabeledField label="Madness used outside tracked plans" hint="Installments not added through Cash & installments. Tracked plans are counted automatically.">
+            <MoneyInput
               value={madnessUsed}
-              onChange={(e) => setMadnessUsed(e.target.value)}
+              onChange={setMadnessUsed}
               placeholder="0"
             />
           </LabeledField>
@@ -756,20 +739,16 @@ export function CreditCardForm({
         </div>
 
         <LabeledField
-          label="Minimum payment override (₱) (optional)"
+          label="Minimum payment override (optional)"
           hint="Override the issuer minimum for this card"
           hintId="cc-form-hint-minimum-payment"
           error={errors.minimumPaymentOverride}
           errorId="cc-form-error-minimum-payment"
         >
-          <input
+          <MoneyInput
             ref={minimumPaymentOverrideRef}
-            type="number"
-            inputMode="decimal"
-            min="0"
-            step="0.01"
             value={minimumPaymentOverride}
-            onChange={(e) => setMinimumPaymentOverride(e.target.value)}
+            onChange={setMinimumPaymentOverride}
             placeholder="e.g. 850"
             aria-invalid={errors.minimumPaymentOverride ? true : undefined}
             aria-describedby={errors.minimumPaymentOverride ? 'cc-form-error-minimum-payment' : 'cc-form-hint-minimum-payment'}
@@ -802,20 +781,16 @@ export function CreditCardForm({
             </select>
           </LabeledField>
           {rewardType !== 'points' && (
-            <LabeledField label="Cashback cap (₱) (optional)">
-              <input
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
+            <LabeledField label="Cashback cap (optional)">
+              <MoneyInput
                 value={cashbackCap}
-                onChange={(e) => {
-                  setCashbackCap(e.target.value)
+                onChange={(next) => {
+                  setCashbackCap(next)
                   if (selectedPreset !== 'custom') {
                     setSelectedPreset('custom')
                   }
                 }}
-                placeholder="3000"
+                placeholder="3,000"
               />
             </LabeledField>
           )}
@@ -823,40 +798,18 @@ export function CreditCardForm({
 
         {rewardType !== 'points' && (
           <>
-            <div className="form-row">
-              <LabeledField label="Starting cashback balance (₱)">
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.01"
-                  value={cashbackStartingBalance}
-                  onChange={(e) => {
-                    setCashbackStartingBalance(e.target.value)
-                    if (selectedPreset !== 'custom') {
-                      setSelectedPreset('custom')
-                    }
-                  }}
-                  placeholder="0"
-                />
-              </LabeledField>
-              <LabeledField label="Min spend for cashback (₱)">
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.01"
-                  value={cashbackMinSpend}
-                  onChange={(e) => {
-                    setCashbackMinSpend(e.target.value)
-                    if (selectedPreset !== 'custom') {
-                      setSelectedPreset('custom')
-                    }
-                  }}
-                  placeholder="1000"
-                />
-              </LabeledField>
-            </div>
+            <LabeledField label="Min spend for cashback">
+              <MoneyInput
+                value={cashbackMinSpend}
+                onChange={(next) => {
+                  setCashbackMinSpend(next)
+                  if (selectedPreset !== 'custom') {
+                    setSelectedPreset('custom')
+                  }
+                }}
+                placeholder="1,000"
+              />
+            </LabeledField>
 
             <LabeledField label="Cashback rules">
               <input

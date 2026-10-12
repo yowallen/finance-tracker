@@ -1,5 +1,6 @@
 import { usePaymentAllocation } from '../hooks/usePaymentAllocation'
 import { formatMoney } from '../lib/format'
+import { MoneyInput } from './MoneyInput'
 import type { CreditCard, CreditCardStatement, PaymentAllocationPlan } from '../types/creditCard'
 
 interface PaymentAllocationProps {
@@ -39,14 +40,10 @@ export function PaymentAllocation({ cards, statements, onApply }: PaymentAllocat
 
       <div className="payment-allocation-controls">
         <label>
-          Total payment (₱)
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            inputMode="decimal"
-            value={allocation.totalPayment || ''}
-            onChange={(event) => allocation.setTotalPayment(Number(event.target.value) || 0)}
+          Total payment
+          <MoneyInput
+            value={allocation.totalPayment ? String(allocation.totalPayment) : ''}
+            onChange={(value) => allocation.setTotalPayment(Number(value) || 0)}
             placeholder="0.00"
           />
         </label>

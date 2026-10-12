@@ -88,6 +88,13 @@ describe('Credit-to-Cash schedule', () => {
     })
   })
 
+  it('adds the service fee to the first installment only', () => {
+    const charges = buildInstallmentCharges([plan({ processingFee: 500 })], [card])
+
+    expect(charges[0].amount).toBeCloseTo(5166.67, 2)
+    expect(charges[1].amount).toBeCloseTo(4666.67, 2)
+  })
+
   it('summarizes billed and unbilled principal as of a date', () => {
     const [summary] = summarizeCardInstallments([card.id], [plan()], [card], new Date(2026, 10, 30, 23, 59, 59))
 

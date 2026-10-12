@@ -1164,6 +1164,62 @@ select:focus {
   box-shadow: 0 0 0 1px var(--accent);
 }
 
+.money-field {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--md-sys-color-surface-container-highest);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.money-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.money-field-sign {
+  flex: 0 0 auto;
+  padding-left: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  user-select: none;
+}
+
+.money-field input {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding-left: 0.35rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.money-field input:focus {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.money-field:has(input:disabled) {
+  opacity: 0.55;
+}
+
+.cashback-redeem-input-row .money-field,
+.ip-fixed-input .money-field {
+  flex: 1;
+}
+
+.ip-fixed-input .money-field {
+  max-width: 18rem;
+}
+
 /* iOS Safari gives native date inputs an intrinsic width that ignores width: 100%. */
 input[type='date'] {
   -webkit-appearance: none;
@@ -6195,6 +6251,16 @@ html[data-theme='dark'] .undo-toast-undo:hover {
   color: inherit;
   font: inherit;
   font-weight: 600;
+}
+
+.payment-custom-amount .money-field {
+  background: var(--surface);
+}
+
+.payment-custom-amount .money-field input {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .payment-amount-hint {

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type SubmitEvent } from 'react'
 import { Bell, Check, CreditCard as CreditCardIcon, Plus, WalletCards, X, Pencil, Trash2 } from 'lucide-react'
 import { formatMoney, formatYearMonth, monthLabel, toMonthInputValue } from '../lib/format'
+import { formatMoneyInput } from '../lib/moneyInput'
+import { MoneyInput } from './MoneyInput'
 import {
   durationInMonths,
   endsOnFor,
@@ -460,15 +462,11 @@ export function BillReminders({
               />
             </label>
             <label>
-              Amount (₱)
-              <input
-                type="number"
-                inputMode="decimal"
-                min="0.01"
-                step="0.01"
+              Amount
+              <MoneyInput
                 required
                 value={amountText}
-                onChange={(e) => setAmountText(e.target.value)}
+                onChange={setAmountText}
                 placeholder="0.00"
               />
             </label>
@@ -604,23 +602,21 @@ export function BillReminders({
                 </div>
                 <p className="tx-desc">{reminder.bill.name}</p>
                 <p className="reminder-due">
-                  {reminder.isCreditCardPayment
-                    ? `Pay by ${formatDueDate(reminder.recommendedPaymentDate ?? reminder.dueDate)} · Due ${formatDueDate(reminder.actualDueDate ?? reminder.dueDate)}`
-                    : `Due ${formatDueDate(reminder.actualDueDate ?? reminder.dueDate)}`}{' '}
-                  · Payment {reminder.paymentNumber} of {reminder.totalPayments} · ends {formatYearMonth(reminder.endsOn)}
+                  {reminder.isInstallmentPart
+                    ? `Pay by ${formatDueDate(reminder.recommendedPaymentDate ?? reminder.dueDate)} · Due ${formatDueDate(reminder.actualDueDate ?? reminder.dueDate)} · Installment ${reminder.paymentNumber} of ${reminder.totalPayments}`
+                    : reminder.isCreditCardPayment
+                      ? `Pay by ${formatDueDate(reminder.recommendedPaymentDate ?? reminder.dueDate)} · Due ${formatDueDate(reminder.actualDueDate ?? reminder.dueDate)}`
+                      : `Due ${formatDueDate(reminder.actualDueDate ?? reminder.dueDate)}`}{' '}
+                  {!reminder.isInstallmentPart && (
+                    <>· Payment {reminder.paymentNumber} of {reminder.totalPayments} · ends {formatYearMonth(reminder.endsOn)}</>
+                  )}
                   {reminder.bill.notes ? ` · ${reminder.bill.notes}` : ''}
                 </p>
-                {reminder.installments?.map((line, index) => (
-                  <p key={`${line.label}-${index}`} className="reminder-includes">
-                    Includes {line.label} · {formatMoney(line.amount)}
-                  </p>
-                ))}
               </div>
               <div className="reminder-side">
                 <strong className="tx-amount bill">{formatMoney(reminder.bill.amount)}</strong>
                 <div className="tx-actions">
-                  {/* Mark Paid button - only shows when not paid */}
-                  {reminder.status !== 'paid' && (
+                  {reminder.status !== 'paid' && !reminder.isInstallmentPart && (
                     <button
                       type="button"
                       className="icon-btn icon-btn--paid"
@@ -637,7 +633,7 @@ export function BillReminders({
                     </button>
                   )}
                   {/* Credit Card Toggle - disabled when bill is paid, being paid, or is a credit card payment bill */}
-                  {!reminder.isCreditCardPayment && (
+                  {!reminder.isCreditCardPayment && !reminder.isInstallmentPart && (
                     <button
                       type="button"
                       className={`icon-btn icon-btn--cc ${reminder.payWithCreditCard ? 'active' : ''}`}
@@ -658,7 +654,7 @@ export function BillReminders({
                       <CreditCardIcon aria-hidden="true" />
                     </button>
                   )}
-                  {reminder.isCreditCardPayment && (
+                  {reminder.isCreditCardPayment && !reminder.isInstallmentPart && (
                     <button
                       type="button"
                       className="icon-btn icon-btn--cc"
@@ -669,28 +665,30 @@ export function BillReminders({
                       <CreditCardIcon aria-hidden="true" />
                     </button>
                   )}
-                  {/* Edit - disabled when bill is paid or being paid */}
-                  <button
-                    type="button"
-                    className="icon-btn icon-btn--edit"
-                    onClick={() => openEdit(reminder.bill)}
-                    disabled={reminder.status === 'paid' || payingId === reminder.bill.id}
-                    aria-label={`Edit ${reminder.bill.name}`}
-                    title="Edit bill"
-                  >
-                    <Pencil aria-hidden="true" />
-                  </button>
-                  {/* Delete - disabled when bill is being paid */}
-                  <button
-                    type="button"
-                    className="icon-btn danger"
-                    onClick={() => void handleRemove(reminder)}
-                    disabled={payingId === reminder.bill.id}
-                    aria-label={`Delete ${reminder.bill.name}`}
-                    title="Delete bill"
-                  >
-                    <Trash2 aria-hidden="true" />
-                  </button>
+                  {!reminder.isInstallmentPart && (
+                    <button
+                      type="button"
+                      className="icon-btn icon-btn--edit"
+                      onClick={() => openEdit(reminder.bill)}
+                      disabled={reminder.status === 'paid' || payingId === reminder.bill.id}
+                      aria-label={`Edit ${reminder.bill.name}`}
+                      title="Edit bill"
+                    >
+                      <Pencil aria-hidden="true" />
+                    </button>
+                  )}
+                  {!reminder.isInstallmentPart && (
+                    <button
+                      type="button"
+                      className="icon-btn danger"
+                      onClick={() => void handleRemove(reminder)}
+                      disabled={payingId === reminder.bill.id}
+                      aria-label={`Delete ${reminder.bill.name}`}
+                      title="Delete bill"
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </button>
+                  )}
                 </div>
               </div>
             </li>
@@ -755,19 +753,14 @@ export function BillReminders({
                 </div>
                 {paymentAmountMode === 'minimum' && (
                   <label className="payment-custom-amount">
-                    Amount (₱)
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      min={paymentMinimumAmount}
-                      max={paymentFullAmount}
-                      step="0.01"
+                    Amount
+                    <MoneyInput
                       value={paymentCustomAmount}
-                      onChange={(event) => {
-                        setPaymentCustomAmount(event.target.value)
+                      onChange={(value) => {
+                        setPaymentCustomAmount(value)
                         setPaymentAmountError(null)
                       }}
-                      placeholder={String(paymentMinimumAmount)}
+                      placeholder={formatMoneyInput(String(paymentMinimumAmount))}
                     />
                     <span className="payment-amount-hint">
                       Default is the minimum. You can raise it up to {formatMoney(paymentFullAmount)}.

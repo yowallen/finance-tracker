@@ -44,6 +44,7 @@ import type { BillReminder, RecurringBill, RecurringBillInput } from '../types/r
 import type { CreditCard, CreditCardInput, PaymentAllocationPlan } from '../types/creditCard'
 import type { CardInstallment, CardInstallmentInput } from '../types/cardInstallment'
 import { installmentLabel } from '../types/cardInstallment'
+import { isPostedInstallmentFee } from '../services/cardInstallments'
 import type { CashAdvanceRequest, CreditToCashRequest, InstallmentPurchaseRequest } from './CardCashSheet'
 import { useCardInstallments } from '../hooks/useCardInstallments'
 import type { SavingsGoal, SavingsGoalInput } from '../types/savingsGoal'
@@ -218,6 +219,15 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
     remove,
   } = useTransactions(userId, year, month)
 
+  const monthTransactions = useMemo(
+    () => transactions.filter((tx) => !isPostedInstallmentFee(tx)),
+    [transactions],
+  )
+  const ledgerTransactions = useMemo(
+    () => allTransactions.filter((tx) => !isPostedInstallmentFee(tx)),
+    [allTransactions],
+  )
+
   const {
     plans: installmentPlans,
     error: installmentError,
@@ -261,7 +271,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
     add: addBill,
     update: updateBill,
     remove: removeBill,
-  } = useRecurringBills(userId, year, month, transactions, cards, statements, cardTransactions)
+  } = useRecurringBills(userId, year, month, monthTransactions, cards, statements, cardTransactions, installmentPlans)
 
   const paydayBudgetEnabled = isFeatureEnabled('paydayBudget')
   const { settings: paydaySettings, periods: paydayPeriods, save: savePayday } = usePaydayBudget(
@@ -315,7 +325,7 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
   const attentionReminders = useMemo(
     () =>
       reminders
-        .filter((item) => item.status === 'overdue' || item.status === 'due-soon')
+        .filter((item) => !item.isInstallmentPart && (item.status === 'overdue' || item.status === 'due-soon'))
         .slice(0, 3),
     [reminders],
   )
@@ -368,13 +378,13 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
   )
 
   const spendingStats = useMemo(
-    () => computeMonthlySpendingStats(transactions),
-    [transactions],
+    () => computeMonthlySpendingStats(monthTransactions),
+    [monthTransactions],
   )
 
   const spendingHistory = useMemo(
-    () => buildMonthlySpendingHistory(allTransactions, year, month, 5),
-    [allTransactions, year, month],
+    () => buildMonthlySpendingHistory(ledgerTransactions, year, month, 5),
+    [ledgerTransactions, year, month],
   )
 
   const savingsStats = useMemo(
@@ -578,17 +588,6 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
     setSaving(true)
     try {
       const planId = await addInstallment(plan)
-      if ((plan.processingFee ?? 0) > 0) {
-        await add({
-          type: 'bill',
-          amount: plan.processingFee!,
-          category: 'Fee',
-          description: `Credit-to-Cash service fee · ${card.name}`,
-          occurredAt,
-          creditCardId: card.id,
-          installmentPlanId: planId,
-        })
-      }
       if (recordIncome) {
         await add({
           type: 'income',
@@ -894,8 +893,8 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
               reminders={reminders}
               bills={bills}
               ccPaymentBills={ccPaymentBills}
-              allTransactions={allTransactions}
-              transactions={transactions}
+              allTransactions={ledgerTransactions}
+              transactions={monthTransactions}
               onUpdate={updateBill}
             />
 
@@ -915,8 +914,8 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
             />
 
             <TransactionList
-              transactions={transactions}
-              allTransactions={allTransactions}
+              transactions={monthTransactions}
+              allTransactions={ledgerTransactions}
               loading={txLoading}
               onEdit={(tx) => openTransactionSheet(tx)}
               onDelete={handleDelete}
@@ -928,8 +927,8 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
             <TransactionHistoryPanel
               open={historyOpen}
               suspended={sheetOpen}
-              transactions={transactions}
-              allTransactions={allTransactions}
+              transactions={monthTransactions}
+              allTransactions={ledgerTransactions}
               loading={txLoading}
               onClose={closeHistory}
               onAdd={() => openTransactionSheet()}

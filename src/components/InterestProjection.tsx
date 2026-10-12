@@ -11,6 +11,7 @@ import {
   BarChart2,
 } from 'lucide-react'
 import { formatMoney } from '../lib/format'
+import { MoneyInput } from './MoneyInput'
 import { projectInterest } from '../services/creditCards'
 import type { InterestProjection } from '../types/creditCard'
 
@@ -337,20 +338,12 @@ export function InterestProjection({ projection, onClose }: InterestProjectionPr
               <label className="ip-fixed-label" htmlFor="ip-fixed-amount">
                 Monthly payment amount
               </label>
-              <div className="ip-fixed-field">
-                <span className="ip-fixed-prefix" aria-hidden="true">₱</span>
-                <input
-                  id="ip-fixed-amount"
-                  type="number"
-                  inputMode="decimal"
-                  min={minimumPayment}
-                  step="100"
-                  value={customFixedPayment}
-                  onChange={(e) => setCustomFixedPayment(Math.max(minimumPayment, Number.parseFloat(e.target.value) || 0))}
-                  className="ip-fixed-input-field"
-                  aria-label="Fixed monthly payment amount in pesos"
-                />
-              </div>
+              <MoneyInput
+                id="ip-fixed-amount"
+                value={String(customFixedPayment)}
+                onChange={(value) => setCustomFixedPayment(Math.max(minimumPayment, Number.parseFloat(value) || 0))}
+                aria-label="Fixed monthly payment amount in pesos"
+              />
             </div>
           )}
 

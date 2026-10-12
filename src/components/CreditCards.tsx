@@ -24,6 +24,7 @@ import {
   type CreditToCashRequest,
   type InstallmentPurchaseRequest,
 } from './CardCashSheet'
+import { MoneyInput } from './MoneyInput'
 import { CreditCardForm } from './CreditCardForm'
 import { CreditLimitBar } from './CreditLimitBar'
 import { LoadingState } from './LoadingState'
@@ -934,18 +935,13 @@ export function CreditCards({
                 <p className="payment-card-select-label">Redeem amount</p>
                 <div className="cashback-redeem-box">
                   <label className="cashback-redeem-label" htmlFor="cashback-redeem-amount">
-                    Amount (₱)
+                    Amount
                   </label>
                   <div className="cashback-redeem-input-row">
-                    <input
+                    <MoneyInput
                       id="cashback-redeem-amount"
-                      type="number"
-                      min="1"
-                      max={redeemAvailable}
-                      step="1"
                       value={redeemAmount}
-                      onChange={(event) => setRedeemAmount(event.target.value)}
-                      className="cashback-redeem-input"
+                      onChange={setRedeemAmount}
                     />
                     <button
                       type="button"

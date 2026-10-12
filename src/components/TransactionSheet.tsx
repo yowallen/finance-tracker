@@ -55,7 +55,7 @@ export function TransactionSheet({ open, title, onClose, children }: Transaction
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
     window.addEventListener('keydown', handleKeyDown)
     window.requestAnimationFrame(() => {
-      dialogRef.current?.querySelector<HTMLInputElement>('input[type="number"]')?.focus()
+      dialogRef.current?.querySelector<HTMLInputElement>('.money-field input, input[type="number"]')?.focus()
     })
 
     return () => {

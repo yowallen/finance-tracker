@@ -9,6 +9,7 @@ import {
   TrendingUp,
   Wallet,
 } from 'lucide-react'
+import { MoneyInput } from './MoneyInput'
 import {
   CATEGORIES,
   type SavingsDirection,
@@ -242,16 +243,12 @@ export function TransactionForm({
 
         <div className="form-row">
           <label>
-            Amount (₱)
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0.01"
-              step="0.01"
+            Amount
+            <MoneyInput
               required
               autoFocus
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={setAmount}
               placeholder="0.00"
               aria-invalid={error ? true : undefined}
               aria-describedby={error ? 'tx-form-error' : undefined}

@@ -177,12 +177,14 @@ export function buildInstallmentCharges(plans: CardInstallment[], cards: CreditC
     const billingCard = billingCardFor(plan.cardId, cards)
     if (!card || !billingCard) continue
     const label = installmentLabel(plan)
+    const serviceFee = roundMoney(Math.max(0, plan.processingFee ?? 0))
     for (const row of computeInstallmentSchedule(plan, billingCard)) {
+      const includesFee = row.number === 1 && serviceFee > 0
       charges.push({
         id: `installment:${plan.id}:${row.number}`,
         userId: plan.userId,
         type: 'bill',
-        amount: row.amount,
+        amount: includesFee ? roundMoney(row.amount + serviceFee) : row.amount,
         category: 'Installment',
         description: `${label} installment ${row.number}/${plan.termMonths}`,
         occurredAt: row.billingDate.toISOString(),
@@ -199,6 +201,16 @@ export function buildInstallmentCharges(plans: CardInstallment[], cards: CreditC
 
 export function isInstallmentCharge(tx: Pick<Transaction, 'installmentNumber'>): boolean {
   return typeof tx.installmentNumber === 'number'
+}
+
+/** A service fee saved as its own card charge. The first installment now includes that fee. */
+export function isPostedInstallmentFee(
+  tx: Pick<Transaction, 'category' | 'creditCardId' | 'installmentPlanId' | 'installmentNumber'>,
+): boolean {
+  return tx.category === 'Fee'
+    && typeof tx.creditCardId === 'string'
+    && typeof tx.installmentPlanId === 'string'
+    && typeof tx.installmentNumber !== 'number'
 }
 
 /** Rollup of each plan on the given cards; rows billed on or before `asOf` count as billed. */
