@@ -57,6 +57,13 @@ export interface BillReminder {
   installments?: Array<{ label: string; amount: number; number?: number; term?: number }>
   /** True for an installment row that is already included in the card payment. */
   isInstallmentPart?: boolean
+  /**
+   * Cash still reserved for this reminder. A credit card cycle that has met its
+   * minimum keeps the unpaid statement on the card instead of taking it from income.
+   */
+  cashStillDue?: number
+  /** True when this credit card cycle was settled by the minimum, not the full statement. */
+  minimumSettled?: boolean
   /** True when this bill is flagged to be paid with a credit card for the viewed month.
    *  When true, the bill is excluded from daily balance/cash flow computations. */
   payWithCreditCard?: boolean

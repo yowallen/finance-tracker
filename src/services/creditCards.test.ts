@@ -843,6 +843,23 @@ describe('interest grace period', () => {
 
     expect(statement.interestCharged).toBeGreaterThan(0)
   })
+
+  it('keeps a payment above the statement balance as a credit', () => {
+    const overpay = tx('overpay', 6000, '2026-09-30T12:00:00', true)
+    const novemberCharge = tx('nov-charge', 200, '2026-11-01T12:00:00')
+    const transactions = [septemberCharge, octoberCharge, overpay, novemberCharge]
+
+    const october = computeStatement(card, transactions, 2026, 9)
+    expect(october.statementBalance).toBe(0)
+    expect(october.interestCharged).toBe(0)
+    expect(october.outstandingBalance).toBeCloseTo(3904.5 + 1000 - 6000, 2)
+
+    const november = computeStatement(card, transactions, 2026, 10)
+    expect(november.previousBalance).toBeCloseTo(3904.5 + 1000 - 6000, 2)
+    expect(november.statementBalance).toBe(0)
+    expect(november.interestCharged).toBe(0)
+    expect(november.outstandingBalance).toBeCloseTo(3904.5 + 1000 - 6000 + 200, 2)
+  })
 })
 
 describe('cashback statement credit', () => {

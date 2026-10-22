@@ -91,7 +91,7 @@ export function useRecurringBills(
   const reminders = useMemo(() => {
     const regularReminders = buildBillReminders(visibleBills, monthTransactions, year, month)
     const ccReminders = ccPaymentBills.flatMap((ccBill) => {
-      const reminder = creditCardBillToReminder(ccBill, year, month, monthTransactions)
+      const reminder = creditCardBillToReminder(ccBill, year, month, allTransactions)
       const parts = expandInstallmentReminders(reminder)
       return ccBill.installmentsOnly ? parts : [reminder, ...parts]
     })
@@ -105,7 +105,7 @@ export function useRecurringBills(
       cards,
       year,
       month,
-      monthTransactions,
+      allTransactions,
       covered,
     )
     // Sort: overdue/due-soon first, then by due day
@@ -122,7 +122,7 @@ export function useRecurringBills(
       const bRank = rank[b.status] ?? 99
       return aRank - bRank || a.dueDate.getTime() - b.dueDate.getTime()
     })
-  }, [visibleBills, monthTransactions, year, month, ccPaymentBills, installmentPlans, cards])
+  }, [visibleBills, monthTransactions, allTransactions, year, month, ccPaymentBills, installmentPlans, cards])
 
   async function add(input: RecurringBillInput): Promise<void> {
     if (!userId) throw new Error('Missing user id.')

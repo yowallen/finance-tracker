@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { expandInstallmentReminders, generateCreditCardPaymentBills, reminderBillsForMonth, upcomingInstallmentReminders, type CreditCardPaymentBill } from './creditCardBills'
+import { creditCardBillToReminder, creditCardCashStillDue, expandInstallmentReminders, generateCreditCardPaymentBills, reminderBillsForMonth, upcomingInstallmentReminders, type CreditCardPaymentBill } from './creditCardBills'
+import { computeMonthBalance } from './balanceOutlook'
+import type { Transaction } from '../types/transaction'
 import { buildInstallmentCharges } from './cardInstallments'
 import { computeStatement, groupCreditCards } from './creditCards'
 import type { BillReminder } from '../types/recurringBill'
@@ -188,5 +190,76 @@ describe('iPhone installment purchase reminders', () => {
     expect(reminders.map((reminder) => reminder.bill.name)).toEqual(['iPhone 15 installment 1/24'])
     expect(reminders[0].isInstallmentPart).toBe(true)
     expect(reminders[0].bill.notes).toBe('Included in the BPI Amore payment')
+  })
+})
+
+describe('minimum payment cash obligation', () => {
+  const statement = bill({
+    id: 'october',
+    cardId: 'card',
+    amount: 10000,
+    minimumPayment: 500,
+    statementDate: new Date(2026, 8, 16),
+    scheduledDueDate: new Date(2026, 9, 2),
+    dueDate: new Date(2026, 9, 5),
+  })
+
+  function payment(amount: number, when: Date): Transaction {
+    const occurredAt = when.toISOString()
+    return {
+      id: `pay-${amount}`,
+      userId: 'user-1',
+      type: 'bill',
+      amount,
+      category: 'Credit card payment',
+      description: 'Payment',
+      occurredAt,
+      createdAt: occurredAt,
+      creditCardId: 'card',
+      creditCardPayment: true,
+    }
+  }
+
+  function income(amount: number): Transaction {
+    const occurredAt = new Date(2026, 9, 16, 12).toISOString()
+    return {
+      id: 'salary',
+      userId: 'user-1',
+      type: 'income',
+      amount,
+      category: 'Salary',
+      description: 'Salary',
+      occurredAt,
+      createdAt: occurredAt,
+    }
+  }
+
+  it('does not take an unpaid statement out of cash', () => {
+    expect(creditCardCashStillDue(statement, [])).toBe(10000)
+
+    const outlook = computeMonthBalance([], [income(20000)], 2026, 9, 0, [statement])
+    expect(outlook.unpaidScheduledBills).toBe(0)
+    expect(outlook.monthNet).toBe(20000)
+  })
+
+  it('drops the cash hold once the minimum is paid and leaves the rest on the card', () => {
+    const minimum = payment(500, new Date(2026, 9, 2, 12))
+    expect(creditCardCashStillDue(statement, [minimum])).toBe(0)
+
+    const outlook = computeMonthBalance([], [income(20000), minimum], 2026, 9, 0, [statement])
+    expect(outlook.unpaidScheduledBills).toBe(0)
+    expect(outlook.monthNet).toBe(19500)
+
+    const reminder = creditCardBillToReminder(statement, 2026, 9, [minimum], new Date(2026, 9, 16))
+    expect(reminder.status).toBe('paid')
+    expect(reminder.minimumSettled).toBe(true)
+    expect(reminder.cashStillDue).toBe(0)
+  })
+
+  it('does not hold the unpaid remainder when the payment is short of the statement', () => {
+    const short = payment(200, new Date(2026, 9, 2, 12))
+    const outlook = computeMonthBalance([], [income(20000), short], 2026, 9, 0, [statement])
+    expect(outlook.unpaidScheduledBills).toBe(0)
+    expect(outlook.monthNet).toBe(19800)
   })
 })

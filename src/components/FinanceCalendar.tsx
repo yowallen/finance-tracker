@@ -316,9 +316,11 @@ export function FinanceCalendar({
                     <span className={`reminder-status status-${bill.status}`}>{statusShort(bill)}</span>
                     <p className="tx-desc">{bill.bill.name}</p>
                     <p className="reminder-due">
-                      {bill.status === 'paid'
-                        ? `Paid · Payment ${bill.paymentNumber}/${bill.totalPayments}`
-                        : `Bill due · Payment ${bill.paymentNumber}/${bill.totalPayments}`}
+                      {bill.isCreditCardPayment
+                        ? 'Stays on the card until you pay · not taken from this balance'
+                        : bill.status === 'paid'
+                          ? `Paid · Payment ${bill.paymentNumber}/${bill.totalPayments}`
+                          : `Bill due · Payment ${bill.paymentNumber}/${bill.totalPayments}`}
                     </p>
                   </div>
                   <div className="calendar-detail-actions">
@@ -408,7 +410,7 @@ export function FinanceCalendar({
 }
 
 function statusShort(reminder: BillReminder): string {
-  if (reminder.status === 'paid') return 'Paid'
+  if (reminder.status === 'paid') return reminder.minimumSettled ? 'Minimum paid' : 'Paid'
   if (reminder.status === 'overdue') return 'Overdue'
   if (reminder.status === 'due-soon') return 'Due soon'
   if (reminder.status === 'unpaid') return 'Unpaid'

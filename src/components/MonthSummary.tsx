@@ -188,8 +188,12 @@ export function MonthSummary({
                   </header>
                   <div className="cc-snapshot-stats">
                     <div className="cc-snapshot-stat">
-                      <span className="cc-stat-label">Outstanding</span>
-                      <strong className="cc-stat-value outstanding">{formatMoney(statement.outstandingBalance)}</strong>
+                      <span className="cc-stat-label">
+                        {statement.outstandingBalance < -0.005 ? 'Credit' : 'Outstanding'}
+                      </span>
+                      <strong className="cc-stat-value outstanding">
+                        {formatMoney(Math.abs(statement.outstandingBalance))}
+                      </strong>
                     </div>
                     <div className="cc-snapshot-stat">
                       <span className="cc-stat-label">Available</span>
@@ -210,7 +214,7 @@ export function MonthSummary({
                         <span className="cc-stat-label">Used</span>
                         <strong className="cc-stat-value">
                           {card.limit > 0
-                            ? `${Math.min(100, (statement.outstandingBalance / card.limit) * 100).toFixed(0)}%`
+                            ? `${Math.min(100, Math.max(0, (statement.outstandingBalance / card.limit) * 100)).toFixed(0)}%`
                             : '0%'}
                         </strong>
                       </div>

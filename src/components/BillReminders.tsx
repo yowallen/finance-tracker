@@ -42,7 +42,7 @@ interface BillRemindersProps {
 function statusLabel(reminder: BillReminder): string {
   switch (reminder.status) {
     case 'paid':
-      return 'Paid'
+      return reminder.minimumSettled ? 'Minimum paid' : 'Paid'
     case 'overdue':
       return `Overdue by ${Math.abs(reminder.daysUntilDue)} day${Math.abs(reminder.daysUntilDue) === 1 ? '' : 's'}`
     case 'due-soon':
@@ -133,6 +133,7 @@ export function BillReminders({
   const [paymentCardId, setPaymentCardId] = useState('')
   const [paymentAmountMode, setPaymentAmountMode] = useState<'full' | 'minimum'>('full')
   const [paymentCustomAmount, setPaymentCustomAmount] = useState('')
+  const [paymentFullAmountText, setPaymentFullAmountText] = useState('')
   const [paymentAmountError, setPaymentAmountError] = useState<string | null>(null)
   const paymentDialogRef = useRef<HTMLDialogElement>(null)
 
@@ -172,7 +173,8 @@ export function BillReminders({
       const parsed = Number.parseFloat(paymentCustomAmount)
       return Number.isFinite(parsed) ? parsed : Number.NaN
     }
-    return paymentFullAmount
+    const parsed = Number.parseFloat(paymentFullAmountText)
+    return Number.isFinite(parsed) ? parsed : Number.NaN
   })()
 
   function resetPaymentModal() {
@@ -181,6 +183,7 @@ export function BillReminders({
     setPaymentCardId('')
     setPaymentAmountMode('full')
     setPaymentCustomAmount('')
+    setPaymentFullAmountText('')
     setPaymentAmountError(null)
   }
 
@@ -302,6 +305,7 @@ export function BillReminders({
     setPaymentCardId(shouldUseCard ? defaultCardId : '')
     setPaymentAmountMode('full')
     setPaymentCustomAmount(minimumAmount > 0 ? String(minimumAmount) : '')
+    setPaymentFullAmountText(fullAmount > 0 ? String(fullAmount) : '')
     setPaymentAmountError(null)
   }
 
@@ -313,17 +317,26 @@ export function BillReminders({
         setPaymentAmountError('Enter a payment amount greater than zero.')
         return
       }
-      if (resolvedPaymentAmount + 0.001 < paymentMinimumAmount) {
-        setPaymentAmountError(
-          `Payment must be at least the minimum (${formatMoney(paymentMinimumAmount)}).`,
-        )
-        return
-      }
-      if (resolvedPaymentAmount - paymentFullAmount > 0.001) {
-        setPaymentAmountError(
-          `Payment cannot exceed the statement balance (${formatMoney(paymentFullAmount)}).`,
-        )
-        return
+      if (paymentAmountMode === 'full') {
+        if (resolvedPaymentAmount + 0.001 < paymentFullAmount) {
+          setPaymentAmountError(
+            `Pay full has to cover the statement balance (${formatMoney(paymentFullAmount)}).`,
+          )
+          return
+        }
+      } else {
+        if (resolvedPaymentAmount + 0.001 < paymentMinimumAmount) {
+          setPaymentAmountError(
+            `Payment must be at least the minimum (${formatMoney(paymentMinimumAmount)}).`,
+          )
+          return
+        }
+        if (resolvedPaymentAmount - paymentFullAmount > 0.001) {
+          setPaymentAmountError(
+            `Payment cannot exceed the statement balance (${formatMoney(paymentFullAmount)}).`,
+          )
+          return
+        }
       }
     }
 
@@ -730,8 +743,11 @@ export function BillReminders({
                     type="button"
                     className={`payment-amount-mode ${paymentAmountMode === 'full' ? 'selected' : ''}`}
                     onClick={() => {
-                      setPaymentAmountMode('full')
                       setPaymentAmountError(null)
+                      if (paymentAmountMode !== 'full') {
+                        setPaymentAmountMode('full')
+                        setPaymentFullAmountText(paymentFullAmount > 0 ? String(paymentFullAmount) : '')
+                      }
                     }}
                   >
                     <span className="payment-amount-mode-title">Pay full</span>
@@ -751,6 +767,22 @@ export function BillReminders({
                     <span className="payment-amount-mode-value">{formatMoney(paymentMinimumAmount)}</span>
                   </button>
                 </div>
+                {paymentAmountMode === 'full' && (
+                  <label className="payment-custom-amount">
+                    Amount
+                    <MoneyInput
+                      value={paymentFullAmountText}
+                      onChange={(value) => {
+                        setPaymentFullAmountText(value)
+                        setPaymentAmountError(null)
+                      }}
+                      placeholder={formatMoneyInput(String(paymentFullAmount))}
+                    />
+                    <span className="payment-amount-hint">
+                      Starts at the statement balance ({formatMoney(paymentFullAmount)}). Pay more and the extra covers new charges, or stays on the card as a credit.
+                    </span>
+                  </label>
+                )}
                 {paymentAmountMode === 'minimum' && (
                   <label className="payment-custom-amount">
                     Amount

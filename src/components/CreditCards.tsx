@@ -83,6 +83,9 @@ function statementStatus(
   if (!statement.card.active) {
     return { label: 'Inactive', tone: 'neutral' }
   }
+  if (statement.outstandingBalance < -0.005) {
+    return { label: 'Credit', tone: 'ok' }
+  }
   if (statement.statementBalance <= 0 && statement.outstandingBalance <= 0) {
     return { label: 'No balance', tone: 'ok' }
   }
@@ -522,9 +525,11 @@ export function CreditCards({
                     <div className="cc-card-body">
                       <div className="cc-card-primary">
                         <div>
-                          <span className="cc-card-label">Outstanding balance</span>
+                          <span className="cc-card-label">
+                            {statement.outstandingBalance < -0.005 ? 'Credit balance' : 'Outstanding balance'}
+                          </span>
                           <strong className="cc-card-balance">
-                            {formatMoney(statement.outstandingBalance)}
+                            {formatMoney(Math.abs(statement.outstandingBalance))}
                           </strong>
                         </div>
                       </div>

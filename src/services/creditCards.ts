@@ -788,7 +788,8 @@ export function computeOutstandingBalance(
     }
   }
 
-  return Math.max(0, balance)
+  // A payment past what is owed stays as a credit instead of being discarded.
+  return balance
 }
 
 /** Return every transaction linked to a card through the selected month. */
@@ -1233,7 +1234,6 @@ export function computePoolStatement(
       previousBalance += tx.amount
     }
   }
-  previousBalance = Math.max(0, previousBalance)
 
   const previousDueDate = computeStatementPeriod(primary, year, month - 1).dueDate
   const interest = computeStatementInterest(
@@ -1584,7 +1584,7 @@ function computePreviousBalance(
     }
   }
 
-  return Math.max(0, balance)
+  return balance
 }
 
 /**
@@ -1644,7 +1644,7 @@ export function getUtilizationForMonth(
 ): UtilizationSnapshot {
   const statement = computeStatement(card, allTransactions, year, month)
   const utilizationPercent = card.limit > 0
-    ? Math.min(100, (statement.outstandingBalance / card.limit) * 100)
+    ? Math.min(100, Math.max(0, (statement.outstandingBalance / card.limit) * 100))
     : 0
   return {
     date: new Date(year, month, 1).toISOString(),
@@ -1716,7 +1716,7 @@ export function buildPoolUtilizationHistory(
       month,
       outstandingBalance: statement.outstandingBalance,
       limit,
-      utilizationPercent: limit > 0 ? Math.min(100, (statement.outstandingBalance / limit) * 100) : 0,
+      utilizationPercent: limit > 0 ? Math.min(100, Math.max(0, (statement.outstandingBalance / limit) * 100)) : 0,
       cardId: pool.primary.id,
     })
   }
@@ -1787,7 +1787,7 @@ export function computeAggregateUtilization(
   return {
     totalBalance,
     totalLimit,
-    utilizationPercent: totalLimit > 0 ? Math.min(100, (totalBalance / totalLimit) * 100) : 0,
+    utilizationPercent: totalLimit > 0 ? Math.min(100, Math.max(0, (totalBalance / totalLimit) * 100)) : 0,
   }
 }
 

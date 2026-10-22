@@ -93,13 +93,6 @@ export function computeMonthBalance(
       .map((tx) => tx.recurringBillId as string),
   )
 
-  // Also track paid credit card payment bills (by cardId + statement period)
-  const paidCcPaymentIds = new Set(
-    monthly
-      .filter((tx) => tx.type === 'bill' && tx.creditCardPayment === true && typeof tx.creditCardId === 'string')
-      .map((tx) => `${tx.creditCardId}:${new Date(tx.occurredAt).toISOString().slice(0, 7)}`),
-  )
-
   // Credit card payments (bill type with creditCardPayment: true) are treated as bill outflows
   const creditCardPayments = monthly.filter(isCreditCardPayment)
   const creditCardPaymentTotal = creditCardPayments.reduce((sum, tx) => sum + tx.amount, 0)
@@ -127,17 +120,7 @@ export function computeMonthBalance(
     }
   }
 
-  // Add credit card payment bills to scheduled/unpaid
-  for (const ccBill of dueCcPaymentBills) {
-    scheduledBills += ccBill.amount
-    // Credit card payment bills are always paid with cash/debit, never with credit card
-    // Check if already paid (by cardId + statement month)
-    const ccBillKey = `${ccBill.cardId}:${ccBill.dueDate.toISOString().slice(0, 7)}`
-    if (!paidCcPaymentIds.has(ccBillKey)) {
-      unpaidScheduledBills += ccBill.amount
-      unpaidCount += 1
-    }
-  }
+  // Credit card balances stay on the card. They are not added to unpaid cash.
 
   const monthNet =
     summary.income -
@@ -214,6 +197,9 @@ export function computeMonthNetThroughDay(
   day: number,
   ccPaymentBills: CreditCardPaymentBill[] = [],
 ): number {
+  // Card statements are not cash owed on this day. The parameter stays so callers
+  // can keep passing the same bill list.
+  void ccPaymentBills
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const clampedDay = Math.min(Math.max(day, 1), daysInMonth)
 
@@ -229,7 +215,6 @@ export function computeMonthNetThroughDay(
   let savingsDeposits = 0
   let savingsWithdrawals = 0
   const paidRecurringIds = new Set<string>()
-  const paidCcPaymentIds = new Set<string>()
 
   for (const tx of monthly) {
     if (tx.type === 'income') {
@@ -244,9 +229,6 @@ export function computeMonthNetThroughDay(
     } else if (tx.type === 'bill') {
       if (tx.creditCardPayment === true) {
         creditCardPayments += tx.amount
-        if (tx.creditCardId) {
-          paidCcPaymentIds.add(`${tx.creditCardId}:${new Date(tx.occurredAt).toISOString().slice(0, 7)}`)
-        }
       } else if (tx.creditCardId) {
         // Credit card bill (not a payment) - don't count as cash bill, paid later via creditCardPayment
       } else {
@@ -271,15 +253,7 @@ export function computeMonthNetThroughDay(
     }
   }
 
-  // Add credit card payment bills due on or before the clamped day
-  for (const ccBill of ccPaymentBills) {
-    if (ccBill.scheduledDueDate.getFullYear() !== year || ccBill.scheduledDueDate.getMonth() !== month) continue
-    const ccBillKey = `${ccBill.cardId}:${ccBill.scheduledDueDate.toISOString().slice(0, 7)}`
-    const dueDay = ccBill.scheduledDueDate.getDate()
-    if (dueDay <= clampedDay && !paidCcPaymentIds.has(ccBillKey)) {
-      unpaidScheduledBills += ccBill.amount
-    }
-  }
+  // Unpaid card statements are not cash owed. The balance carries on the card.
 
   return (
     income +

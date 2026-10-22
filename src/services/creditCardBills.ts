@@ -23,6 +23,8 @@ export interface CreditCardPaymentBill {
   lastFour: string
   /** Statement balance for the current month (amount to pay) */
   amount: number
+  /** Minimum that settles this cycle. The rest carries to the next statement. */
+  minimumPayment?: number
   /** Actual due date for this statement */
   dueDate: Date
   /** Recommended payment date before the actual bank deadline */
@@ -96,6 +98,7 @@ export function generateCreditCardPaymentBills(
       cardName: card.name,
       lastFour: card.lastFour,
       amount: statement.statementBalance,
+      minimumPayment: statement.minimumPayment,
       dueDate,
       scheduledDueDate: recommendedPaymentDate,
       dueDay: recommendedPaymentDate.getDate(),
@@ -165,6 +168,51 @@ export function reminderBillsForMonth(
 }
 
 /**
+ * Payments that settle an issued statement: after it closes, and before the next one opens.
+ * A payment inside the closing period is already baked into the statement balance.
+ */
+function paymentsAfterStatement(
+  bill: Pick<CreditCardPaymentBill, 'cardId' | 'statementDate'>,
+  transactions: Transaction[],
+): Transaction[] {
+  const statement = startOfLocalDay(bill.statementDate)
+  const start = new Date(statement)
+  start.setDate(start.getDate() + 1)
+  const nextStatement = new Date(statement)
+  nextStatement.setMonth(nextStatement.getMonth() + 1)
+  const end = new Date(nextStatement)
+  end.setDate(end.getDate() - 1)
+  end.setHours(23, 59, 59, 999)
+  const startMs = start.getTime()
+  const endMs = end.getTime()
+
+  return transactions.filter((tx) => {
+    if (tx.creditCardPayment !== true || tx.creditCardId !== bill.cardId) return false
+    const occurred = new Date(tx.occurredAt).getTime()
+    return Number.isFinite(occurred) && occurred >= startMs && occurred <= endMs
+  })
+}
+
+/**
+ * Cash to hold back for this statement.
+ * Nothing paid yet: the statement balance, since it may still be paid in full.
+ * Minimum met: nothing. The unpaid balance stays on the card for the next statement.
+ * Short of the minimum: only the rest of the minimum, not the whole balance.
+ */
+export function creditCardCashStillDue(
+  bill: Pick<CreditCardPaymentBill, 'cardId' | 'amount' | 'statementDate' | 'minimumPayment'>,
+  transactions: Transaction[],
+): number {
+  const paid = paymentsAfterStatement(bill, transactions).reduce((sum, tx) => sum + tx.amount, 0)
+  if (paid <= 0.001) return Math.max(0, bill.amount)
+  const minimum = typeof bill.minimumPayment === 'number'
+    ? Math.min(Math.max(0, bill.minimumPayment), bill.amount)
+    : bill.amount
+  if (minimum <= 0.001 || paid + 0.001 >= minimum) return 0
+  return Math.round((minimum - paid) * 100) / 100
+}
+
+/**
  * Convert a credit card payment bill to a BillReminder for display.
  */
 export function creditCardBillToReminder(
@@ -188,18 +236,14 @@ export function creditCardBillToReminder(
   const msPerDay = 24 * 60 * 60 * 1000
   const daysUntilDue = Math.round((dueStart.getTime() - todayStart.getTime()) / msPerDay)
 
-  // Check if already paid this month (creditCardPayment transaction for this card)
-  const paid = monthTransactions.find(
-    (tx) =>
-      tx.type === 'bill' &&
-      tx.creditCardPayment === true &&
-      tx.creditCardId === ccBill.cardId &&
-      // Check if transaction is in the same statement period
-      isInStatementPeriod(tx.occurredAt, actualDueDate),
-  )
+  const appliedPayments = paymentsAfterStatement(ccBill, monthTransactions)
+  const paidTotal = appliedPayments.reduce((sum, tx) => sum + tx.amount, 0)
+  const cashStillDue = creditCardCashStillDue(ccBill, monthTransactions)
+  const minimumSettled = cashStillDue <= 0.001 && paidTotal > 0.001 && paidTotal + 0.001 < ccBill.amount
+  const paid = appliedPayments[0]
 
   let status: BillReminderStatus
-  if (paid) {
+  if (paid && cashStillDue <= 0.001) {
     status = 'paid'
   } else if (viewingPast) {
     status = 'unpaid'
@@ -242,6 +286,8 @@ export function creditCardBillToReminder(
     isCreditCardPayment: true,
     creditCardId: ccBill.cardId,
     cardColor: ccBill.color,
+    cashStillDue,
+    ...(minimumSettled ? { minimumSettled: true } : {}),
     ...(ccBill.installments ? { installments: ccBill.installments } : {}),
   }
 }
@@ -339,23 +385,6 @@ export function upcomingInstallmentReminders(
   }
 
   return reminders
-}
-
-/**
- * Check if a transaction date falls within the statement period
- * for a credit card payment due in the given month.
- */
-function isInStatementPeriod(
-  occurredAt: string,
-  dueDate: Date,
-): boolean {
-  const txDate = new Date(occurredAt)
-  // Consider a window around the due date (e.g., 5 days before to 5 days after)
-  const windowStart = new Date(dueDate)
-  windowStart.setDate(windowStart.getDate() - 5)
-  const windowEnd = new Date(dueDate)
-  windowEnd.setDate(windowEnd.getDate() + 5)
-  return txDate >= windowStart && txDate <= windowEnd
 }
 
 /**
