@@ -3,14 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/finance-tracker/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="color-scheme" content="light dark" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Poppins:wght@400;500;600;700&display=swap"
-    />
+    <meta name="theme-color" content="#e4e8e6" />
+    <meta name="description" content="Private ledger for balances, bills, cards, and savings." />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Ledger" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://identitytoolkit.googleapis.com" />
+    <link rel="preconnect" href="https://securetoken.googleapis.com" />
+    <link rel="preconnect" href="https://firestore.googleapis.com" />
     <title>Ledger — Finance Tracker</title>
     <script>
       (function () {
@@ -24,15 +30,15 @@
                 : 'light'
           document.documentElement.setAttribute('data-theme', theme)
           document.documentElement.style.colorScheme = theme
+          var themeColors = { light: '#e4e8e6', dark: '#0f1512' }
+          var themeMeta = document.querySelector('meta[name="theme-color"]')
+          if (themeMeta) themeMeta.setAttribute('content', themeColors[theme])
         } catch (e) {}
       })()
     </script>
-    <script type="module" crossorigin src="/finance-tracker/assets/index-aeyruItD.js"></script>
-    <link rel="modulepreload" crossorigin href="/finance-tracker/assets/rolldown-runtime-BpQH8Ho1.js">
-    <link rel="modulepreload" crossorigin href="/finance-tracker/assets/firestore-BfrWIG_Z.js">
-    <link rel="modulepreload" crossorigin href="/finance-tracker/assets/ledger-Cc9whgFt.js">
-    <link rel="modulepreload" crossorigin href="/finance-tracker/assets/vendor-Z_dBUF-8.js">
-    <link rel="stylesheet" crossorigin href="/finance-tracker/assets/index-D_8eJVdB.css">
+    <script type="module" crossorigin src="/finance-tracker/assets/index-DQuco2cI.js"></script>
+    <link rel="modulepreload" crossorigin href="/finance-tracker/assets/jsx-runtime-QtymfJMM.js">
+    <link rel="stylesheet" crossorigin href="/finance-tracker/assets/index-Duvxv1oy.css">
   </head>
   <body>
     <div id="root"></div>
