@@ -893,6 +893,9 @@ function LedgerApp({ user, theme, onToggleTheme, onLogOut }: Readonly<LedgerAppP
               reminders={reminders}
               bills={bills}
               ccPaymentBills={ccPaymentBills}
+              cards={cards}
+              cardActivity={cardTransactions}
+              installmentPlans={installmentPlans}
               allTransactions={ledgerTransactions}
               transactions={monthTransactions}
               onUpdate={updateBill}

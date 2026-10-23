@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { creditCardBillToReminder, creditCardCashStillDue, expandInstallmentReminders, generateCreditCardPaymentBills, reminderBillsForMonth, upcomingInstallmentReminders, type CreditCardPaymentBill } from './creditCardBills'
+import { creditCardBillToReminder, creditCardCashStillDue, creditLimitsAsOfDay, expandInstallmentReminders, generateCreditCardPaymentBills, reminderBillsForMonth, upcomingInstallmentReminders, type CreditCardPaymentBill } from './creditCardBills'
 import { computeMonthBalance } from './balanceOutlook'
 import type { Transaction } from '../types/transaction'
 import { buildInstallmentCharges } from './cardInstallments'
@@ -261,5 +261,93 @@ describe('minimum payment cash obligation', () => {
     const outlook = computeMonthBalance([], [income(20000), short], 2026, 9, 0, [statement])
     expect(outlook.unpaidScheduledBills).toBe(0)
     expect(outlook.monthNet).toBe(19800)
+  })
+})
+
+describe('calendar credit limit', () => {
+  const card: CreditCard = {
+    id: 'card',
+    userId: 'user-1',
+    name: 'BPI Amore',
+    lastFour: '5877',
+    limit: 10000,
+    statementDay: 16,
+    dueDay: 5,
+    active: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  }
+
+  function charge(amount: number, day: number): Transaction {
+    const occurredAt = new Date(2026, 9, day, 12).toISOString()
+    return {
+      id: `charge-${day}`,
+      userId: 'user-1',
+      type: 'expense',
+      amount,
+      category: 'Food',
+      description: 'Lunch',
+      occurredAt,
+      createdAt: occurredAt,
+      creditCardId: card.id,
+    }
+  }
+
+  function cardBill(amount: number, day: number): BillReminder {
+    return {
+      bill: {
+        id: 'rent',
+        userId: 'user-1',
+        name: 'Internet',
+        amount,
+        category: 'Utilities',
+        dueDay: day,
+        startsOn: '2026-10',
+        durationValue: 12,
+        durationUnit: 'months',
+        notes: '',
+        active: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      dueDate: new Date(2026, 9, day),
+      status: 'upcoming',
+      daysUntilDue: 1,
+      paidTransactionId: null,
+      paymentNumber: 1,
+      totalPayments: 12,
+      endsOn: '2027-09',
+      payWithCreditCard: true,
+    }
+  }
+
+  it('reduces available credit on the day a card charge posts', () => {
+    const before = creditLimitsAsOfDay([card], [charge(1500, 10)], [], 2026, 9, 9)
+    const after = creditLimitsAsOfDay([card], [charge(1500, 10)], [], 2026, 9, 10)
+    expect(before.limits[0].available).toBe(10000)
+    expect(after.limits[0].available).toBe(8500)
+  })
+
+  it('reduces available credit when a bill is paid with the card', () => {
+    const before = creditLimitsAsOfDay([card], [], [], 2026, 9, 11, [cardBill(500, 12)])
+    const onDue = creditLimitsAsOfDay([card], [], [], 2026, 9, 12, [cardBill(500, 12)])
+    expect(before.limits[0].available).toBe(10000)
+    expect(onDue.limits[0].available).toBe(9500)
+  })
+
+  it('still deducts this month when an earlier payment was already on the card', () => {
+    const earlier = new Date(2026, 8, 12, 12).toISOString()
+    const priorPayment: Transaction = {
+      id: 'prior',
+      userId: 'user-1',
+      type: 'bill',
+      amount: 500,
+      category: 'Utilities',
+      description: 'Internet',
+      occurredAt: earlier,
+      createdAt: earlier,
+      creditCardId: card.id,
+      recurringBillId: 'rent',
+    }
+    const onDue = creditLimitsAsOfDay([card], [priorPayment], [], 2026, 9, 12, [cardBill(500, 12)])
+    expect(onDue.limits[0].available).toBe(9000)
   })
 })

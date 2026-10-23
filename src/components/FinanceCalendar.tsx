@@ -1,12 +1,14 @@
 import { useState } from 'react'
-import { CalendarDays, CreditCard } from 'lucide-react'
+import { CalendarDays, CreditCard as CreditCardIcon } from 'lucide-react'
 import { formatMoney, formatDate, monthLabel } from '../lib/format'
 import {
   computeAverageDailyBalance,
   computeRunningBalanceForDay,
 } from '../services/balanceOutlook'
 import type { BillReminder, RecurringBill, RecurringBillInput } from '../types/recurringBill'
-import type { CreditCardPaymentBill } from '../services/creditCardBills'
+import { creditLimitsAsOfDay, type CreditCardPaymentBill } from '../services/creditCardBills'
+import type { CreditCard } from '../types/creditCard'
+import type { CardInstallment } from '../types/cardInstallment'
 import type { Transaction } from '../types/transaction'
 import { isSavingsWithdraw } from '../types/transaction'
 
@@ -20,6 +22,10 @@ interface FinanceCalendarProps {
   transactions: Transaction[]
   bills: RecurringBill[]
   ccPaymentBills: CreditCardPaymentBill[]
+  cards: CreditCard[]
+  /** Ledger charges plus installment postings. These reduce the credit limit. */
+  cardActivity: Transaction[]
+  installmentPlans: CardInstallment[]
   onUpdate: (id: string, input: RecurringBillInput) => Promise<void>
 }
 
@@ -30,6 +36,14 @@ interface DayEvents {
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+function isCreditLimitCharge(tx: Transaction): boolean {
+  return Boolean(tx.creditCardId)
+    && tx.creditCardPayment !== true
+    && tx.cashbackCredit !== true
+    && tx.installmentPurchase !== true
+    && (tx.type === 'expense' || tx.type === 'bill')
+}
 
 function buildMonthCells(year: number, month: number): Array<number | null> {
   const firstWeekday = new Date(year, month, 1).getDay()
@@ -105,6 +119,9 @@ export function FinanceCalendar({
   transactions,
   bills,
   ccPaymentBills,
+  cards,
+  cardActivity,
+  installmentPlans,
   onUpdate,
 }: FinanceCalendarProps) {
   const today = new Date()
@@ -115,7 +132,16 @@ export function FinanceCalendar({
   )
 
   const cells = buildMonthCells(year, month)
-  const eventsByDay = buildEventsByDay(reminders, transactions, year, month)
+  const seenTransactionIds = new Set(transactions.map((tx) => tx.id))
+  const postedCardCharges = cardActivity.filter(
+    (tx) => isCreditLimitCharge(tx) && !seenTransactionIds.has(tx.id),
+  )
+  const eventsByDay = buildEventsByDay(
+    reminders,
+    [...transactions, ...postedCardCharges],
+    year,
+    month,
+  )
 
   // Clamp selection when the month has fewer days (no effect needed).
   const daysInView = new Date(year, month + 1, 0).getDate()
@@ -169,6 +195,13 @@ export function FinanceCalendar({
     ccPaymentBills,
   )
   const adbPositive = averageDaily.averageDailyBalance >= 0
+  const creditAsOfDay = cards.length === 0
+    ? { limits: [], cardBills: 0 }
+    : creditLimitsAsOfDay(cards, cardActivity, installmentPlans, year, month, activeDay, reminders)
+  const availableCredit = Math.max(
+    0,
+    creditAsOfDay.limits.reduce((sum, limit) => sum + limit.available, 0) - creditAsOfDay.cardBills,
+  )
 
   /** Toggle whether a bill for the current viewed month should be paid with a credit card. */
   async function handleToggleCreditCardPayment(reminder: BillReminder) {
@@ -214,6 +247,11 @@ export function FinanceCalendar({
           <span className="legend-dot bill" />Bill due
           <span className="legend-dot income" />Income
           <span className="legend-dot expense" />Expense
+          {cards.length > 0 && (
+            <>
+              <span className="legend-dot card" />Credit limit
+            </>
+          )}
         </p>
       </div>
 
@@ -250,10 +288,20 @@ export function FinanceCalendar({
             )
             const billCount = events?.bills.length ?? 0
             const txCount = visibleEvents?.length ?? 0
-            const billTransactionCount = visibleEvents?.filter((t) => t.type === 'bill').length ?? 0
-            const incomeCount = visibleEvents?.filter((t) => t.type === 'income' || isSavingsWithdraw(t)).length ?? 0
+            const cardCount = visibleEvents?.filter((tx) =>
+              isCreditLimitCharge(tx)
+              || tx.installmentPurchase === true
+              || tx.cashbackCredit === true
+              || (Boolean(tx.creditCardId) && tx.type === 'income'),
+            ).length ?? 0
+            const billTransactionCount = visibleEvents?.filter(
+              (tx) => tx.type === 'bill' && !isCreditLimitCharge(tx),
+            ).length ?? 0
+            const incomeCount = visibleEvents?.filter(
+              (tx) => (tx.type === 'income' || isSavingsWithdraw(tx)) && tx.cashbackCredit !== true && !tx.creditCardId,
+            ).length ?? 0
             const expenseCount = visibleEvents?.filter(
-              (t) => t.type !== 'income' && t.type !== 'bill' && !isSavingsWithdraw(t),
+              (tx) => tx.type !== 'income' && tx.type !== 'bill' && !isSavingsWithdraw(tx) && !isCreditLimitCharge(tx) && tx.installmentPurchase !== true,
             ).length ?? 0
             const isToday = isCurrentMonth && day === today.getDate()
             const isSelected = day === activeDay
@@ -274,13 +322,18 @@ export function FinanceCalendar({
                   .join(' ')}
                 onClick={() => setSelectedDay(day)}
                 aria-pressed={isSelected}
-                aria-label={`${day}, ${billCount} bills, ${txCount} transactions`}
+                aria-label={`${day}, ${billCount} bills, ${cardCount} credit limit charges, ${txCount} transactions`}
               >
                 <span className="calendar-day-num">{day}</span>
                 <span className="calendar-dots" aria-hidden="true">
                   {billCount + billTransactionCount > 0 && (
                     <span className="legend-dot bill">
                       {billCount + billTransactionCount > 1 ? billCount + billTransactionCount : null}
+                    </span>
+                  )}
+                  {cardCount > 0 && (
+                    <span className="legend-dot card">
+                      {cardCount > 1 ? cardCount : null}
                     </span>
                   )}
                   {incomeCount > 0 && (
@@ -306,78 +359,122 @@ export function FinanceCalendar({
             <strong className="stat-value">{formatMoney(dayRunningBalance)}</strong>
             <span className="stat-meta">As of this day · includes unpaid bills due by now</span>
           </div>
+          {creditAsOfDay.limits.length > 0 && (
+            <div className="calendar-day-balance">
+              <span className="stat-label">Available credit</span>
+              <strong className="stat-value">{formatMoney(availableCredit)}</strong>
+              <span className="stat-meta">
+                {creditAsOfDay.limits.length === 1
+                  ? `of ${formatMoney(creditAsOfDay.limits[0].limit)} · after card charges and card bills due by now`
+                  : 'After card charges and card bills due by now'}
+              </span>
+              {(creditAsOfDay.limits.length > 1 || creditAsOfDay.cardBills > 0) && (
+                <ul className="calendar-credit-limits">
+                  {creditAsOfDay.limits.map((limit) => (
+                    <li key={limit.id}>
+                      <span>{limit.name} ···· {limit.lastFour}</span>
+                      <strong>{formatMoney(limit.available)} of {formatMoney(limit.limit)}</strong>
+                    </li>
+                  ))}
+                  {creditAsOfDay.cardBills > 0 && (
+                    <li>
+                      <span>Bills on a card</span>
+                      <strong>−{formatMoney(creditAsOfDay.cardBills)}</strong>
+                    </li>
+                  )}
+                </ul>
+              )}
+            </div>
+          )}
           {!selected || (selected.bills.length === 0 && visibleTransactions?.length === 0) ? (
             <p className="muted">No bills or transactions on this day.</p>
           ) : (
             <ul className="calendar-detail-list">
-              {selected.bills.map((bill) => (
-                <li key={`bill-${bill.bill.id}`} className={`calendar-detail-item bill status-${bill.status}`}>
+              {selected.bills.map((bill) => {
+                const onCard = bill.payWithCreditCard === true && !bill.isCreditCardPayment && !bill.isInstallmentPart
+                return (
+                  <li key={`bill-${bill.bill.id}`} className={`calendar-detail-item bill${onCard ? ' card' : ''} status-${bill.status}`}>
+                    <div className="calendar-detail-main">
+                      <span className={`reminder-status status-${bill.status}`}>{statusShort(bill)}</span>
+                      <p className="tx-desc">{bill.bill.name}</p>
+                      <p className="reminder-due">{billDetailNote(bill)}</p>
+                    </div>
+                    <div className="calendar-detail-actions">
+                      <strong className={`tx-amount ${onCard ? 'card' : 'bill'}`}>
+                        {bill.status === 'paid' || onCard ? '−' : ''}
+                        {formatMoney(bill.bill.amount)}
+                      </strong>
+                      {bill.status !== 'paid' && !bill.isCreditCardPayment && !bill.isInstallmentPart && (
+                        <button
+                          type="button"
+                          className={`icon-btn icon-btn--cc ${bill.payWithCreditCard ? 'active' : ''}`}
+                          onClick={() => void handleToggleCreditCardPayment(bill)}
+                          disabled={bill.bill.category === 'Loan'}
+                          aria-label={bill.bill.category === 'Loan'
+                            ? 'Loans cannot be paid with credit card'
+                            : bill.payWithCreditCard
+                              ? 'Remove credit card payment flag'
+                              : 'Mark as paid with credit card. Deducts from the credit limit'}
+                          aria-pressed={bill.bill.category === 'Loan' ? false : bill.payWithCreditCard}
+                          title={bill.bill.category === 'Loan'
+                            ? 'Loans cannot be paid with a credit card.'
+                            : bill.payWithCreditCard
+                              ? 'This bill is deducted from the credit limit. Click to remove it.'
+                              : 'Put this bill on a credit card. It deducts from the credit limit.'}
+                        >
+                          <CreditCardIcon aria-hidden="true" />
+                        </button>
+                      )}
+                      {bill.status !== 'paid' && bill.isCreditCardPayment && (
+                        <button
+                          type="button"
+                          className="icon-btn icon-btn--cc"
+                          disabled
+                          aria-label="Credit card payments can only be paid with cash or debit"
+                          title="Credit card payments can only be paid with cash or debit"
+                        >
+                          <CreditCardIcon aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                )
+              })}
+              {visibleTransactions?.map((tx) => {
+                const onLimit = isCreditLimitCharge(tx)
+                const limitCredit = tx.cashbackCredit === true || (Boolean(tx.creditCardId) && tx.type === 'income')
+                const installmentPurchase = tx.installmentPurchase === true
+                const isInflow = !limitCredit && (tx.type === 'income' || isSavingsWithdraw(tx))
+                const amountClass = onLimit || installmentPurchase
+                  ? 'card'
+                  : limitCredit
+                    ? 'income'
+                    : isInflow
+                      ? 'income'
+                      : tx.type === 'bill'
+                        ? 'bill'
+                        : tx.type
+                const itemClass = onLimit || installmentPurchase || limitCredit ? 'card' : tx.type
+                return (
+                <li key={`tx-${tx.id}`} className={`calendar-detail-item ${itemClass}`}>
                   <div className="calendar-detail-main">
-                    <span className={`reminder-status status-${bill.status}`}>{statusShort(bill)}</span>
-                    <p className="tx-desc">{bill.bill.name}</p>
+                    <span className={`tx-type-badge ${itemClass}`}>
+                      {onLimit || installmentPurchase || limitCredit ? 'Credit limit' : tx.type}
+                    </span>
+                    <p className="tx-desc">{tx.description.trim() || tx.category}</p>
                     <p className="reminder-due">
-                      {bill.isCreditCardPayment
-                        ? 'Stays on the card until you pay · not taken from this balance'
-                        : bill.status === 'paid'
-                          ? `Paid · Payment ${bill.paymentNumber}/${bill.totalPayments}`
-                          : `Bill due · Payment ${bill.paymentNumber}/${bill.totalPayments}`}
+                      {onLimit
+                        ? 'Deducted from the credit limit'
+                        : installmentPurchase
+                          ? 'Uses the credit limit in monthly deductions'
+                          : limitCredit
+                            ? 'Added to the credit limit'
+                            : formatDate(tx.occurredAt)}
                     </p>
                   </div>
                   <div className="calendar-detail-actions">
-                    <strong className={`tx-amount ${bill.status === 'paid' ? 'bill' : 'bill'}`}>
-                      {bill.status === 'paid' ? '−' : ''}
-                      {formatMoney(bill.bill.amount)}
-                    </strong>
-                    {bill.status !== 'paid' && !bill.isCreditCardPayment && !bill.isInstallmentPart && (
-                      <button
-                        type="button"
-                        className={`icon-btn icon-btn--cc ${bill.payWithCreditCard ? 'active' : ''}`}
-                        onClick={() => void handleToggleCreditCardPayment(bill)}
-                        disabled={bill.bill.category === 'Loan'}
-                        aria-label={bill.bill.category === 'Loan'
-                          ? 'Loans cannot be paid with credit card'
-                          : bill.payWithCreditCard
-                            ? 'Remove credit card payment flag'
-                            : 'Mark as paid with credit card (excluded from daily balance)'}
-                        aria-pressed={bill.bill.category === 'Loan' ? false : bill.payWithCreditCard}
-                        title={bill.bill.category === 'Loan'
-                          ? 'Loans cannot be paid with a credit card.'
-                          : bill.payWithCreditCard
-                            ? 'This bill is flagged as paid with credit card. Click to remove flag.'
-                            : 'Flag this bill to be paid with credit card (excluded from daily balance)'}
-                      >
-                        <CreditCard aria-hidden="true" />
-                      </button>
-                    )}
-                    {bill.status !== 'paid' && bill.isCreditCardPayment && (
-                      <button
-                        type="button"
-                        className="icon-btn icon-btn--cc"
-                        disabled
-                        aria-label="Credit card payments can only be paid with cash or debit"
-                        title="Credit card payments can only be paid with cash or debit"
-                      >
-                        <CreditCard aria-hidden="true" />
-                      </button>
-                    )}
-                  </div>
-                </li>
-              ))}
-              {visibleTransactions?.map((tx) => {
-                const isInflow = tx.type === 'income' || isSavingsWithdraw(tx)
-                const amountClass = isInflow ? 'income' : tx.type === 'bill' ? 'bill' : tx.type
-                return (
-                <li key={`tx-${tx.id}`} className={`calendar-detail-item ${tx.type}`}>
-                  <div className="calendar-detail-main">
-                    <span className={`tx-type-badge ${tx.type}`}>{tx.type}</span>
-                    <p className="tx-desc">{tx.description.trim() || tx.category}</p>
-                    <time className="tx-when" dateTime={tx.occurredAt}>
-                      {formatDate(tx.occurredAt)}
-                    </time>
-                  </div>
-                  <div className="calendar-detail-actions">
                     <strong className={`tx-amount ${amountClass}`}>
-                      {isInflow ? '+' : tx.type === 'bill' ? '−' : '−'}
+                      {limitCredit || isInflow ? '+' : '−'}
                       {formatMoney(tx.amount)}
                     </strong>
                   </div>
@@ -407,6 +504,29 @@ export function FinanceCalendar({
       </div>
     </section>
   )
+}
+
+function billDetailNote(reminder: BillReminder): string {
+  if (reminder.isInstallmentPart) {
+    const included = reminder.bill.notes || 'Included in the card payment'
+    return `${included} · Installment ${reminder.paymentNumber} of ${reminder.totalPayments}`
+  }
+  if (reminder.isCreditCardPayment) {
+    if (reminder.status === 'paid' && reminder.minimumSettled) {
+      return 'Minimum paid · the rest stays on the card'
+    }
+    if (reminder.status === 'paid') {
+      return `Paid · Payment ${reminder.paymentNumber}/${reminder.totalPayments}`
+    }
+    return 'Stays on the card until you pay · not taken from this balance'
+  }
+  if (reminder.payWithCreditCard && reminder.status !== 'paid') {
+    return 'Deducted from the credit limit'
+  }
+  if (reminder.status === 'paid') {
+    return `Paid · Payment ${reminder.paymentNumber}/${reminder.totalPayments}`
+  }
+  return `Bill due · Payment ${reminder.paymentNumber}/${reminder.totalPayments}`
 }
 
 function statusShort(reminder: BillReminder): string {

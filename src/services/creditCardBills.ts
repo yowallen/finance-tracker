@@ -4,8 +4,8 @@ import type { CardInstallment } from '../types/cardInstallment'
 import { installmentLabel } from '../types/cardInstallment'
 import type { RecurringBill, BillReminder, BillReminderStatus } from '../types/recurringBill'
 import type { Transaction } from '../types/transaction'
-import { computeInstallmentSchedule } from './cardInstallments'
-import { computeStatementPeriod, groupCreditCards } from './creditCards'
+import { computeInstallmentSchedule, summarizeCardInstallments } from './cardInstallments'
+import { computePoolStatement, computeStatementPeriod, groupCreditCards } from './creditCards'
 import { previousPhilippineBankingDay, startOfLocalDay } from './recurringBills'
 
 /**
@@ -191,6 +191,81 @@ function paymentsAfterStatement(
     const occurred = new Date(tx.occurredAt).getTime()
     return Number.isFinite(occurred) && occurred >= startMs && occurred <= endMs
   })
+}
+
+export interface CalendarCreditLimit {
+  id: string
+  name: string
+  lastFour: string
+  limit: number
+  available: number
+}
+
+/**
+ * Available credit on each card as of a calendar day.
+ * Posted card charges reduce the limit. A bill flagged to be paid with a card
+ * reduces it too, until that charge is recorded on a card.
+ * `cardBills` is the part that is not tied to one card when several limits exist.
+ */
+export function creditLimitsAsOfDay(
+  cards: CreditCard[],
+  cardTransactions: Transaction[],
+  plans: CardInstallment[],
+  year: number,
+  month: number,
+  day: number,
+  reminders: BillReminder[] = [],
+): { limits: CalendarCreditLimit[]; cardBills: number } {
+  const asOf = new Date(year, month, day, 23, 59, 59, 999)
+  const asOfMs = asOf.getTime()
+  const through = cardTransactions.filter((tx) => {
+    const time = new Date(tx.occurredAt).getTime()
+    return Number.isFinite(time) && time <= asOfMs
+  })
+  const summaries = summarizeCardInstallments(
+    cards.map((card) => card.id),
+    plans,
+    cards,
+    asOf,
+  )
+  const limits = groupCreditCards(cards)
+    .filter((pool) => pool.primary.active)
+    .map((pool) => {
+      const statement = computePoolStatement(pool, through, year, month, summaries)
+      return {
+        id: pool.id,
+        name: pool.cards.map((card) => card.name).join(' · '),
+        lastFour: pool.cards.map((card) => card.lastFour).join(' · '),
+        limit: pool.primary.limit,
+        available: statement.availableCredit,
+      }
+    })
+
+  const cardBills = reminders.reduce((sum, reminder) => {
+    if (!reminder.payWithCreditCard || reminder.isCreditCardPayment || reminder.isInstallmentPart) return sum
+    if (reminder.status === 'paid') return sum
+    const due = reminder.dueDate
+    if (due.getFullYear() !== year || due.getMonth() !== month || due.getDate() > day) return sum
+    const monthStart = new Date(year, month, 1).getTime()
+    const alreadyCharged = through.some((tx) => {
+      if (tx.recurringBillId !== reminder.bill.id || typeof tx.creditCardId !== 'string') return false
+      const time = new Date(tx.occurredAt).getTime()
+      return time >= monthStart && time <= asOfMs
+    })
+    if (alreadyCharged) return sum
+    return sum + reminder.bill.amount
+  }, 0)
+  const roundedBills = Math.round(cardBills * 100) / 100
+
+  if (limits.length === 1 && roundedBills > 0) {
+    limits[0] = {
+      ...limits[0],
+      available: Math.max(0, Math.round((limits[0].available - roundedBills) * 100) / 100),
+    }
+    return { limits, cardBills: 0 }
+  }
+
+  return { limits, cardBills: roundedBills }
 }
 
 /**

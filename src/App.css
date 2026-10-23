@@ -1626,6 +1626,10 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
   color: var(--income);
 }
 
+.tx-amount.card {
+  color: var(--accent);
+}
+
 .tx-amount.expense,
 .tx-amount.bill,
 .tx-amount.savings {
@@ -2442,6 +2446,10 @@ html[data-theme='dark'] .btn-primary:hover:not(:disabled) {
   background: var(--expense);
 }
 
+.legend-dot.card {
+  background: var(--accent);
+}
+
 .calendar-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(240px, 0.9fr);
@@ -2694,7 +2702,9 @@ html[data-theme='light'] .calendar-detail-item {
   border-left-color: var(--bill);
 }
 
-.calendar-detail-item.bill .reminder-status {
+.calendar-detail-item.bill .reminder-status,
+.calendar-detail-item.card .reminder-status,
+.calendar-detail-item .tx-type-badge {
   align-self: flex-start;
   display: inline-flex;
   flex: 0 0 auto;
@@ -2712,6 +2722,32 @@ html[data-theme='light'] .calendar-detail-item {
 
 .calendar-detail-item.expense {
   border-left-color: var(--expense);
+}
+
+.calendar-detail-item.card {
+  border-left-color: var(--accent);
+}
+
+.calendar-credit-limits {
+  list-style: none;
+  margin: 0.45rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.calendar-credit-limits li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+
+.calendar-credit-limits strong {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
 .calendar-detail-main {
